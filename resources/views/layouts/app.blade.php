@@ -24,10 +24,11 @@
         </a>
 
         <nav class="topnav">
-            <a href="/login">Login</a>
-            <a href="/dashboard">Dashboard</a>
-            <a href="/admin">Admin</a>
-            <button type="button" class="button button-ghost" data-logout>Logout</button>
+            @hasSection('nav')
+                @yield('nav')
+            @else
+                <a href="/login">Login</a>
+            @endif
         </nav>
     </header>
 

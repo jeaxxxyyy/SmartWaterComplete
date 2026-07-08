@@ -42,6 +42,37 @@ class ReportController extends Controller
             ->latest('id')
             ->first();
 
+        $monthExpression = match (DB::connection()->getDriverName()) {
+            'mysql', 'mariadb' => "DATE_FORMAT(recorded_at, '%Y-%m')",
+            'pgsql' => "TO_CHAR(recorded_at, 'YYYY-MM')",
+            default => "strftime('%Y-%m', recorded_at)",
+        };
+
+        $monthlyUsage = WaterReading::query()
+            ->when($userId !== null, fn ($query) => $query->where('user_id', $userId))
+            ->where('recorded_at', '>=', now()->subMonths(11)->startOfMonth())
+            ->selectRaw("{$monthExpression} as month, sum(liters_used) as total_liters, sum(cubic_meter) as total_cubic_meter, sum(estimated_bill) as estimated_bill")
+            ->groupByRaw($monthExpression)
+            ->orderBy('month')
+            ->get()
+            ->keyBy('month');
+
+        $monthlySeries = collect(range(11, 0))
+            ->map(function (int $monthsAgo) use ($monthlyUsage) {
+                $date = now()->subMonths($monthsAgo);
+                $monthKey = $date->format('Y-m');
+                $row = $monthlyUsage->get($monthKey);
+
+                return [
+                    'month' => $monthKey,
+                    'label' => $date->format('M Y'),
+                    'total_liters' => (float) ($row->total_liters ?? 0),
+                    'total_cubic_meter' => (float) ($row->total_cubic_meter ?? 0),
+                    'estimated_bill' => (float) ($row->estimated_bill ?? 0),
+                ];
+            })
+            ->values();
+
         return response()->json([
             'data' => [
                 'current_month' => [
@@ -62,6 +93,7 @@ class ReportController extends Controller
                 ],
                 'billing_statement' => $statement,
                 'active_billing' => $activeBilling,
+                'monthly_usage' => $monthlySeries,
             ],
         ]);
     }

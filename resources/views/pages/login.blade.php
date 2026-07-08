@@ -2,6 +2,9 @@
 
 @section('title', 'Login | Smart Water Monitoring')
 @section('page', 'login')
+@section('nav')
+    <a href="/">Home</a>
+@endsection
 
 @section('content')
     <section class="auth-grid">

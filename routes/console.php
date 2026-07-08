@@ -3,10 +3,43 @@
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
+use App\Models\User;
+use Illuminate\Console\Command;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
+
+Artisan::command('user:make-admin {email : Email address of the existing user}', function (string $email) {
+    $user = User::where('email', $email)->first();
+
+    if ($user === null) {
+        $this->error("No user found with email {$email}.");
+
+        return Command::FAILURE;
+    }
+
+    if ($user->isDevice()) {
+        $this->error('Device accounts cannot be promoted to admin.');
+
+        return Command::FAILURE;
+    }
+
+    if ($user->isAdmin()) {
+        $this->info("{$user->email} is already an admin.");
+
+        return Command::SUCCESS;
+    }
+
+    $user->forceFill([
+        'role' => 'admin',
+        'is_active' => true,
+    ])->save();
+
+    $this->info("{$user->email} is now an admin.");
+
+    return Command::SUCCESS;
+})->purpose('Promote an existing household user to admin from the server console');
 
 Schedule::command('auth:clear-resets')->daily();
 Schedule::command('sanctum:prune-expired', ['--hours' => 24])->daily();

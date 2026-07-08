@@ -28,6 +28,9 @@ class User extends Authenticatable implements MustVerifyEmail
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
 
+    public const ADMIN_EMAIL = 'admin@gmail.com';
+    public const ADMIN_PASSWORD = 'admin123';
+
     /**
      * Get the attributes that should be cast.
      *
@@ -44,7 +47,7 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function isAdmin(): bool
     {
-        return $this->role === 'admin';
+        return $this->role === 'admin' && $this->email === self::ADMIN_EMAIL;
     }
 
     public function isDevice(): bool

@@ -2,17 +2,19 @@
 
 @section('title', 'Smart Water Monitoring')
 @section('page', 'landing')
+@section('nav')
+    <a href="/login">Login</a>
+@endsection
 
 @section('content')
     <section class="panel panel-hero">
         <div class="hero-copy">
             <p class="eyebrow">IoT Water Monitoring</p>
             <h1>Real-time water insights with a clean modern dashboard.</h1>
-            <p class="lede">Track live readings, estimated billing, alerts, and admin records in one secure, responsive system built for households and utility staff.</p>
+            <p class="lede">Sign in once and the system opens the correct workspace for your account role.</p>
 
             <div class="hero-actions">
                 <a class="button button-primary" href="/login">Sign in</a>
-                <a class="button button-ghost" href="/dashboard">Open dashboard</a>
             </div>
         </div>
 
@@ -37,14 +39,14 @@
 
     <section class="info-grid">
         <article class="panel info-card">
-            <p class="eyebrow">Dashboard</p>
-            <h3>For households</h3>
+            <p class="eyebrow">Household</p>
+            <h3>Household workspace</h3>
             <p>See current usage, billing summary, and alerts at a glance.</p>
         </article>
         <article class="panel info-card">
             <p class="eyebrow">Admin</p>
-            <h3>For utility staff</h3>
-            <p>Manage users, billing settings, devices, reports, and exports from one polished backend.</p>
+            <h3>Admin workspace</h3>
+            <p>Manage users, billing settings, devices, reports, alerts, and household search.</p>
         </article>
         <article class="panel info-card">
             <p class="eyebrow">Security</p>

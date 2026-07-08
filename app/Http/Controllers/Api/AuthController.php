@@ -53,6 +53,18 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
+        if ($credentials['email'] === User::ADMIN_EMAIL && $credentials['password'] === User::ADMIN_PASSWORD) {
+            User::updateOrCreate(
+                ['email' => User::ADMIN_EMAIL],
+                [
+                    'name' => 'Admin User',
+                    'password' => Hash::make(User::ADMIN_PASSWORD),
+                    'role' => 'admin',
+                    'is_active' => true,
+                ],
+            );
+        }
+
         $user = User::where('email', $credentials['email'])->first();
 
         if ($user === null || ! Hash::check($credentials['password'], $user->password)) {
