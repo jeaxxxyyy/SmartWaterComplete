@@ -19,7 +19,6 @@ class AuthController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'account_number' => ['nullable', 'string', 'max:255', 'unique:users,account_number'],
             'address' => ['nullable', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
         ]);
@@ -28,7 +27,7 @@ class AuthController extends Controller
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
-            'account_number' => $validated['account_number'] ?? null,
+            'account_number' => User::generateAccountNumber(),
             'address' => $validated['address'] ?? null,
             'phone' => $validated['phone'] ?? null,
             'role' => 'user',
@@ -172,15 +171,13 @@ class AuthController extends Controller
             ], 422);
         }
 
-        $token = $user->tokens()->whereKey($tokenId)->first();
+        $deleted = $user->tokens()->whereKey($tokenId)->delete();
 
-        if ($token === null) {
+        if ($deleted === 0) {
             return response()->json([
                 'message' => 'Token not found.',
             ], 404);
         }
-
-        $token->delete();
 
         return response()->json([
             'message' => 'Device token revoked successfully.',

@@ -32,7 +32,6 @@
                 <label>Email <input type="email" name="email" autocomplete="email" required></label>
                 <label>Password <input type="password" name="password" autocomplete="new-password" required></label>
                 <label>Confirm password <input type="password" name="password_confirmation" autocomplete="new-password" required></label>
-                <label>Account number <input type="text" name="account_number"></label>
                 <label>Address <input type="text" name="address"></label>
                 <label>Phone <input type="text" name="phone"></label>
                 <button class="button button-primary" type="submit">Create account</button>

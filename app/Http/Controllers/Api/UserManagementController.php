@@ -52,13 +52,15 @@ class UserManagementController extends Controller
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'role' => ['required', Rule::in(['user', 'admin', 'device'])],
-            'account_number' => ['nullable', 'string', 'max:255', 'unique:users,account_number'],
             'address' => ['nullable', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
             'is_active' => ['sometimes', 'boolean'],
         ]);
 
-        $user = User::create($validated);
+        $user = User::create([
+            ...$validated,
+            'account_number' => User::generateAccountNumber(),
+        ]);
 
         $this->billingStatementService->recordAudit(
             $request->user(),
@@ -116,21 +118,18 @@ class UserManagementController extends Controller
 
     public function destroy(Request $request, User $user)
     {
-        $user->update([
-            'is_active' => false,
-        ]);
+        $user->delete();
 
         $this->billingStatementService->recordAudit(
             $request->user(),
-            'user_deactivated',
-            'Deactivated a user account.',
+            'user_deleted',
+            'Deleted a user account.',
             ['user_id' => $user->id],
             $user,
         );
 
         return response()->json([
-            'message' => 'User deactivated successfully.',
-            'data' => $user->fresh(),
+            'message' => 'User deleted successfully.',
         ]);
     }
 }

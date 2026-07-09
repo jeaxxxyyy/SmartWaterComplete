@@ -39,6 +39,102 @@ class SmartWaterAdminApiTest extends TestCase
             ->assertJsonStructure(['data' => ['user', 'token']]);
     }
 
+    public function test_register_page_omits_account_number_and_persists_new_account_without_it(): void
+    {
+        $response = $this->get('/login');
+
+        $response->assertOk()
+            ->assertDontSee('Account number');
+
+        $registerResponse = $this->postJson('/api/register', [
+            'name' => 'New Household User',
+            'email' => 'newhousehold@example.com',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'address' => 'Poblacion, Calape',
+            'phone' => '09171234567',
+        ]);
+
+        $registerResponse->assertCreated()
+            ->assertJsonPath('data.user.account_number', 'ACC-USER-1');
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'newhousehold@example.com',
+            'name' => 'New Household User',
+            'account_number' => 'ACC-USER-1',
+            'role' => 'user',
+            'is_active' => true,
+        ]);
+    }
+
+    public function test_registration_generates_account_numbers_in_sequence(): void
+    {
+        $firstResponse = $this->postJson('/api/register', [
+            'name' => 'Household One',
+            'email' => 'household-one@example.com',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ]);
+
+        $secondResponse = $this->postJson('/api/register', [
+            'name' => 'Household Two',
+            'email' => 'household-two@example.com',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ]);
+
+        $firstResponse->assertCreated();
+        $secondResponse->assertCreated();
+
+        $this->assertSame('ACC-USER-1', $firstResponse->json('data.user.account_number'));
+        $this->assertSame('ACC-USER-2', $secondResponse->json('data.user.account_number'));
+    }
+
+    public function test_summary_is_scoped_to_current_user_for_households_and_all_users_for_admins(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $householdOne = User::factory()->create();
+        $householdTwo = User::factory()->create();
+
+        WaterReading::create([
+            'user_id' => $householdOne->id,
+            'flow_rate' => 1.2,
+            'liters_used' => 1200,
+            'cubic_meter' => 1.2,
+            'estimated_bill' => 48,
+            'rate_per_cubic_meter' => 20,
+            'subsidy_deduction' => 5,
+            'threshold_liters' => 100,
+            'is_threshold_exceeded' => false,
+            'is_possible_leak' => false,
+            'recorded_at' => now()->subDay(),
+        ]);
+
+        WaterReading::create([
+            'user_id' => $householdTwo->id,
+            'flow_rate' => 2.4,
+            'liters_used' => 2400,
+            'cubic_meter' => 2.4,
+            'estimated_bill' => 96,
+            'rate_per_cubic_meter' => 20,
+            'subsidy_deduction' => 5,
+            'threshold_liters' => 100,
+            'is_threshold_exceeded' => false,
+            'is_possible_leak' => false,
+            'recorded_at' => now()->subDay(),
+        ]);
+
+        Sanctum::actingAs($householdOne);
+        $householdResponse = $this->getJson('/api/summary');
+        $householdResponse->assertOk()
+            ->assertJsonPath('data.current_month.total_liters', 1200.0);
+
+        Sanctum::actingAs($admin);
+        $adminResponse = $this->getJson('/api/summary');
+        $adminResponse->assertOk()
+            ->assertJsonPath('data.current_month.total_liters', 3600.0);
+    }
+
     public function test_admin_can_manage_users_and_view_reports(): void
     {
         $admin = User::factory()->admin()->create();

@@ -31,6 +31,29 @@ class User extends Authenticatable implements MustVerifyEmail
     public const ADMIN_EMAIL = 'admin@gmail.com';
     public const ADMIN_PASSWORD = 'admin123';
 
+    public static function generateAccountNumber(): string
+    {
+        $latest = self::query()
+            ->where('account_number', 'like', 'ACC-USER-%')
+            ->orderByDesc('id')
+            ->first();
+
+        $nextNumber = 1;
+
+        if ($latest?->account_number !== null) {
+            $matches = [];
+            preg_match('/(\d+)$/', $latest->account_number, $matches);
+            $nextNumber = isset($matches[1]) ? (int) $matches[1] + 1 : 1;
+        }
+
+        do {
+            $candidate = 'ACC-USER-' . $nextNumber;
+            $nextNumber++;
+        } while (self::query()->where('account_number', $candidate)->exists());
+
+        return $candidate;
+    }
+
     /**
      * Get the attributes that should be cast.
      *

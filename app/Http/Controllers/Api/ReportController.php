@@ -17,7 +17,9 @@ class ReportController extends Controller
     {
         $user = $request->user();
         $isAdmin = $user?->isAdmin() === true;
-        $userId = $isAdmin ? $request->integer('user_id') : $user?->id;
+        $userId = $isAdmin && $request->filled('user_id')
+            ? $request->integer('user_id')
+            : ($isAdmin ? null : $user?->id);
 
         $currentMonthStart = now()->startOfMonth();
         $currentMonthEnd = now()->endOfMonth();

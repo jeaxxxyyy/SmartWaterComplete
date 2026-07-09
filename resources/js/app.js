@@ -18,9 +18,9 @@ const formatCurrency = (value) =>
 
 const litersToCubicMeters = (value) => Number(value ?? 0) / 1000;
 
-const formatCubicMeters = (liters) => `${formatNumber(litersToCubicMeters(liters))} m^3`;
+const formatCubicMeters = (liters) => `${formatNumber(litersToCubicMeters(liters))} m³`;
 
-const formatCubicMeterValue = (value) => `${formatNumber(value)} m^3`;
+const formatCubicMeterValue = (value) => `${formatNumber(value)} m³`;
 
 const formatDateTime = (value) => {
     if (!value) {
@@ -56,6 +56,36 @@ const adminState = {
     search: '',
     role: '',
     is_active: '',
+};
+
+const bindAdminUserDeleteActions = (container) => {
+    if (!container || container.dataset.deleteBound === '1') {
+        return;
+    }
+
+    container.dataset.deleteBound = '1';
+    container.addEventListener('click', async (event) => {
+        const button = event.target.closest('[data-delete-user]');
+        if (!button) {
+            return;
+        }
+
+        const userId = button.dataset.deleteUser;
+        const userName = button.dataset.userName || 'this user';
+
+        if (!window.confirm(`Delete ${userName}?`)) {
+            return;
+        }
+
+        try {
+            await requestJson(`/api/users/${userId}`, { method: 'DELETE' });
+            loadAdmin();
+        } catch (error) {
+            if (!handleAuthFailure(error)) {
+                console.error(error);
+            }
+        }
+    });
 };
 
 const readToken = () => localStorage.getItem(tokenKey) ?? '';
@@ -556,8 +586,10 @@ const loadDashboard = async () => {
             to: dashboardState.to,
         });
 
+        const summaryUrl = `/api/summary?user_id=${me.data.id}`;
+
         const [summaryResponse, readingsResponse, notificationsResponse] = await Promise.all([
-            requestJson('/api/summary'),
+            requestJson(summaryUrl),
             requestJson(`/api/readings${readingsQuery}`),
             requestJson('/api/notifications?per_page=5'),
         ]);
@@ -663,6 +695,7 @@ const loadAdmin = async () => {
                             <span>${user.email}</span>
                             <span>${user.role}</span>
                             <span>${user.is_active ? 'Active' : 'Inactive'}</span>
+                            <span><button type="button" class="link-button" data-delete-user="${user.id}" data-user-name="${user.name}">Delete</button></span>
                         </div>
                     `,
                     )
@@ -671,6 +704,7 @@ const loadAdmin = async () => {
 
             usersContainers.forEach((usersContainer) => {
                 usersContainer.innerHTML = usersMarkup;
+                bindAdminUserDeleteActions(usersContainer);
             });
         }
 

@@ -81,10 +81,10 @@
                 <span class="status-pill">Auto scale</span>
             </div>
             <div class="chart-legend">
-                <span><i class="legend-dot usage-dot"></i>Cubic meters</span>
+                <span><i class="legend-dot usage-dot"></i>m³</span>
             </div>
             <div class="usage-chart single-series" data-admin-monthly-chart>
-                <div class="empty-state">Sample output: June 2026 total usage is 245.00 m^3.</div>
+                <div class="empty-state">No usage data yet.</div>
             </div>
         </article>
     </section>
@@ -104,6 +104,7 @@
                         <span>Email</span>
                         <span>Role</span>
                         <span>Status</span>
+                        <span>Actions</span>
                     </div>
                     <div class="table-body" data-admin-users>
                         <div class="empty-state">Connect an admin token to load users.</div>
@@ -124,21 +125,12 @@
                         <option value="admin">Admin</option>
                         <option value="device">Device</option>
                     </select>
-                    <input type="text" name="account_number" placeholder="Account number">
                     <input type="text" name="address" placeholder="Address">
                     <input type="text" name="phone" placeholder="Phone">
                     <button class="button button-primary" type="submit">Create user</button>
                 </form>
             </article>
 
-            <article class="panel sample-panel">
-                <p class="eyebrow">Sample Output</p>
-                <div class="sample-grid">
-                    <div><dt>Household</dt><dd>Maria Santos</dd></div>
-                    <div><dt>Role</dt><dd>Household</dd></div>
-                    <div><dt>Status</dt><dd>Active</dd></div>
-                </div>
-            </article>
         </section>
     </section>
 
@@ -183,6 +175,7 @@
                     <span>Email</span>
                     <span>Role</span>
                     <span>Status</span>
+                    <span>Actions</span>
                 </div>
                 <div class="table-body" data-admin-users>
                     <div class="empty-state">Connect an admin token to load users.</div>
@@ -191,14 +184,6 @@
             <div class="pager" data-admin-users-pager></div>
         </article>
 
-        <article class="panel sample-panel">
-            <p class="eyebrow">Sample Output</p>
-            <div class="sample-grid">
-                <div><dt>Search</dt><dd>Account HH-2026-001</dd></div>
-                <div><dt>Result</dt><dd>1 active household</dd></div>
-                <div><dt>Role filter</dt><dd>Household</dd></div>
-            </div>
-        </article>
     </section>
 
     <section class="dashboard-view" data-admin-view="billing-settings">
@@ -207,7 +192,7 @@
             <h2>Rates and thresholds</h2>
             <form class="stack-form" data-billing-form>
                 <label>
-                    Water rate per cubic meter
+                    Water rate per m³
                     <input type="number" step="0.01" name="water_rate" placeholder="Example: 40.00" required>
                 </label>
                 <label>
@@ -234,14 +219,6 @@
             </form>
         </article>
 
-        <article class="panel sample-panel">
-            <p class="eyebrow">Sample Output</p>
-            <div class="sample-grid">
-                <div><dt>Rate</dt><dd>PHP 40.00 per m^3</dd></div>
-                <div><dt>Threshold</dt><dd>10.00 m^3</dd></div>
-                <div><dt>Quiet hours</dt><dd>22:00-05:00</dd></div>
-            </div>
-        </article>
     </section>
 
     <section class="dashboard-view" data-admin-view="device-management">
@@ -260,14 +237,6 @@
             </div>
         </article>
 
-        <article class="panel sample-panel">
-            <p class="eyebrow">Sample Output</p>
-            <div class="sample-grid">
-                <div><dt>Device</dt><dd>ESP32 Core2</dd></div>
-                <div><dt>Owner</dt><dd>Household device account</dd></div>
-                <div><dt>Tokens</dt><dd>1 active token</dd></div>
-            </div>
-        </article>
     </section>
 
     <section class="dashboard-view" data-admin-view="reports">
@@ -283,14 +252,6 @@
             </div>
         </article>
 
-        <article class="panel sample-panel">
-            <p class="eyebrow">Sample Output</p>
-            <div class="sample-grid">
-                <div><dt>Monthly readings</dt><dd>320</dd></div>
-                <div><dt>Total usage</dt><dd>245.00 m^3</dd></div>
-                <div><dt>Unread alerts</dt><dd>4</dd></div>
-            </div>
-        </article>
     </section>
 
     <section class="dashboard-view" data-admin-view="alerts">
@@ -306,13 +267,5 @@
             </div>
         </article>
 
-        <article class="panel sample-panel">
-            <p class="eyebrow">Sample Output</p>
-            <div class="notification-card">
-                <h4>Leak risk detected</h4>
-                <p>A household reported high flow during quiet hours.</p>
-                <small>Sample admin alert</small>
-            </div>
-        </article>
     </section>
 @endsection

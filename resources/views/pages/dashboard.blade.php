@@ -24,7 +24,7 @@
             <div class="hero-metrics">
                 <div class="mini-card">
                     <span class="mini-label">Current month</span>
-                    <strong class="mint" data-today-total>-- m^3</strong>
+                    <strong class="mint" data-today-total>-- m³</strong>
                     <small>Latest monthly usage snapshot.</small>
                 </div>
             </div>
@@ -37,7 +37,7 @@
                 <small>Current month reading count.</small>
             </article>
             <article class="stat-card">
-                <span class="stat-label">Cubic Meters</span>
+                <span class="stat-label">m³</span>
                 <strong class="mint" data-stat-liters>--</strong>
                 <small>Total water used this month.</small>
             </article>
@@ -62,11 +62,11 @@
                 <span class="status-pill">Auto scale</span>
             </div>
             <div class="chart-legend">
-                <span><i class="legend-dot usage-dot"></i>Cubic meters</span>
+                <span><i class="legend-dot usage-dot"></i>m³</span>
                 <span><i class="legend-dot bill-dot"></i>Estimated bill</span>
             </div>
             <div class="usage-chart" data-household-monthly-chart>
-                <div class="empty-state">Sample output: Jan 2026 shows 8.40 m^3 and PHP 336.00.</div>
+                <div class="empty-state">No usage data yet.</div>
             </div>
         </article>
     </section>
@@ -84,7 +84,7 @@
                 <div class="table-head">
                     <span>Date</span>
                     <span>Flow</span>
-                    <span>Cubic Meters</span>
+                    <span>m³</span>
                     <span>Bill</span>
                     <span>Status</span>
                 </div>
@@ -95,14 +95,6 @@
             <div class="pager" data-readings-pager></div>
         </article>
 
-        <article class="panel sample-panel">
-            <p class="eyebrow">Sample Output</p>
-            <div class="sample-grid">
-                <div><dt>Flow</dt><dd>12.50 L/min</dd></div>
-                <div><dt>Usage</dt><dd>0.08 m^3</dd></div>
-                <div><dt>Status</dt><dd>Normal</dd></div>
-            </div>
-        </article>
     </section>
 
     <section class="dashboard-view" data-household-view="consumption-history">
@@ -134,7 +126,7 @@
                 <div class="table-head">
                     <span>Date</span>
                     <span>Flow</span>
-                    <span>Cubic Meters</span>
+                    <span>m³</span>
                     <span>Bill</span>
                     <span>Status</span>
                 </div>
@@ -145,14 +137,6 @@
             <div class="pager" data-readings-pager></div>
         </article>
 
-        <article class="panel sample-panel">
-            <p class="eyebrow">Sample Output</p>
-            <div class="sample-grid">
-                <div><dt>Date range</dt><dd>June 1-30, 2026</dd></div>
-                <div><dt>Total usage</dt><dd>11.25 m^3</dd></div>
-                <div><dt>Bill</dt><dd>PHP 450.00</dd></div>
-            </div>
-        </article>
     </section>
 
     <section class="dashboard-view" data-household-view="billing-summary">
@@ -179,14 +163,6 @@
             </dl>
         </article>
 
-        <article class="panel sample-panel">
-            <p class="eyebrow">Sample Output</p>
-            <div class="sample-grid">
-                <div><dt>Rate</dt><dd>PHP 40.00 per m^3</dd></div>
-                <div><dt>Subsidy</dt><dd>PHP 50.00</dd></div>
-                <div><dt>Balance</dt><dd>PHP 398.00</dd></div>
-            </div>
-        </article>
     </section>
 
     <section class="dashboard-view" data-household-view="notifications-alerts">
@@ -198,14 +174,6 @@
             </div>
         </article>
 
-        <article class="panel sample-panel">
-            <p class="eyebrow">Sample Output</p>
-            <div class="notification-card">
-                <h4>High usage warning</h4>
-                <p>Your usage exceeded the configured monthly threshold.</p>
-                <small>Sample alert</small>
-            </div>
-        </article>
     </section>
 
     <section class="dashboard-view" data-household-view="profile">
