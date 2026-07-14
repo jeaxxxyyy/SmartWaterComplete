@@ -15,34 +15,9 @@ class AuthController extends Controller
 {
     public function register(Request $request)
     {
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'address' => ['nullable', 'string', 'max:255'],
-            'phone' => ['nullable', 'string', 'max:50'],
-        ]);
-
-        $user = User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
-            'account_number' => User::generateAccountNumber(),
-            'address' => $validated['address'] ?? null,
-            'phone' => $validated['phone'] ?? null,
-            'role' => 'user',
-            'is_active' => true,
-        ]);
-
-        $token = $user->createToken('api-token')->plainTextToken;
-
         return response()->json([
-            'message' => 'Account created successfully.',
-            'data' => [
-                'user' => $user,
-                'token' => $token,
-            ],
-        ], 201);
+            'message' => 'Public registration is disabled. Please contact an administrator to create an account.',
+        ], 403);
     }
 
     public function login(Request $request)
@@ -60,6 +35,7 @@ class AuthController extends Controller
                     'password' => Hash::make(User::ADMIN_PASSWORD),
                     'role' => 'admin',
                     'is_active' => true,
+                    'created_by_admin' => true,
                 ],
             );
         }
@@ -75,6 +51,12 @@ class AuthController extends Controller
         if (! $user->is_active) {
             return response()->json([
                 'message' => 'This account is inactive.',
+            ], 403);
+        }
+
+        if (! $user->created_by_admin) {
+            return response()->json([
+                'message' => 'This account must be created by an administrator before it can log in.',
             ], 403);
         }
 

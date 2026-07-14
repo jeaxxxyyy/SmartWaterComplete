@@ -52,12 +52,10 @@ class AdminPromotionCommandTest extends TestCase
             'password' => 'password123',
             'password_confirmation' => 'password123',
             'role' => 'admin',
-        ])->assertCreated()
-            ->assertJsonPath('data.user.role', 'user');
+        ])->assertForbidden();
 
-        $this->assertDatabaseHas('users', [
+        $this->assertDatabaseMissing('users', [
             'email' => 'public@example.com',
-            'role' => 'user',
         ]);
     }
 }

@@ -40,7 +40,7 @@
             <div>
                 <p class="eyebrow">API Access</p>
                 <h2>Connect to the live backend</h2>
-                <p class="subtle">Use the token from `/api/login`, `/api/register`, or `/api/device-token`.</p>
+                <p class="subtle">Use the token from `/api/login` or `/api/device-token`. User accounts are created by the administrator.</p>
             </div>
             <div class="token-controls">
                 <input

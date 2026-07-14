@@ -15,7 +15,6 @@
 
             <div class="auth-tabs">
                 <button type="button" class="tab-button is-active" data-tab-target="login">Login</button>
-                <button type="button" class="tab-button" data-tab-target="register">Register</button>
                 <button type="button" class="tab-button" data-tab-target="device">Device Token</button>
             </div>
 
@@ -25,16 +24,6 @@
                 <label>Email <input type="email" name="email" autocomplete="email" required></label>
                 <label>Password <input type="password" name="password" autocomplete="current-password" required></label>
                 <button class="button button-primary" type="submit">Sign in</button>
-            </form>
-
-            <form class="auth-form" data-auth-form="register">
-                <label>Name <input type="text" name="name" autocomplete="name" required></label>
-                <label>Email <input type="email" name="email" autocomplete="email" required></label>
-                <label>Password <input type="password" name="password" autocomplete="new-password" required></label>
-                <label>Confirm password <input type="password" name="password_confirmation" autocomplete="new-password" required></label>
-                <label>Address <input type="text" name="address"></label>
-                <label>Phone <input type="text" name="phone"></label>
-                <button class="button button-primary" type="submit">Create account</button>
             </form>
 
             <form class="auth-form" data-auth-form="device">

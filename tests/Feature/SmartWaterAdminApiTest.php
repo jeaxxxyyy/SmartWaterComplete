@@ -14,21 +14,24 @@ class SmartWaterAdminApiTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_public_registration_and_login_issue_tokens(): void
+    public function test_admin_created_user_can_login_issue_tokens(): void
     {
-        $registerResponse = $this->postJson('/api/register', [
+        $admin = User::factory()->admin()->create();
+
+        Sanctum::actingAs($admin);
+
+        $createResponse = $this->postJson('/api/users', [
             'name' => 'Household User',
             'email' => 'household@example.com',
             'password' => 'password123',
-            'password_confirmation' => 'password123',
-            'account_number' => 'ACC-1001',
+            'role' => 'user',
             'address' => 'Poblacion, Calape',
             'phone' => '09171234567',
         ]);
 
-        $registerResponse->assertCreated()
-            ->assertJsonPath('data.user.role', 'user')
-            ->assertJsonStructure(['data' => ['user', 'token']]);
+        $createResponse->assertCreated()
+            ->assertJsonPath('data.role', 'user')
+            ->assertJsonPath('data.created_by_admin', true);
 
         $loginResponse = $this->postJson('/api/login', [
             'email' => 'household@example.com',
@@ -39,55 +42,48 @@ class SmartWaterAdminApiTest extends TestCase
             ->assertJsonStructure(['data' => ['user', 'token']]);
     }
 
-    public function test_register_page_omits_account_number_and_persists_new_account_without_it(): void
+    public function test_register_page_does_not_offer_public_registration(): void
     {
         $response = $this->get('/login');
 
         $response->assertOk()
+            ->assertDontSee('Register')
             ->assertDontSee('Account number');
 
-        $registerResponse = $this->postJson('/api/register', [
+        $this->postJson('/api/register', [
             'name' => 'New Household User',
             'email' => 'newhousehold@example.com',
             'password' => 'password123',
             'password_confirmation' => 'password123',
             'address' => 'Poblacion, Calape',
             'phone' => '09171234567',
-        ]);
-
-        $registerResponse->assertCreated()
-            ->assertJsonPath('data.user.account_number', 'ACC-USER-1');
-
-        $this->assertDatabaseHas('users', [
-            'email' => 'newhousehold@example.com',
-            'name' => 'New Household User',
-            'account_number' => 'ACC-USER-1',
-            'role' => 'user',
-            'is_active' => true,
-        ]);
+        ])->assertForbidden();
     }
 
-    public function test_registration_generates_account_numbers_in_sequence(): void
+    public function test_admin_created_accounts_generate_account_numbers_in_sequence(): void
     {
-        $firstResponse = $this->postJson('/api/register', [
+        $admin = User::factory()->admin()->create();
+        Sanctum::actingAs($admin);
+
+        $firstResponse = $this->postJson('/api/users', [
             'name' => 'Household One',
             'email' => 'household-one@example.com',
             'password' => 'password123',
-            'password_confirmation' => 'password123',
+            'role' => 'user',
         ]);
 
-        $secondResponse = $this->postJson('/api/register', [
+        $secondResponse = $this->postJson('/api/users', [
             'name' => 'Household Two',
             'email' => 'household-two@example.com',
             'password' => 'password123',
-            'password_confirmation' => 'password123',
+            'role' => 'user',
         ]);
 
         $firstResponse->assertCreated();
         $secondResponse->assertCreated();
 
-        $this->assertSame('ACC-USER-1', $firstResponse->json('data.user.account_number'));
-        $this->assertSame('ACC-USER-2', $secondResponse->json('data.user.account_number'));
+        $this->assertSame('ACC-USER-1', $firstResponse->json('data.account_number'));
+        $this->assertSame('ACC-USER-2', $secondResponse->json('data.account_number'));
     }
 
     public function test_summary_is_scoped_to_current_user_for_households_and_all_users_for_admins(): void
@@ -127,12 +123,12 @@ class SmartWaterAdminApiTest extends TestCase
         Sanctum::actingAs($householdOne);
         $householdResponse = $this->getJson('/api/summary');
         $householdResponse->assertOk()
-            ->assertJsonPath('data.current_month.total_liters', 1200.0);
+            ->assertJsonPath('data.current_month.total_liters', 1200);
 
         Sanctum::actingAs($admin);
         $adminResponse = $this->getJson('/api/summary');
         $adminResponse->assertOk()
-            ->assertJsonPath('data.current_month.total_liters', 3600.0);
+            ->assertJsonPath('data.current_month.total_liters', 3600);
     }
 
     public function test_admin_can_manage_users_and_view_reports(): void

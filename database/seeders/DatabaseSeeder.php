@@ -21,6 +21,7 @@ class DatabaseSeeder extends Seeder
             'email' => User::ADMIN_EMAIL,
             'password' => Hash::make(User::ADMIN_PASSWORD),
             'account_number' => 'ACC-ADMIN-0001',
+            'created_by_admin' => true,
         ]);
 
         User::factory()->create([
@@ -28,12 +29,14 @@ class DatabaseSeeder extends Seeder
             'email' => 'device@example.com',
             'role' => 'device',
             'account_number' => 'ACC-DEVICE-0001',
+            'created_by_admin' => true,
         ]);
 
         User::factory()->create([
             'name' => 'Test User',
             'email' => 'test@example.com',
             'account_number' => 'ACC-USER-0001',
+            'created_by_admin' => true,
         ]);
     }
 }

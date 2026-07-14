@@ -25,6 +25,12 @@ Artisan::command('user:make-admin {email : Email address of the existing user}',
         return Command::FAILURE;
     }
 
+    if (! $user->created_by_admin) {
+        $this->error('Only admin-created accounts can be promoted.');
+
+        return Command::FAILURE;
+    }
+
     if ($user->isAdmin()) {
         $this->info("{$user->email} is already an admin.");
 

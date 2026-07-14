@@ -32,6 +32,7 @@ class UserFactory extends Factory
             'address' => fake()->streetAddress(),
             'phone' => fake()->phoneNumber(),
             'is_active' => true,
+            'created_by_admin' => true,
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
@@ -45,6 +46,7 @@ class UserFactory extends Factory
             'email' => User::ADMIN_EMAIL,
             'password' => Hash::make(User::ADMIN_PASSWORD),
             'role' => 'admin',
+            'created_by_admin' => true,
         ]);
     }
 

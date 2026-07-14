@@ -10,6 +10,9 @@ class WaterReading extends Model
 {
     protected $fillable = [
         'user_id',
+        'device_name',
+        'device_payload',
+        'leak_detection_status',
         'flow_rate',
         'liters_used',
         'cubic_meter',
@@ -17,12 +20,18 @@ class WaterReading extends Model
         'rate_per_cubic_meter',
         'subsidy_deduction',
         'threshold_liters',
+        'water_limit_liters',
+        'monitoring_status',
+        'wifi_signal_strength',
+        'device_connection_status',
+        'server_connection_status',
         'is_threshold_exceeded',
         'is_possible_leak',
-        'recorded_at'
+        'recorded_at',
     ];
 
     protected $casts = [
+        'device_payload' => 'array',
         'flow_rate' => 'decimal:2',
         'liters_used' => 'decimal:2',
         'cubic_meter' => 'decimal:4',
@@ -30,6 +39,8 @@ class WaterReading extends Model
         'rate_per_cubic_meter' => 'decimal:2',
         'subsidy_deduction' => 'decimal:2',
         'threshold_liters' => 'decimal:2',
+        'water_limit_liters' => 'decimal:2',
+        'wifi_signal_strength' => 'integer',
         'is_threshold_exceeded' => 'boolean',
         'is_possible_leak' => 'boolean',
         'recorded_at' => 'datetime',

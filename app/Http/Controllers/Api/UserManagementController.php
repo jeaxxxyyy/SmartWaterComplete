@@ -60,6 +60,7 @@ class UserManagementController extends Controller
         $user = User::create([
             ...$validated,
             'account_number' => User::generateAccountNumber(),
+            'created_by_admin' => true,
         ]);
 
         $this->billingStatementService->recordAudit(

@@ -21,6 +21,7 @@ use Illuminate\Notifications\Notifiable;
     'address',
     'phone',
     'is_active',
+    'created_by_admin',
 ])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements MustVerifyEmail
@@ -65,6 +66,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'created_by_admin' => 'boolean',
         ];
     }
 

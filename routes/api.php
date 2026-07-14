@@ -11,6 +11,21 @@ use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\UserManagementController;
 use App\Http\Controllers\Api\WaterController;
 
+// ============================================================
+//  ADD THIS PING ROUTE FOR TESTING
+// ============================================================
+Route::get('/ping', function () {
+    return response()->json([
+        'status' => 'ok',
+        'message' => 'Server is running',
+        'timestamp' => now()
+    ]);
+});
+
+// ============================================================
+//  EXISTING ROUTES
+// ============================================================
+
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/device-token', [AuthController::class, 'deviceToken']);
@@ -26,6 +41,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('verification.verify');
     Route::get('/readings', [WaterController::class, 'index']);
     Route::get('/summary', [ReportController::class, 'summary']);
+    Route::get('/live-state', [WaterController::class, 'liveState']);
 
     Route::get('/billing-settings', [BillingController::class, 'index']);
     Route::get('/notifications', [NotificationController::class, 'index']);

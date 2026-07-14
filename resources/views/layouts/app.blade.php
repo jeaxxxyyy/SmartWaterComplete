@@ -23,17 +23,35 @@
             </span>
         </a>
 
-        <nav class="topnav">
-            @hasSection('nav')
-                @yield('nav')
-            @else
+        @hasSection('nav')
+        @else
+            <nav class="topnav">
                 <a href="/login">Login</a>
-            @endif
-        </nav>
+            </nav>
+        @endif
     </header>
 
-    <main class="shell shell-app">
-        @yield('content')
-    </main>
+    @hasSection('nav')
+        <div class="app-shell">
+            <aside class="dashboard-sidebar panel">
+                <div class="sidebar-brand">
+                    <p class="eyebrow">@yield('title', config('app.name', 'Smart Water Monitoring'))</p>
+                    <h2>Navigation</h2>
+                    <p class="subtle">Use the sections on the left to switch between dashboard views.</p>
+                </div>
+                <nav class="sidebar-nav">
+                    @yield('nav')
+                </nav>
+            </aside>
+
+            <main class="shell shell-app shell-dashboard">
+                @yield('content')
+            </main>
+        </div>
+    @else
+        <main class="shell shell-app">
+            @yield('content')
+        </main>
+    @endif
 </body>
 </html>

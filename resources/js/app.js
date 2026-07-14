@@ -18,9 +18,9 @@ const formatCurrency = (value) =>
 
 const litersToCubicMeters = (value) => Number(value ?? 0) / 1000;
 
-const formatCubicMeters = (liters) => `${formatNumber(litersToCubicMeters(liters))} m³`;
+const formatCubicMeters = (liters) => `${formatNumber(litersToCubicMeters(liters))} m3`;
 
-const formatCubicMeterValue = (value) => `${formatNumber(value)} m³`;
+const formatCubicMeterValue = (value) => `${formatNumber(value)} m3`;
 
 const formatDateTime = (value) => {
     if (!value) {
@@ -43,6 +43,12 @@ const dashboardFilterForm = $('[data-reading-filters]');
 const adminUserFilterForm = $('[data-user-filters]');
 const readingsPagers = $$('[data-readings-pager]');
 
+const setText = (selector, value) => {
+    $$(selector).forEach((node) => {
+        node.textContent = value;
+    });
+};
+
 const dashboardState = {
     page: 1,
     per_page: 10,
@@ -56,6 +62,29 @@ const adminState = {
     search: '',
     role: '',
     is_active: '',
+};
+
+const DASHBOARD_REFRESH_MS = 15000;
+let dashboardRefreshTimer = null;
+let dashboardRefreshInFlight = false;
+
+const stopDashboardPolling = () => {
+    if (dashboardRefreshTimer) {
+        window.clearTimeout(dashboardRefreshTimer);
+        dashboardRefreshTimer = null;
+    }
+};
+
+const scheduleDashboardPolling = () => {
+    stopDashboardPolling();
+
+    if (page !== 'household' || !readToken()) {
+        return;
+    }
+
+    dashboardRefreshTimer = window.setTimeout(() => {
+        loadDashboard({ reschedule: true });
+    }, DASHBOARD_REFRESH_MS);
 };
 
 const bindAdminUserDeleteActions = (container) => {
@@ -366,6 +395,7 @@ const bootLogout = () => {
         } catch (error) {
             handleAuthFailure(error);
         } finally {
+            stopDashboardPolling();
             persistToken('');
             safeRedirect('/login');
         }
@@ -457,7 +487,7 @@ const renderReadings = (items) => {
 
     const markup = items
         .map((reading) => {
-            const status = reading.is_possible_leak ? 'Leak risk' : reading.is_threshold_exceeded ? 'Threshold' : 'Normal';
+            const status = reading.is_possible_leak ? 'Leak detected' : reading.is_threshold_exceeded ? 'Usage limit reached' : 'Normal';
             const statusClass = reading.is_possible_leak ? 'badge badge-leak' : reading.is_threshold_exceeded ? 'badge badge-threshold' : 'badge badge-normal';
 
             return `
@@ -478,62 +508,83 @@ const renderReadings = (items) => {
 };
 
 const renderNotifications = (items) => {
-    const container = $('[data-notifications-list]');
-    if (!container) {
+    const containers = $$('[data-notifications-list], [data-admin-notifications]');
+    if (!containers.length) {
         return;
     }
 
     if (!items?.length) {
-        container.innerHTML = '<div class="empty-state">No alerts yet.</div>';
+        containers.forEach((container) => {
+            container.innerHTML = '<div class="empty-state">No alerts yet.</div>';
+        });
         return;
     }
 
-    container.innerHTML = items
-        .map((notification) => `
+    const markup = items
+        .map((notification) => {
+            const label = notification.type === 'possible_leak'
+                ? 'Leak detected'
+                : notification.type === 'threshold_exceeded'
+                    ? 'Usage limit reached'
+                    : 'Announcement';
+
+            return `
             <article class="notification-card">
-                <div style="display:flex;justify-content:space-between;gap:1rem;align-items:center;">
+                <div class="notification-head">
                     <h4>${notification.title}</h4>
-                    <span style="font-size:0.75rem;color:${notification.is_read ? '#94a3b8' : '#67e8f9'};">${notification.is_read ? 'Read' : 'Unread'}</span>
+                    <span class="status-chip ${notification.is_read ? 'status-chip-muted' : 'status-chip-soft'}">${notification.is_read ? 'Read' : 'Unread'}</span>
                 </div>
+                <p class="notification-tag">${label}</p>
                 <p>${notification.message}</p>
                 <small>${formatDateTime(notification.sent_at ?? notification.created_at)}</small>
             </article>
-        `)
+        `;
+        })
         .join('');
+
+    containers.forEach((container) => {
+        container.innerHTML = markup;
+    });
 };
 
 const renderProfile = (user) => {
-    $('[data-profile-name]') && ($('[data-profile-name]').textContent = user?.name ?? '--');
-    $('[data-profile-email]') && ($('[data-profile-email]').textContent = user?.email ?? '--');
-    $('[data-profile-account]') && ($('[data-profile-account]').textContent = user?.account_number ?? '--');
-    $('[data-profile-address]') && ($('[data-profile-address]').textContent = user?.address ?? '--');
-    $('[data-profile-phone]') && ($('[data-profile-phone]').textContent = user?.phone ?? '--');
+    setText('[data-profile-name]', user?.name ?? '--');
+    setText('[data-profile-email]', user?.email ?? '--');
+    setText('[data-profile-account]', user?.account_number ?? '--');
+    setText('[data-profile-address]', user?.address ?? '--');
+    setText('[data-profile-phone]', user?.phone ?? '--');
 };
 
 const renderAdminAlerts = (items) => {
-    const container = $('[data-admin-alerts]');
-    if (!container) {
+    const containers = $$('[data-admin-alerts], [data-admin-notifications]');
+    if (!containers.length) {
         return;
     }
 
     if (!items?.length) {
-        container.innerHTML = '<div class="empty-state">No alerts found for this period.</div>';
+        containers.forEach((container) => {
+            container.innerHTML = '<div class="empty-state">No alerts found for this period.</div>';
+        });
         return;
     }
 
-    container.innerHTML = items
-        .slice(0, 5)
+    const markup = items
+        .slice(0, 8)
         .map((notification) => `
             <article class="notification-card">
-                <div style="display:flex;justify-content:space-between;gap:1rem;align-items:center;">
+                <div class="notification-head">
                     <h4>${notification.title}</h4>
-                    <span style="font-size:0.75rem;color:${notification.is_read ? '#64748b' : '#c24152'};">${notification.is_read ? 'Read' : 'Unread'}</span>
+                    <span class="status-chip ${notification.is_read ? 'status-chip-muted' : 'status-chip-alert'}">${notification.is_read ? 'Read' : 'Unread'}</span>
                 </div>
                 <p>${notification.message}</p>
                 <small>${formatDateTime(notification.sent_at ?? notification.created_at)}</small>
             </article>
         `)
         .join('');
+
+    containers.forEach((container) => {
+        container.innerHTML = markup;
+    });
 };
 
 const applySummary = (summary) => {
@@ -542,18 +593,34 @@ const applySummary = (summary) => {
     const billingStatement = summary?.billing_statement ?? null;
     const activeBilling = summary?.active_billing ?? null;
 
-    $('[data-stat-readings]') && ($('[data-stat-readings]').textContent = current.reading_count ?? '--');
-    $('[data-stat-liters]') && ($('[data-stat-liters]').textContent = formatCubicMeters(current.total_liters ?? 0));
-    $('[data-stat-bill]') && ($('[data-stat-bill]').textContent = formatCurrency(current.estimated_bill ?? 0));
-    $('[data-stat-alerts]') && ($('[data-stat-alerts]').textContent = notifications.unread ?? '--');
-    $('[data-today-total]') && ($('[data-today-total]').textContent = formatCubicMeters(current.total_liters ?? 0));
-    $('[data-balance]') && ($('[data-balance]').textContent = billingStatement ? formatCurrency(billingStatement.remaining_balance) : '--');
-    $('[data-water-rate]') && ($('[data-water-rate]').textContent = activeBilling ? formatCurrency(activeBilling.water_rate) : '--');
-    $('[data-subsidy]') && ($('[data-subsidy]').textContent = activeBilling ? formatCurrency(activeBilling.subsidy_deduction) : '--');
-    $('[data-billing-month]') &&
-        ($('[data-billing-month]').textContent = billingStatement?.billing_month
-            ? new Date(billingStatement.billing_month).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
-            : '--');
+    const latestReading = current.latest_reading ?? null;
+    const totalConsumed = formatCubicMeters(current.total_liters ?? 0);
+    const estimatedBill = formatCurrency(current.estimated_bill ?? 0);
+    const leakDetected = Boolean(latestReading?.is_possible_leak);
+    const leakStatus = leakDetected ? 'Leak detected' : 'Normal';
+    const quickSummary = `${current.reading_count ?? 0} readings, ${totalConsumed}, ${estimatedBill}`;
+
+    setText('[data-stat-readings]', current.reading_count ?? '--');
+    setText('[data-stat-liters]', totalConsumed);
+    setText('[data-stat-bill]', estimatedBill);
+    setText('[data-stat-alerts]', notifications.unread ?? '--');
+    setText('[data-today-total]', totalConsumed);
+    setText('[data-total-consumed]', totalConsumed);
+    setText('[data-estimated-bill]', estimatedBill);
+    setText('[data-water-rate]', activeBilling ? formatCurrency(activeBilling.water_rate) : '--');
+    setText('[data-balance]', billingStatement ? formatCurrency(billingStatement.remaining_balance) : '--');
+    setText('[data-threshold]', activeBilling ? `${formatNumber(activeBilling.threshold_liters ?? 0)} L` : '--');
+    setText('[data-leak-threshold]', activeBilling ? `${formatNumber(activeBilling.leak_flow_rate_threshold ?? 0)} L/min` : '--');
+    setText('[data-current-flow]', latestReading ? `${formatNumber(latestReading.flow_rate)} L/min` : '-- L/min');
+    setText('[data-leak-status]', leakStatus);
+    setText('[data-leak-summary]', leakStatus);
+    setText('[data-leak-details]', leakDetected ? 'Possible leak detected from the latest reading.' : 'No leak has been detected yet.');
+    setText('[data-last-updated-label]', latestReading?.recorded_at ? `Last updated: ${formatDateTime(latestReading.recorded_at)}` : 'Last updated: --');
+    setText('[data-last-updated]', latestReading?.recorded_at ? formatDateTime(latestReading.recorded_at) : '--');
+    setText('[data-billing-month]', billingStatement?.billing_month
+        ? new Date(billingStatement.billing_month).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+        : '--');
+    setText('[data-quick-summary]', quickSummary);
 
     renderNotifications(notifications.latest ?? []);
     renderMonthlyChart($('[data-household-monthly-chart]'), summary?.monthly_usage ?? [], {
@@ -564,18 +631,32 @@ const applySummary = (summary) => {
             { label: 'Jun 2026', total_cubic_meter: 8.4, estimated_bill: 336 },
         ],
     });
-    $('[data-live-label]') && ($('[data-live-label]').textContent = current.latest_reading ? 'Live' : 'Idle');
+    setText('[data-live-label]', latestReading ? 'Live' : 'Idle');
 };
 
-const loadDashboard = async () => {
+const loadDashboard = async (options = {}) => {
+    const { reschedule = true } = options;
+
     if (!readToken()) {
+        stopDashboardPolling();
         safeRedirect('/login');
         return;
     }
 
+    if (dashboardRefreshInFlight) {
+        if (reschedule) {
+            scheduleDashboardPolling();
+        }
+
+        return;
+    }
+
+    dashboardRefreshInFlight = true;
+
     try {
         const me = await requestJson('/api/me');
         if (redirectAwayFromWrongRole(me.data, 'household')) {
+            stopDashboardPolling();
             return;
         }
 
@@ -606,14 +687,23 @@ const loadDashboard = async () => {
             loadDashboard();
         }));
         setStatus('Connected');
+        if (reschedule) {
+            scheduleDashboardPolling();
+        }
     } catch (error) {
         if (handleAuthFailure(error)) {
+            stopDashboardPolling();
             return;
         }
 
         console.error(error);
         setStatus('Connection failed');
         $('[data-live-label]') && ($('[data-live-label]').textContent = 'Offline');
+        if (reschedule) {
+            scheduleDashboardPolling();
+        }
+    } finally {
+        dashboardRefreshInFlight = false;
     }
 };
 
@@ -625,6 +715,7 @@ const loadAdmin = async () => {
     const usersContainers = $$('[data-admin-users]');
     const tokensContainer = $('[data-device-tokens]');
     const reportsContainer = $('[data-admin-reports]');
+    const billingSummaryContainer = $('[data-admin-billing-summary]');
     const deviceSelect = $('[data-device-select]');
     const summaryLabel = $('[data-admin-summary]');
     const userForm = $('[data-admin-user-form]');
@@ -672,11 +763,36 @@ const loadAdmin = async () => {
         const consumption = consumptionResponse.data ?? {};
         const notificationReport = notificationsResponse.data ?? {};
 
-        summaryLabel && (summaryLabel.textContent = `${responsePaginator(usersResponse)?.total ?? users.length} users`);
-        $('[data-admin-households]') && ($('[data-admin-households]').textContent = overviewHouseholdUsers.length);
-        $('[data-admin-devices]') && ($('[data-admin-devices]').textContent = overviewDeviceUsers.length);
-        $('[data-admin-alert-count]') && ($('[data-admin-alert-count]').textContent = notificationReport.unread ?? 0);
-        $('[data-admin-liters]') && ($('[data-admin-liters]').textContent = formatCubicMeters(summary.current_month?.total_liters ?? 0));
+        const tokenCounts = await Promise.all(
+            overviewDeviceUsers.map(async (user) => {
+                try {
+                    const tokenResponse = await requestJson(`/api/devices/${user.id}/tokens`);
+                    return {
+                        user,
+                        tokens: tokenResponse.data ?? [],
+                    };
+                } catch (error) {
+                    return {
+                        user,
+                        tokens: [],
+                    };
+                }
+            }),
+        );
+
+        const onlineDevices = tokenCounts.filter((item) => item.tokens.length > 0).length;
+        const offlineDevices = Math.max(overviewDeviceUsers.length - onlineDevices, 0);
+        const totalConsumption = formatCubicMeters(summary.current_month?.total_liters ?? 0);
+        const estimatedBilling = formatCurrency(summary.current_month?.estimated_bill ?? 0);
+
+        summaryLabel && (summaryLabel.textContent = `${responsePaginator(usersResponse)?.total ?? users.length} records`);
+        setText('[data-admin-households]', overviewHouseholdUsers.length);
+        setText('[data-admin-devices]', overviewDeviceUsers.length);
+        setText('[data-admin-online-devices]', onlineDevices);
+        setText('[data-admin-offline-devices]', offlineDevices);
+        setText('[data-admin-alert-count]', notificationReport.unread ?? 0);
+        setText('[data-admin-liters]', totalConsumption);
+        setText('[data-admin-billing-total]', estimatedBilling);
         renderMonthlyChart($('[data-admin-monthly-chart]'), summary.monthly_usage ?? [], {
             fallbackRows: [
                 { label: 'Apr 2026', total_cubic_meter: 218 },
@@ -721,44 +837,40 @@ const loadAdmin = async () => {
         }
 
         if (tokensContainer) {
-            if (!overviewDeviceUsers.length) {
+            if (!tokenCounts.length) {
                 tokensContainer.innerHTML = '<div class="empty-state">No device accounts found.</div>';
             } else {
-                const tokenGroups = await Promise.all(
-                    overviewDeviceUsers.map(async (user) => {
-                        try {
-                            const tokenResponse = await requestJson(`/api/devices/${user.id}/tokens`);
-                            const tokens = tokenResponse.data ?? [];
-                            return `
-                                <article class="notification-card">
-                                    <h4>${user.name}</h4>
-                                    <p>${user.email}</p>
-                                    <small>${tokens.length} active token(s)</small>
-                                </article>
-                            `;
-                        } catch (error) {
-                            return `
-                                <article class="notification-card">
-                                    <h4>${user.name}</h4>
-                                    <p>${user.email}</p>
-                                    <small>Unable to load tokens</small>
-                                </article>
-                            `;
-                        }
-                    }),
-                );
-
-                tokensContainer.innerHTML = tokenGroups.join('');
+                tokensContainer.innerHTML = tokenCounts
+                    .map(({ user, tokens }) => `
+                        <article class="notification-card">
+                            <h4>${user.name}</h4>
+                            <p>${user.email}</p>
+                            <small>${tokens.length} active token(s)</small>
+                        </article>
+                    `)
+                    .join('');
             }
         }
 
         if (reportsContainer) {
             reportsContainer.innerHTML = `
                 <div><dt>Monthly readings</dt><dd>${summary.current_month?.reading_count ?? 0}</dd></div>
-                <div><dt>Monthly usage</dt><dd>${formatCubicMeters(summary.current_month?.total_liters ?? 0)}</dd></div>
+                <div><dt>Monthly usage</dt><dd>${totalConsumption}</dd></div>
+                <div><dt>Estimated billing</dt><dd>${estimatedBilling}</dd></div>
                 <div><dt>Unread alerts</dt><dd>${notificationReport.unread ?? 0}</dd></div>
                 <div><dt>Consumption rows</dt><dd>${consumption.summary?.reading_count ?? 0}</dd></div>
                 <div><dt>Notification items</dt><dd>${notificationReport.total ?? 0}</dd></div>
+            `;
+        }
+
+        if (billingSummaryContainer) {
+            billingSummaryContainer.innerHTML = `
+                <div><dt>Water rate per m3</dt><dd>${billingSettings ? formatCurrency(billingSettings.water_rate) : '--'}</dd></div>
+                <div><dt>Threshold liters</dt><dd>${billingSettings ? formatNumber(billingSettings.threshold_liters ?? 0) : '--'}</dd></div>
+                <div><dt>Leak threshold</dt><dd>${billingSettings ? formatNumber(billingSettings.leak_flow_rate_threshold ?? 0) : '--'}</dd></div>
+                <div><dt>Quiet hours</dt><dd>${billingSettings ? `${billingSettings.quiet_hours_start}:00 - ${billingSettings.quiet_hours_end}:00` : '--'}</dd></div>
+                <div><dt>Households</dt><dd>${overviewHouseholdUsers.length}</dd></div>
+                <div><dt>Devices online</dt><dd>${onlineDevices}</dd></div>
             `;
         }
 

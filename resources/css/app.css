@@ -66,6 +66,14 @@ a {
     padding-top: 1rem;
 }
 
+.app-shell {
+    width: min(1440px, calc(100% - 2rem));
+    margin: 0 auto;
+    padding: 1rem 0 3rem;
+    display: grid;
+    gap: 1rem;
+}
+
 .topbar {
     position: sticky;
     top: 0;
@@ -159,6 +167,55 @@ a {
     background: #e6f6fb;
 }
 
+.dashboard-sidebar {
+    padding: 1rem;
+    position: sticky;
+    top: 4.7rem;
+    align-self: start;
+    display: grid;
+    gap: 1rem;
+}
+
+.sidebar-brand h2 {
+    margin: 0;
+    font-size: 1.15rem;
+}
+
+.sidebar-nav {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.sidebar-nav a,
+.sidebar-nav button {
+    width: 100%;
+    text-align: left;
+    color: var(--muted);
+    background: #f8fbfd;
+    border: 1px solid var(--line);
+    font-size: 0.94rem;
+    font-weight: 700;
+    text-decoration: none;
+    padding: 0.8rem 0.9rem;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+}
+
+.sidebar-nav a:hover,
+.sidebar-nav button:hover {
+    color: var(--text);
+    background: #eef8fb;
+    border-color: #cdeaf2;
+}
+
+.sidebar-nav a.is-active,
+.sidebar-nav button.is-active {
+    color: var(--primary-dark);
+    background: #e6f6fb;
+    border-color: #8bd2e5;
+}
+
 .panel {
     border: 1px solid var(--line);
     background: var(--surface);
@@ -170,6 +227,25 @@ a {
     padding: 1.4rem;
     display: grid;
     gap: 1.25rem;
+}
+
+.household-hero,
+.admin-hero {
+    position: relative;
+    overflow: hidden;
+}
+
+.household-hero::after,
+.admin-hero::after {
+    content: "";
+    position: absolute;
+    inset: auto -6rem -6rem auto;
+    width: 16rem;
+    height: 16rem;
+    border-radius: 999px;
+    opacity: 0.12;
+    pointer-events: none;
+    background: radial-gradient(circle, var(--primary), transparent 68%);
 }
 
 .hero-copy h1,
@@ -213,6 +289,13 @@ a {
     gap: 0.75rem;
 }
 
+.hero-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
 .hero-actions {
     display: flex;
     flex-wrap: wrap;
@@ -231,6 +314,37 @@ a {
     display: block;
     margin: 0.4rem 0 0.25rem;
     font-size: 1.05rem;
+}
+
+.status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.45rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: #eef8fb;
+    color: var(--primary-dark);
+    font-size: 0.78rem;
+    font-weight: 750;
+}
+
+.status-chip-soft {
+    background: #eefbf5;
+    border-color: #b7e3d0;
+    color: var(--success);
+}
+
+.status-chip-muted {
+    background: #f1f5f9;
+    border-color: #d7e1ea;
+    color: var(--muted);
+}
+
+.status-chip-alert {
+    background: #fff1f3;
+    border-color: #f4bdc5;
+    color: var(--danger);
 }
 
 .mini-label,
@@ -881,6 +995,22 @@ a {
     background: var(--surface-soft);
 }
 
+.notification-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.notification-tag {
+    margin: 0.45rem 0 0;
+    color: var(--primary-dark);
+    font-size: 0.76rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
 .notification-card h4 {
     margin: 0;
     color: var(--text);
@@ -896,6 +1026,18 @@ a {
     display: block;
     margin-top: 0.55rem;
     color: var(--muted);
+}
+
+.leak-banner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    margin: 1rem 0 0.8rem;
+    padding: 0.9rem;
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(15, 143, 188, 0.08), rgba(194, 65, 82, 0.06));
+    border: 1px solid var(--line);
 }
 
 .empty-state {
@@ -938,6 +1080,11 @@ a {
 
     .auth-grid {
         grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+        align-items: start;
+    }
+
+    .app-shell {
+        grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
         align-items: start;
     }
 }
@@ -988,6 +1135,15 @@ a {
     .panel-head {
         align-items: stretch;
         flex-direction: column;
+    }
+
+    .dashboard-sidebar {
+        position: static;
+        top: auto;
+    }
+
+    .sidebar-nav {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
