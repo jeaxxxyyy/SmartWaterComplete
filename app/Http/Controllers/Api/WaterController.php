@@ -4,15 +4,17 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\WaterReading;
+use App\Models\Device;
 use App\Services\WaterConsumptionService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class WaterController extends Controller
 {
     public function __construct(
         protected WaterConsumptionService $waterConsumptionService
-    ) {
-    }
+    ) {}
 
     public function index(Request $request)
     {
@@ -47,6 +49,46 @@ class WaterController extends Controller
             ->withQueryString();
     }
 
+    public function history(Request $request)
+    {
+        $user = $request->user();
+        $userId = $user?->isAdmin() === true && $request->filled('user_id')
+            ? $request->integer('user_id')
+            : ($user?->isAdmin() === true ? null : $user?->id);
+
+        $daily = WaterReading::query()
+            ->when($userId !== null, fn ($query) => $query->where('user_id', $userId))
+            ->where('recorded_at', '>=', now()->subMonths(12)->startOfDay())
+            ->selectRaw('date(recorded_at) as period, sum(liters_used) as total_liters, sum(cubic_meter) as total_cubic_meter, sum(estimated_bill) as estimated_bill, sum(case when is_possible_leak = 1 then 1 else 0 end) as leak_count, sum(case when is_threshold_exceeded = 1 then 1 else 0 end) as limit_count')
+            ->groupBy(DB::raw('date(recorded_at)'))
+            ->orderByDesc('period')
+            ->get();
+
+        $aggregate = function (string $period) use ($daily) {
+            return $daily
+                ->groupBy(fn ($row) => match ($period) {
+                    'week' => Carbon::parse($row->period)->startOfWeek()->format('Y-m-d'),
+                    'month' => Carbon::parse($row->period)->startOfMonth()->format('Y-m'),
+                    default => $row->period,
+                })
+                ->map(fn ($rows, $label) => [
+                    'period' => $label,
+                    'total_liters' => round((float) $rows->sum('total_liters'), 4),
+                    'total_cubic_meter' => round((float) $rows->sum('total_cubic_meter'), 6),
+                    'estimated_bill' => round((float) $rows->sum('estimated_bill'), 2),
+                    'leak_count' => (int) $rows->sum('leak_count'),
+                    'limit_count' => (int) $rows->sum('limit_count'),
+                ])
+                ->values();
+        };
+
+        return response()->json(['data' => [
+            'daily' => $aggregate('day')->take(31)->values(),
+            'weekly' => $aggregate('week')->take(12)->values(),
+            'monthly' => $aggregate('month')->take(12)->values(),
+        ]]);
+    }
+
     public function store(Request $request)
     {
         $accessToken = $request->user()?->currentAccessToken();
@@ -58,7 +100,7 @@ class WaterController extends Controller
         }
 
         $validated = $request->validate([
-            'user_id' => ['required', 'integer', 'exists:users,id'],
+            'user_id' => ['nullable', 'integer', 'exists:users,id'],
             'device_name' => ['nullable', 'string', 'max:255'],
             'flow_rate' => ['required', 'numeric', 'min:0'],
             'liters_used' => ['nullable', 'numeric', 'min:0'],
@@ -73,11 +115,20 @@ class WaterController extends Controller
             'recorded_at' => ['nullable', 'date'],
         ]);
 
-        if ((int) $request->user()->id !== (int) $validated['user_id']) {
+        $device = $request->user();
+        $registeredDevice = Device::query()->where('auth_user_id', $device->id)->first();
+        if ($registeredDevice && $registeredDevice->status !== 'active') {
+            return response()->json(['message' => 'This municipal meter is not active.'], 403);
+        }
+        $targetUserId = $registeredDevice?->household_id ?? $device->assigned_user_id ?? $device->id;
+
+        if (isset($validated['user_id']) && (int) $validated['user_id'] !== (int) $targetUserId) {
             return response()->json([
-                'message' => 'You may only submit readings for the authenticated device account.',
+                'message' => 'This device may only submit readings for its assigned household.',
             ], 403);
         }
+
+        $validated['user_id'] = $targetUserId;
 
         $validated['liters_used'] = (float) ($validated['liters_used'] ?? $validated['total_water_liters'] ?? 0);
         $validated['cubic_meter'] = $validated['cubic_meter'] ?? ($validated['liters_used'] / 1000);
@@ -88,6 +139,11 @@ class WaterController extends Controller
         $validated['leak_detection_status'] = $validated['leak_detection_status'] ?? 'Normal';
 
         $result = $this->waterConsumptionService->storeReading($validated);
+
+        $registeredDevice?->update([
+            'last_seen_at' => now(),
+            'last_telemetry_at' => now(),
+        ]);
 
         return response()->json([
             'message' => 'Water data saved successfully',

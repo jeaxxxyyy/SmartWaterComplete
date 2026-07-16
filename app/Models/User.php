@@ -3,20 +3,22 @@
 namespace App\Models;
 
 use Database\Factories\UserFactory;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
 #[Fillable([
     'name',
     'email',
     'password',
     'role',
+    'assigned_user_id',
     'account_number',
     'address',
     'phone',
@@ -30,6 +32,7 @@ class User extends Authenticatable implements MustVerifyEmail
     use HasApiTokens, HasFactory, Notifiable;
 
     public const ADMIN_EMAIL = 'admin@gmail.com';
+
     public const ADMIN_PASSWORD = 'admin123';
 
     public static function generateAccountNumber(): string
@@ -48,7 +51,7 @@ class User extends Authenticatable implements MustVerifyEmail
         }
 
         do {
-            $candidate = 'ACC-USER-' . $nextNumber;
+            $candidate = 'ACC-USER-'.$nextNumber;
             $nextNumber++;
         } while (self::query()->where('account_number', $candidate)->exists());
 
@@ -78,6 +81,16 @@ class User extends Authenticatable implements MustVerifyEmail
     public function isDevice(): bool
     {
         return $this->role === 'device';
+    }
+
+    public function assignedHousehold(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'assigned_user_id');
+    }
+
+    public function assignedDevices(): HasMany
+    {
+        return $this->hasMany(self::class, 'assigned_user_id');
     }
 
     public function waterReadings(): HasMany

@@ -1,5 +1,6 @@
 const tokenKey = 'smart-water-token';
 const adminEmail = 'admin@gmail.com';
+const themeKey = 'smart-water-theme';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -18,9 +19,9 @@ const formatCurrency = (value) =>
 
 const litersToCubicMeters = (value) => Number(value ?? 0) / 1000;
 
-const formatCubicMeters = (liters) => `${formatNumber(litersToCubicMeters(liters))} m3`;
+const formatCubicMeters = (liters) => `${formatNumber(litersToCubicMeters(liters))} m³`;
 
-const formatCubicMeterValue = (value) => `${formatNumber(value)} m3`;
+const formatCubicMeterValue = (value) => `${formatNumber(value)} m³`;
 
 const formatDateTime = (value) => {
     if (!value) {
@@ -42,6 +43,39 @@ const refreshButton = $('[data-refresh]');
 const dashboardFilterForm = $('[data-reading-filters]');
 const adminUserFilterForm = $('[data-user-filters]');
 const readingsPagers = $$('[data-readings-pager]');
+const accountForm = $('[data-account-form]');
+const passwordForm = $('[data-password-form]');
+const toastStack = $('[data-toast-stack]');
+const themeToggle = $('[data-theme-toggle]');
+
+const applyTheme = (theme) => {
+    const resolved = theme === 'dark' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = resolved;
+    localStorage.setItem(themeKey, resolved);
+    if (themeToggle) {
+        themeToggle.textContent = resolved === 'dark' ? 'Use light theme' : 'Use dark theme';
+        themeToggle.setAttribute('aria-pressed', resolved === 'dark' ? 'true' : 'false');
+    }
+};
+
+const showToast = (message, type = 'success') => {
+    if (!toastStack || !message) return;
+    const toast = document.createElement('div');
+    toast.className = `toast-alert${type === 'error' ? ' is-error' : ''}`;
+    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    toast.textContent = message;
+    toastStack.appendChild(toast);
+    window.setTimeout(() => toast.remove(), type === 'error' ? 6000 : 4000);
+};
+
+const errorMessage = (error, fallback = 'The action could not be completed.') => {
+    try {
+        const payload = JSON.parse(error?.message ?? '');
+        return payload.message ?? Object.values(payload.errors ?? {}).flat()[0] ?? fallback;
+    } catch {
+        return fallback;
+    }
+};
 
 const setText = (selector, value) => {
     $$(selector).forEach((node) => {
@@ -55,6 +89,12 @@ const dashboardState = {
     from: '',
     to: '',
 };
+let consumptionHistory = { daily: [], weekly: [], monthly: [] };
+let historyPeriod = 'daily';
+let notificationObserver = null;
+let householdChartObserver = null;
+let adminChartObserver = null;
+const notificationReadInFlight = new Set();
 
 const adminState = {
     page: 1,
@@ -64,7 +104,7 @@ const adminState = {
     is_active: '',
 };
 
-const DASHBOARD_REFRESH_MS = 15000;
+const DASHBOARD_REFRESH_MS = 3000;
 let dashboardRefreshTimer = null;
 let dashboardRefreshInFlight = false;
 
@@ -108,10 +148,12 @@ const bindAdminUserDeleteActions = (container) => {
 
         try {
             await requestJson(`/api/users/${userId}`, { method: 'DELETE' });
+            showToast(`${userName} was deleted successfully.`);
             loadAdmin();
         } catch (error) {
             if (!handleAuthFailure(error)) {
                 console.error(error);
+                showToast(errorMessage(error, `Could not delete ${userName}.`), 'error');
             }
         }
     });
@@ -256,34 +298,84 @@ const renderMonthlyChart = (container, series, options = {}) => {
     const hasData = rows.some((row) => Number(row.total_cubic_meter ?? 0) > 0 || Number(row.estimated_bill ?? 0) > 0);
     const chartRows = (hasData ? rows : (options.fallbackRows ?? [])).slice(-3);
     const maxUsage = Math.max(...chartRows.map((row) => Number(row.total_cubic_meter ?? 0)), 0);
+    const maxBill = Math.max(...chartRows.map((row) => Number(row.estimated_bill ?? 0)), 0);
 
     if (!chartRows.length) {
         container.innerHTML = options.emptyMessage ?? '<div class="empty-state">No monthly usage available yet.</div>';
         return;
     }
 
-    container.innerHTML = chartRows
-        .map((row, index) => {
+    const signature = JSON.stringify({ chartRows, hasBills });
+    if (container.dataset.chartSignature === signature) return;
+    container.dataset.chartSignature = signature;
+    const wasAnimated = container.classList.contains('is-animated');
+    container.classList.remove('is-animated');
+    container.innerHTML = `<div class="vertical-chart-grid">${chartRows
+        .map((row) => {
             const usage = Number(row.total_cubic_meter ?? 0);
             const bill = Number(row.estimated_bill ?? 0);
-            const previousUsage = Number(chartRows[index - 1]?.total_cubic_meter ?? usage);
-            const trendClass = usage > previousUsage ? 'is-up' : usage < previousUsage ? 'is-down' : 'is-flat';
-            const trendArrow = usage > previousUsage ? '&uarr;' : usage < previousUsage ? '&darr;' : '&rarr;';
-            const arrowWidth = maxUsage > 0 ? Math.max((usage / maxUsage) * 100, usage > 0 ? 12 : 0) : 0;
+            const usageHeight = maxUsage > 0 ? Math.max((usage / maxUsage) * 100, usage > 0 ? 5 : 0) : 0;
+            const billHeight = maxBill > 0 ? Math.max((bill / maxBill) * 100, bill > 0 ? 5 : 0) : 0;
 
             return `
                 <div class="chart-month" title="${row.label}: ${formatCubicMeterValue(usage)}${hasBills ? `, ${formatCurrency(bill)}` : ''}">
-                    <span class="chart-y-label">${row.label}</span>
-                    <div class="arrow-track">
-                        <span class="usage-arrow-line ${trendClass}" style="width:${arrowWidth}%"></span>
-                        <span class="trend-arrow ${trendClass}">${trendArrow}</span>
+                    <div class="vertical-bars">
+                        <span class="vertical-bar usage-bar" style="--bar-height:${usageHeight}%"><i>${formatCubicMeterValue(usage)}</i></span>
+                        ${hasBills ? `<span class="vertical-bar bill-bar" style="--bar-height:${billHeight}%"><i>${formatCurrency(bill)}</i></span>` : ''}
                     </div>
-                    <strong>${formatCubicMeterValue(usage)}</strong>
-                    ${hasBills ? `<small>${formatCurrency(bill)}</small>` : ''}
+                    <strong>${row.label}</strong>
                 </div>
             `;
         })
-        .join('');
+        .join('')}</div>`;
+
+    if (wasAnimated) {
+        container.classList.add('is-animated');
+    } else if (container.closest('.dashboard-view')?.classList.contains('is-active')) {
+        if (container.matches('[data-household-monthly-chart]')) {
+            observeHouseholdChart(container);
+        } else {
+            observeAdminChart(container);
+        }
+    }
+};
+
+const observeHouseholdChart = (chart) => {
+    householdChartObserver?.disconnect();
+    householdChartObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+            if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+                entry.target.classList.add('is-animated');
+                householdChartObserver?.unobserve(entry.target);
+            }
+        });
+    }, { threshold: 0.5 });
+    householdChartObserver.observe(chart);
+};
+
+const observeAdminChart = (chart) => {
+    adminChartObserver?.disconnect();
+    adminChartObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+            if (entry.isIntersecting && entry.intersectionRatio >= 1) {
+                entry.target.classList.add('is-animated');
+                adminChartObserver?.unobserve(entry.target);
+            }
+        });
+    }, { threshold: 1 });
+    adminChartObserver.observe(chart);
+};
+
+const animateVisibleCharts = (view) => {
+    $$('[data-admin-monthly-chart], [data-household-monthly-chart]', view).forEach((chart) => {
+        chart.classList.remove('is-animated');
+        void chart.offsetHeight;
+        if (chart.matches('[data-household-monthly-chart]')) {
+            observeHouseholdChart(chart);
+            return;
+        }
+        observeAdminChart(chart);
+    });
 };
 
 const serializeForm = (form) => Object.fromEntries(new FormData(form).entries());
@@ -360,6 +452,8 @@ const showHouseholdView = (target) => {
     $$('[data-household-nav]').forEach((button) => {
         button.classList.toggle('is-active', button.dataset.householdNav === target);
     });
+    const activeView = $(`[data-household-view="${target}"]`);
+    if (activeView) animateVisibleCharts(activeView);
 };
 
 const showAdminView = (target, shouldUpdateHash = true) => {
@@ -374,6 +468,8 @@ const showAdminView = (target, shouldUpdateHash = true) => {
     if (shouldUpdateHash) {
         window.history.replaceState(null, '', `#${target}`);
     }
+    const activeView = $(`[data-admin-view="${target}"]`);
+    if (activeView) animateVisibleCharts(activeView);
 };
 
 const hasTokenOrReport = (message = 'Paste and save a bearer token first.') => {
@@ -456,10 +552,7 @@ const bootLoginPage = () => {
                     return;
                 }
 
-                report('Issuing device token...');
-                const response = await submitJsonForm('/api/device-token', payload);
-                persistToken(response.data.token);
-                report(`Device token issued for ${response.data.user.name}.`);
+                report('This account type must be commissioned by the municipal administrator.');
             } catch (error) {
                 report(handleAuthFailure(error) ? 'Session expired.' : 'Request failed. Check your inputs.');
                 console.error(error);
@@ -473,7 +566,7 @@ const bootLoginPage = () => {
 };
 
 const renderReadings = (items) => {
-    const containers = $$('[data-readings-list]');
+    const containers = $$('[data-live-readings-list]');
     if (!containers.length) {
         return;
     }
@@ -507,8 +600,33 @@ const renderReadings = (items) => {
     });
 };
 
+const renderConsumptionHistory = () => {
+    const container = $('[data-history-list]');
+    if (!container) return;
+    const items = consumptionHistory[historyPeriod] ?? [];
+    if (!items.length) {
+        container.innerHTML = '<div class="empty-state" style="margin:1rem;">No consumption totals available.</div>';
+        return;
+    }
+    container.innerHTML = items.map((item) => {
+        const label = historyPeriod === 'weekly'
+            ? `Week of ${new Date(`${item.period}T00:00:00`).toLocaleDateString()}`
+            : historyPeriod === 'monthly'
+                ? new Date(`${item.period}-01T00:00:00`).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+                : new Date(`${item.period}T00:00:00`).toLocaleDateString();
+        const alerts = Number(item.leak_count) + Number(item.limit_count);
+        return `<div class="table-row">
+            <span>${label}</span>
+            <span>${formatNumber(item.total_liters, 3)} L</span>
+            <span>${formatCubicMeterValue(item.total_cubic_meter)}</span>
+            <span>${formatCurrency(item.estimated_bill)}</span>
+            <span>${alerts ? `${alerts} alert(s)` : 'None'}</span>
+        </div>`;
+    }).join('');
+};
+
 const renderNotifications = (items) => {
-    const containers = $$('[data-notifications-list], [data-admin-notifications]');
+    const containers = $$('[data-notifications-list]');
     if (!containers.length) {
         return;
     }
@@ -529,7 +647,7 @@ const renderNotifications = (items) => {
                     : 'Announcement';
 
             return `
-            <article class="notification-card">
+            <article class="notification-card" data-notification-id="${notification.id}" data-notification-read="${notification.is_read ? '1' : '0'}" tabindex="0">
                 <div class="notification-head">
                     <h4>${notification.title}</h4>
                     <span class="status-chip ${notification.is_read ? 'status-chip-muted' : 'status-chip-soft'}">${notification.is_read ? 'Read' : 'Unread'}</span>
@@ -537,6 +655,7 @@ const renderNotifications = (items) => {
                 <p class="notification-tag">${label}</p>
                 <p>${notification.message}</p>
                 <small>${formatDateTime(notification.sent_at ?? notification.created_at)}</small>
+                <button type="button" class="link-button rose" data-delete-received-notification="${notification.id}">Delete</button>
             </article>
         `;
         })
@@ -544,6 +663,64 @@ const renderNotifications = (items) => {
 
     containers.forEach((container) => {
         container.innerHTML = markup;
+        bindNotificationReadTracking(container);
+    });
+};
+
+const markNotificationRead = async (card) => {
+    const id = card?.dataset.notificationId;
+    if (!id || card.dataset.notificationRead === '1' || notificationReadInFlight.has(id)) return;
+    notificationReadInFlight.add(id);
+    try {
+        await requestJson(`/api/notifications/${id}/read`, { method: 'PATCH' });
+        card.dataset.notificationRead = '1';
+        const badge = $('.status-chip', card);
+        if (badge) {
+            badge.textContent = 'Read';
+            badge.classList.remove('status-chip-soft');
+            badge.classList.add('status-chip-muted');
+        }
+    } catch (error) {
+        if (!handleAuthFailure(error)) console.error(error);
+    } finally {
+        notificationReadInFlight.delete(id);
+    }
+};
+
+const bindNotificationReadTracking = (container) => {
+    notificationObserver?.disconnect();
+    if (container.dataset.readTrackingBound !== '1') {
+        container.dataset.readTrackingBound = '1';
+        container.addEventListener('click', async (event) => {
+            const deleteButton = event.target.closest('[data-delete-received-notification]');
+            if (deleteButton) {
+                event.stopPropagation();
+                try {
+                    await requestJson(`/api/notifications/received/${deleteButton.dataset.deleteReceivedNotification}`, { method: 'DELETE' });
+                    deleteButton.closest('[data-notification-id]')?.remove();
+                    showToast('Notification deleted successfully.');
+                    loadDashboard();
+                } catch (error) {
+                    if (!handleAuthFailure(error)) showToast(errorMessage(error, 'Could not delete the notification.'), 'error');
+                }
+                return;
+            }
+            markNotificationRead(event.target.closest('[data-notification-id]'));
+        });
+        container.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') markNotificationRead(event.target.closest('[data-notification-id]'));
+        });
+    }
+    notificationObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+            if (entry.isIntersecting && entry.intersectionRatio >= 0.75) {
+                markNotificationRead(entry.target);
+                notificationObserver?.unobserve(entry.target);
+            }
+        });
+    }, { threshold: 0.75 });
+    $$('[data-notification-id]', container).forEach((card) => {
+        if (card.dataset.notificationRead !== '1') notificationObserver.observe(card);
     });
 };
 
@@ -553,37 +730,69 @@ const renderProfile = (user) => {
     setText('[data-profile-account]', user?.account_number ?? '--');
     setText('[data-profile-address]', user?.address ?? '--');
     setText('[data-profile-phone]', user?.phone ?? '--');
+    if (accountForm && !accountForm.contains(document.activeElement)) {
+        accountForm.elements.email.value = user?.email ?? '';
+        accountForm.elements.phone.value = user?.phone ?? '';
+    }
 };
 
 const renderAdminAlerts = (items) => {
-    const containers = $$('[data-admin-alerts], [data-admin-notifications]');
+    const containers = $$('[data-admin-alerts]');
     if (!containers.length) {
         return;
     }
 
-    if (!items?.length) {
+    const alerts = items ?? [];
+
+    if (!alerts.length) {
         containers.forEach((container) => {
             container.innerHTML = '<div class="empty-state">No alerts found for this period.</div>';
         });
         return;
     }
 
-    const markup = items
-        .slice(0, 8)
-        .map((notification) => `
+    const markup = alerts
+        .map((leak) => `
             <article class="notification-card">
                 <div class="notification-head">
-                    <h4>${notification.title}</h4>
-                    <span class="status-chip ${notification.is_read ? 'status-chip-muted' : 'status-chip-alert'}">${notification.is_read ? 'Read' : 'Unread'}</span>
+                    <h4>${leak.user.name} · ${leak.user.account_number ?? leak.user.email}</h4>
+                    <span class="status-chip ${leak.status === 'resolved' ? 'status-chip-soft' : 'status-chip-alert'}">${leak.status === 'resolved' ? 'Resolved' : 'Unresolved'}</span>
                 </div>
-                <p>${notification.message}</p>
-                <small>${formatDateTime(notification.sent_at ?? notification.created_at)}</small>
+                <p>${leak.user.address ?? 'No household address recorded'} · Flow: ${formatNumber(leak.flow_rate)} L/min</p>
+                <small>Last reading: ${formatDateTime(leak.last_reading_at)} · Last notice: ${formatDateTime(leak.last_notice_at)}</small>
             </article>
         `)
         .join('');
 
     containers.forEach((container) => {
         container.innerHTML = markup;
+    });
+};
+
+const renderAdminSentNotifications = (items) => {
+    const types = ['service_interruption', 'maintenance', 'announcement'];
+    types.forEach((type) => {
+        const container = $(`[data-admin-sent-type="${type}"]`);
+        if (!container) return;
+        const grouped = new Map();
+        (items ?? []).filter((item) => item.type === type).forEach((item) => {
+            const sentTime = item.sent_at ?? item.created_at ?? '';
+            const legacyTime = sentTime.slice(0, 16);
+            const key = item.batch_id ?? `${item.type}|${item.title}|${item.message}|${legacyTime}`;
+            if (!grouped.has(key)) grouped.set(key, { ...item, recipientCount: 0 });
+            grouped.get(key).recipientCount += 1;
+        });
+        const records = [...grouped.values()];
+        container.innerHTML = records.length
+            ? records.map((item) => `<article class="notification-card">
+                <div class="notification-head">
+                    <h4>${item.title}</h4>
+                </div>
+                <p>${item.message}</p>
+                <small>Sent ${formatDateTime(item.sent_at ?? item.created_at)} · ${item.recipientCount} recipient${item.recipientCount === 1 ? '' : 's'}</small>
+                <button type="button" class="link-button rose" data-delete-sent-notification="${item.id}" data-notification-title="${item.title}">Delete</button>
+            </article>`).join('')
+            : '<div class="empty-state">No sent records in this category.</div>';
     });
 };
 
@@ -614,6 +823,14 @@ const applySummary = (summary) => {
     setText('[data-current-flow]', latestReading ? `${formatNumber(latestReading.flow_rate)} L/min` : '-- L/min');
     setText('[data-leak-status]', leakStatus);
     setText('[data-leak-summary]', leakStatus);
+    $$('[data-leak-status]').forEach((node) => {
+        node.classList.toggle('status-chip-soft', !leakDetected);
+        node.classList.toggle('status-chip-alert', leakDetected);
+    });
+    $$('[data-leak-summary]').forEach((node) => {
+        node.classList.toggle('mint', !leakDetected);
+        node.classList.toggle('rose', leakDetected);
+    });
     setText('[data-leak-details]', leakDetected ? 'Possible leak detected from the latest reading.' : 'No leak has been detected yet.');
     setText('[data-last-updated-label]', latestReading?.recorded_at ? `Last updated: ${formatDateTime(latestReading.recorded_at)}` : 'Last updated: --');
     setText('[data-last-updated]', latestReading?.recorded_at ? formatDateTime(latestReading.recorded_at) : '--');
@@ -669,10 +886,11 @@ const loadDashboard = async (options = {}) => {
 
         const summaryUrl = `/api/summary?user_id=${me.data.id}`;
 
-        const [summaryResponse, readingsResponse, notificationsResponse] = await Promise.all([
+        const [summaryResponse, readingsResponse, notificationsResponse, historyResponse] = await Promise.all([
             requestJson(summaryUrl),
             requestJson(`/api/readings${readingsQuery}`),
-            requestJson('/api/notifications?per_page=5'),
+            requestJson('/api/notifications?per_page=100'),
+            requestJson('/api/consumption-history'),
         ]);
 
         const readings = responseItems(readingsResponse);
@@ -682,6 +900,8 @@ const loadDashboard = async (options = {}) => {
         applySummary(summaryResponse.data);
         renderReadings(readings);
         renderNotifications(notifications);
+        consumptionHistory = historyResponse.data ?? consumptionHistory;
+        renderConsumptionHistory();
         readingsPagers.forEach((readingsPager) => renderPager(readingsPager, responsePaginator(readingsResponse), (page) => {
             dashboardState.page = page;
             loadDashboard();
@@ -713,14 +933,18 @@ const loadAdmin = async () => {
     }
 
     const usersContainers = $$('[data-admin-users]');
-    const tokensContainer = $('[data-device-tokens]');
+    const devicesContainer = $('[data-municipal-devices]');
     const reportsContainer = $('[data-admin-reports]');
     const billingSummaryContainer = $('[data-admin-billing-summary]');
-    const deviceSelect = $('[data-device-select]');
+    const deviceHouseholdSelect = $('[data-device-household-select]');
+    const householdSelect = $('[data-household-select]');
     const summaryLabel = $('[data-admin-summary]');
     const userForm = $('[data-admin-user-form]');
     const billingForm = $('[data-billing-form]');
-    const deviceTokenForm = $('[data-device-token-form]');
+    const deviceRegisterForm = $('[data-device-register-form]');
+    const activationResult = $('[data-activation-result]');
+    const announcementForm = $('[data-announcement-form]');
+    const announcementUser = $('[data-announcement-user]');
 
     if (adminUserFilterForm) {
         const fields = serializeForm(adminUserFilterForm);
@@ -745,13 +969,16 @@ const loadAdmin = async () => {
             is_active: adminState.is_active,
         });
 
-        const [summaryResponse, usersResponse, overviewUsersResponse, billingResponse, consumptionResponse, notificationsResponse] = await Promise.all([
+        const [summaryResponse, usersResponse, overviewUsersResponse, billingResponse, consumptionResponse, notificationsResponse, sentNotificationsResponse, devicesResponse, leaksResponse] = await Promise.all([
             requestJson('/api/summary'),
             requestJson(`/api/users${usersQuery}`),
             requestJson('/api/users?per_page=100'),
             requestJson('/api/billing-settings'),
             requestJson('/api/reports/consumption'),
             requestJson('/api/reports/notifications'),
+            requestJson('/api/notifications?per_page=100'),
+            requestJson('/api/municipal-devices'),
+            requestJson('/api/reports/leaks'),
         ]);
 
         const users = responseItems(usersResponse);
@@ -762,32 +989,17 @@ const loadAdmin = async () => {
         const summary = summaryResponse.data ?? {};
         const consumption = consumptionResponse.data ?? {};
         const notificationReport = notificationsResponse.data ?? {};
-
-        const tokenCounts = await Promise.all(
-            overviewDeviceUsers.map(async (user) => {
-                try {
-                    const tokenResponse = await requestJson(`/api/devices/${user.id}/tokens`);
-                    return {
-                        user,
-                        tokens: tokenResponse.data ?? [],
-                    };
-                } catch (error) {
-                    return {
-                        user,
-                        tokens: [],
-                    };
-                }
-            }),
-        );
-
-        const onlineDevices = tokenCounts.filter((item) => item.tokens.length > 0).length;
-        const offlineDevices = Math.max(overviewDeviceUsers.length - onlineDevices, 0);
+        const sentNotifications = responseItems(sentNotificationsResponse);
+        const leakHouseholds = responseItems(leaksResponse);
+        const municipalDevices = responseItems(devicesResponse);
+        const onlineDevices = municipalDevices.filter((device) => device.is_online).length;
+        const offlineDevices = municipalDevices.filter((device) => !device.is_online && device.status !== 'decommissioned').length;
         const totalConsumption = formatCubicMeters(summary.current_month?.total_liters ?? 0);
         const estimatedBilling = formatCurrency(summary.current_month?.estimated_bill ?? 0);
 
         summaryLabel && (summaryLabel.textContent = `${responsePaginator(usersResponse)?.total ?? users.length} records`);
         setText('[data-admin-households]', overviewHouseholdUsers.length);
-        setText('[data-admin-devices]', overviewDeviceUsers.length);
+        setText('[data-admin-devices]', municipalDevices.length);
         setText('[data-admin-online-devices]', onlineDevices);
         setText('[data-admin-offline-devices]', offlineDevices);
         setText('[data-admin-alert-count]', notificationReport.unread ?? 0);
@@ -829,23 +1041,45 @@ const loadAdmin = async () => {
             loadAdmin();
         }));
 
-        if (deviceSelect) {
-            deviceSelect.innerHTML = '<option value="">Choose device account</option>' +
-                overviewDeviceUsers
+        if (deviceHouseholdSelect) {
+            deviceHouseholdSelect.innerHTML = '<option value="">Choose household</option>' +
+                overviewHouseholdUsers
+                    .map((user) => `<option value="${user.id}">${user.name} (${user.account_number ?? user.email})</option>`)
+                    .join('');
+        }
+
+        if (householdSelect) {
+            householdSelect.innerHTML = '<option value="">Assign device to household (devices only)</option>' +
+                overviewHouseholdUsers
+                    .map((user) => `<option value="${user.id}">${user.name} (${user.account_number ?? user.email})</option>`)
+                    .join('');
+        }
+
+        if (announcementUser) {
+            announcementUser.innerHTML = '<option value="">All active households</option>' +
+                overviewHouseholdUsers
                     .map((user) => `<option value="${user.id}">${user.name} (${user.email})</option>`)
                     .join('');
         }
 
-        if (tokensContainer) {
-            if (!tokenCounts.length) {
-                tokensContainer.innerHTML = '<div class="empty-state">No device accounts found.</div>';
+        if (devicesContainer) {
+            if (!municipalDevices.length) {
+                devicesContainer.innerHTML = '<div class="empty-state">No municipal meters registered.</div>';
             } else {
-                tokensContainer.innerHTML = tokenCounts
-                    .map(({ user, tokens }) => `
+                devicesContainer.innerHTML = municipalDevices
+                    .map((device) => `
                         <article class="notification-card">
-                            <h4>${user.name}</h4>
-                            <p>${user.email}</p>
-                            <small>${tokens.length} active token(s)</small>
+                            <h4>${device.asset_number} · ${device.name}</h4>
+                            <p>${device.household?.name ?? 'Unassigned'} · ${device.serial_number}</p>
+                            <small>${device.is_online ? 'Online' : 'Offline'} · Lifecycle: ${device.status} · Maintenance: ${device.maintenance_status}</small>
+                            <small>Last seen: ${formatDateTime(device.last_seen_at)} · Firmware: ${device.firmware_version ?? 'Not reported'}</small>
+                            <small>Hardware: ${device.hardware_id ?? 'Not commissioned'} · Installed: ${device.installed_at ? formatDateTime(device.installed_at) : 'Not set'}</small>
+                            <div class="button-row">
+                                ${device.status !== 'decommissioned' ? `<button type="button" class="button button-secondary" data-device-new-code="${device.id}">New activation code</button>` : ''}
+                                ${device.status === 'active' ? `<button type="button" class="button button-secondary" data-device-status="${device.id}" data-next-status="maintenance">Maintenance</button>` : ''}
+                                ${['maintenance', 'suspended'].includes(device.status) ? `<button type="button" class="button button-secondary" data-device-status="${device.id}" data-next-status="active">Return to service</button>` : ''}
+                                ${device.status !== 'decommissioned' ? `<button type="button" class="link-button" data-device-decommission="${device.id}">Decommission</button>` : ''}
+                            </div>
                         </article>
                     `)
                     .join('');
@@ -865,7 +1099,7 @@ const loadAdmin = async () => {
 
         if (billingSummaryContainer) {
             billingSummaryContainer.innerHTML = `
-                <div><dt>Water rate per m3</dt><dd>${billingSettings ? formatCurrency(billingSettings.water_rate) : '--'}</dd></div>
+                <div><dt>Water rate per m³</dt><dd>${billingSettings ? formatCurrency(billingSettings.water_rate) : '--'}</dd></div>
                 <div><dt>Threshold liters</dt><dd>${billingSettings ? formatNumber(billingSettings.threshold_liters ?? 0) : '--'}</dd></div>
                 <div><dt>Leak threshold</dt><dd>${billingSettings ? formatNumber(billingSettings.leak_flow_rate_threshold ?? 0) : '--'}</dd></div>
                 <div><dt>Quiet hours</dt><dd>${billingSettings ? `${billingSettings.quiet_hours_start}:00 - ${billingSettings.quiet_hours_end}:00` : '--'}</dd></div>
@@ -874,7 +1108,8 @@ const loadAdmin = async () => {
             `;
         }
 
-        renderAdminAlerts(notificationReport.items ?? []);
+        renderAdminAlerts(leakHouseholds);
+        renderAdminSentNotifications(sentNotifications);
 
         if (billingForm && billingSettings) {
             const fields = ['water_rate', 'subsidy_deduction', 'threshold_liters', 'leak_flow_rate_threshold', 'quiet_hours_start', 'quiet_hours_end'];
@@ -896,11 +1131,13 @@ const loadAdmin = async () => {
                     method: 'POST',
                     body: JSON.stringify(payload),
                 });
+                showToast('User account created successfully.');
                 userForm.reset();
                 loadAdmin();
             } catch (error) {
                 if (!handleAuthFailure(error)) {
                     console.error(error);
+                    showToast(errorMessage(error, 'Could not create the user account.'), 'error');
                 }
             }
             });
@@ -916,35 +1153,87 @@ const loadAdmin = async () => {
                     method: 'POST',
                     body: JSON.stringify(payload),
                 });
+                showToast('Water-rate and billing settings saved successfully.');
                 loadAdmin();
             } catch (error) {
                 if (!handleAuthFailure(error)) {
                     console.error(error);
+                    showToast(errorMessage(error, 'Could not save billing settings.'), 'error');
                 }
             }
             });
         }
 
-        if (deviceTokenForm && !deviceTokenForm.dataset.bound) {
-            deviceTokenForm.dataset.bound = '1';
-            deviceTokenForm.addEventListener('submit', async (event) => {
+        if (deviceRegisterForm && !deviceRegisterForm.dataset.bound) {
+            deviceRegisterForm.dataset.bound = '1';
+            deviceRegisterForm.addEventListener('submit', async (event) => {
             event.preventDefault();
-            const payload = Object.fromEntries(new FormData(deviceTokenForm).entries());
-            const userId = payload.user_id;
-            delete payload.user_id;
+            const payload = Object.fromEntries(new FormData(deviceRegisterForm).entries());
+            Object.keys(payload).forEach((key) => payload[key] === '' && delete payload[key]);
 
             try {
-                await requestJson(`/api/devices/${userId}/tokens`, {
+                const response = await requestJson('/api/municipal-devices', {
                     method: 'POST',
                     body: JSON.stringify(payload),
                 });
-                deviceTokenForm.reset();
+                const details = response.data;
+                if (activationResult) activationResult.innerHTML = `<article class="notification-card"><h4>Save this one-time activation information</h4><p>Device UUID: <code>${details.device.uuid}</code></p><p>Activation code: <strong>${details.activation_code}</strong></p><small>Expires: ${formatDateTime(details.expires_at)}. The credential token is delivered directly to the device and is never shown here.</small></article>`;
+                showToast('Municipal meter registered successfully.');
+                deviceRegisterForm.reset();
                 loadAdmin();
             } catch (error) {
                 if (!handleAuthFailure(error)) {
                     console.error(error);
+                    showToast(errorMessage(error, 'Could not register the meter.'), 'error');
                 }
             }
+            });
+        }
+
+        if (devicesContainer && !devicesContainer.dataset.bound) {
+            devicesContainer.dataset.bound = '1';
+            devicesContainer.addEventListener('click', async (event) => {
+                const codeButton = event.target.closest('[data-device-new-code]');
+                const statusButton = event.target.closest('[data-device-status]');
+                const decommissionButton = event.target.closest('[data-device-decommission]');
+                try {
+                    if (codeButton) {
+                        if (!window.confirm('Rotate credentials and create a new activation code? The current device token will stop working.')) return;
+                        const response = await requestJson(`/api/municipal-devices/${codeButton.dataset.deviceNewCode}/activation-code`, { method: 'POST' });
+                        if (activationResult) activationResult.innerHTML = `<article class="notification-card"><h4>One-time activation information</h4><p>Device UUID: <code>${response.data.device_uuid}</code></p><p>Activation code: <strong>${response.data.activation_code}</strong></p><small>Expires: ${formatDateTime(response.data.expires_at)}</small></article>`;
+                        showToast('New activation code created and old credentials revoked.');
+                    } else if (statusButton) {
+                        await requestJson(`/api/municipal-devices/${statusButton.dataset.deviceStatus}`, { method: 'PATCH', body: JSON.stringify({ status: statusButton.dataset.nextStatus, maintenance_status: statusButton.dataset.nextStatus === 'active' ? 'operational' : 'under_maintenance' }) });
+                        showToast('Device lifecycle status updated.');
+                    } else if (decommissionButton) {
+                        if (!window.confirm('Permanently decommission this meter and revoke its credentials?')) return;
+                        await requestJson(`/api/municipal-devices/${decommissionButton.dataset.deviceDecommission}`, { method: 'DELETE' });
+                        showToast('Device decommissioned and credentials revoked.');
+                    } else return;
+                    loadAdmin();
+                } catch (error) {
+                    if (!handleAuthFailure(error)) showToast(errorMessage(error, 'Could not update the meter.'), 'error');
+                }
+            });
+        }
+
+        if (announcementForm && !announcementForm.dataset.bound) {
+            announcementForm.dataset.bound = '1';
+            announcementForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const payload = Object.fromEntries(new FormData(announcementForm).entries());
+                if (!payload.user_id) delete payload.user_id;
+                try {
+                    await requestJson('/api/notifications', { method: 'POST', body: JSON.stringify(payload) });
+                    showToast('Notification sent successfully.');
+                    announcementForm.reset();
+                    loadAdmin();
+                } catch (error) {
+                    if (!handleAuthFailure(error)) {
+                        console.error(error);
+                        showToast(errorMessage(error, 'Could not send the notification.'), 'error');
+                    }
+                }
             });
         }
 
@@ -974,9 +1263,103 @@ const loadAdmin = async () => {
 const bootCommon = () => {
     setTokenInput();
     bootLogout();
+    const supportsThemeSelection = page === 'household' || page === 'admin';
+    if (supportsThemeSelection) {
+        applyTheme(localStorage.getItem(themeKey) ?? 'light');
+    } else {
+        document.documentElement.dataset.theme = 'light';
+    }
+    themeToggle?.addEventListener('click', () => {
+        const nextTheme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+        applyTheme(nextTheme);
+        showToast(`${nextTheme === 'dark' ? 'Dark' : 'Light'} theme enabled.`);
+    });
+
+    document.addEventListener('click', async (event) => {
+        const itemButton = event.target.closest('[data-delete-sent-notification]');
+        const allButton = event.target.closest('[data-delete-all-sent-notifications]');
+        if (!itemButton && !allButton) return;
+
+        const title = itemButton?.dataset.notificationTitle ?? 'all sent notifications';
+        if (!window.confirm(`Delete ${title}? This cannot be undone.`)) return;
+
+        const url = itemButton
+            ? `/api/notifications/sent/${itemButton.dataset.deleteSentNotification}`
+            : '/api/notifications/sent/all';
+        try {
+            const response = await requestJson(url, { method: 'DELETE' });
+            showToast(response?.message ?? 'Notification records deleted successfully.');
+            loadAdmin();
+        } catch (error) {
+            if (!handleAuthFailure(error)) {
+                console.error(error);
+                showToast(errorMessage(error, 'Could not delete the notification records.'), 'error');
+            }
+        }
+    });
+
+    $$('[data-pdf-export]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const printWindow = window.open('', '_blank');
+            try {
+                const response = await fetch(button.dataset.pdfExport, { headers: authHeaders() });
+                if (!response.ok) throw new Error('PDF export failed.');
+                const url = URL.createObjectURL(await response.blob());
+                if (printWindow) printWindow.location.href = url;
+                else window.location.href = url;
+                showToast('PDF export created successfully.');
+                window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+            } catch (error) {
+                printWindow?.close();
+                if (!handleAuthFailure(error)) {
+                    console.error(error);
+                    setStatus('PDF export failed');
+                    showToast('Could not create the PDF export.', 'error');
+                }
+            }
+        });
+    });
+
+    if (accountForm && !accountForm.dataset.bound) {
+        accountForm.dataset.bound = '1';
+        accountForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            try {
+                await requestJson('/api/account', { method: 'PATCH', body: JSON.stringify(serializeForm(accountForm)) });
+                setStatus('Account updated');
+                showToast('Contact details updated successfully.');
+                loadDashboard();
+            } catch (error) {
+                showToast(errorMessage(error, 'Could not update contact details.'), 'error');
+            }
+        });
+    }
+
+    if (passwordForm && !passwordForm.dataset.bound) {
+        passwordForm.dataset.bound = '1';
+        passwordForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            try {
+                await requestJson('/api/account/password', { method: 'PATCH', body: JSON.stringify(serializeForm(passwordForm)) });
+                passwordForm.reset();
+                setStatus('Password changed');
+                showToast('Password changed successfully.');
+            } catch (error) {
+                showToast(errorMessage(error, 'Could not change the password.'), 'error');
+            }
+        });
+    }
 
     $$('[data-household-nav]').forEach((button) => {
         button.addEventListener('click', () => showHouseholdView(button.dataset.householdNav));
+    });
+
+    $$('[data-history-period]').forEach((button) => {
+        button.addEventListener('click', () => {
+            historyPeriod = button.dataset.historyPeriod;
+            $$('[data-history-period]').forEach((tab) => tab.classList.toggle('is-active', tab === button));
+            renderConsumptionHistory();
+        });
     });
 
     $$('[data-admin-nav]').forEach((button) => {
@@ -986,6 +1369,7 @@ const bootCommon = () => {
     saveTokenButton?.addEventListener('click', () => {
         persistToken(tokenInput?.value.trim() ?? '');
         setStatus('Token saved');
+        showToast('API token saved successfully.');
     });
 
     if (dashboardFilterForm && !dashboardFilterForm.dataset.bound) {
@@ -1011,6 +1395,18 @@ const bootCommon = () => {
 
         if (page === 'admin') {
             loadAdmin();
+        }
+    });
+
+    const clearNotificationsButton = $('[data-clear-notifications]');
+    clearNotificationsButton?.addEventListener('click', async () => {
+        if (!window.confirm('Clear every notification from your inbox?')) return;
+        try {
+            const response = await requestJson('/api/notifications/received/all', { method: 'DELETE' });
+            showToast(response.message ?? 'All notifications cleared successfully.');
+            loadDashboard();
+        } catch (error) {
+            if (!handleAuthFailure(error)) showToast(errorMessage(error, 'Could not clear notifications.'), 'error');
         }
     });
 };

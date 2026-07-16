@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Billing;
 use App\Models\BillingStatement;
 use App\Models\Notification;
+use App\Models\User;
 use App\Models\WaterReading;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -29,7 +30,8 @@ class ReportController extends Controller
             ->whereBetween('recorded_at', [$currentMonthStart, $currentMonthEnd]);
 
         $notificationQuery = Notification::query()
-            ->when($userId !== null, fn ($query) => $query->where('user_id', $userId));
+            ->when($userId !== null, fn ($query) => $query->where('user_id', $userId))
+            ->when(! $isAdmin, fn ($query) => $query->whereNull('user_deleted_at'));
 
         $statement = BillingStatement::query()
             ->when($userId !== null, fn ($query) => $query->where('user_id', $userId))
@@ -160,5 +162,43 @@ class ReportController extends Controller
                 'items' => $query->latest()->get(),
             ],
         ]);
+    }
+
+    public function leaks()
+    {
+        $householdIds = Notification::query()
+            ->where('type', 'possible_leak')
+            ->distinct()
+            ->pluck('user_id');
+
+        $items = User::query()
+            ->whereIn('id', $householdIds)
+            ->where('role', 'user')
+            ->get(['id', 'name', 'email', 'account_number', 'address'])
+            ->map(function (User $user): array {
+                $latestReading = WaterReading::query()
+                    ->where('user_id', $user->id)
+                    ->latest('recorded_at')
+                    ->latest('id')
+                    ->first();
+                $latestNotice = Notification::query()
+                    ->where('user_id', $user->id)
+                    ->where('type', 'possible_leak')
+                    ->latest('sent_at')
+                    ->first();
+
+                return [
+                    'user' => $user,
+                    'status' => $latestReading?->is_possible_leak ? 'unresolved' : 'resolved',
+                    'flow_rate' => (float) ($latestReading?->flow_rate ?? 0),
+                    'last_reading_at' => $latestReading?->recorded_at,
+                    'last_notice_at' => $latestNotice?->sent_at,
+                    'last_notice_title' => $latestNotice?->title,
+                ];
+            })
+            ->sortByDesc(fn (array $item) => $item['status'] === 'unresolved')
+            ->values();
+
+        return response()->json(['data' => $items]);
     }
 }

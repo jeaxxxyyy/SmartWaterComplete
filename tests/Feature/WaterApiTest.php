@@ -27,6 +27,7 @@ class WaterApiTest extends TestCase
         Carbon::setTestNow(Carbon::parse('2026-06-18 23:00:00'));
 
         $user = User::factory()->create();
+        Sanctum::actingAs($user, ['device-upload']);
 
         Billing::create([
             'water_rate' => 25,
@@ -76,6 +77,8 @@ class WaterApiTest extends TestCase
     public function test_billing_settings_can_be_saved_and_retrieved(): void
     {
         $user = User::factory()->create();
+        $admin = User::factory()->admin()->create();
+        Sanctum::actingAs($admin);
 
         $response = $this->postJson('/api/billing-settings', [
             'user_id' => $user->id,
@@ -91,15 +94,70 @@ class WaterApiTest extends TestCase
         $response->assertCreated()
             ->assertJsonPath('data.water_rate', '30.00');
 
-        $this->getJson('/api/billing-settings?user_id=' . $user->id)
+        $this->getJson('/api/billing-settings?user_id='.$user->id)
             ->assertOk()
             ->assertJsonPath('data.user_id', $user->id)
             ->assertJsonPath('data.water_rate', '30.00');
     }
 
+    public function test_leak_status_uses_configured_flow_rate_and_notifies_once_per_event(): void
+    {
+        $user = User::factory()->create();
+        Sanctum::actingAs($user, ['device-upload']);
+        Billing::create([
+            'water_rate' => 25,
+            'subsidy_deduction' => 0,
+            'threshold_liters' => 500,
+            'leak_flow_rate_threshold' => 8,
+            'quiet_hours_start' => 22,
+            'quiet_hours_end' => 4,
+            'is_active' => true,
+        ]);
+
+        $reading = fn (float $flow, string $deviceStatus = 'Normal') => [
+            'flow_rate' => $flow,
+            'liters_used' => 1,
+            'cubic_meter' => 0.001,
+            'leak_detection_status' => $deviceStatus,
+        ];
+
+        $this->postJson('/api/water-data', $reading(3, 'Leak Detected'))
+            ->assertCreated()
+            ->assertJsonPath('data.reading.is_possible_leak', false)
+            ->assertJsonPath('data.reading.leak_detection_status', 'Normal');
+
+        $this->postJson('/api/water-data', $reading(8))
+            ->assertCreated()
+            ->assertJsonPath('data.reading.is_possible_leak', true)
+            ->assertJsonPath('data.reading.leak_detection_status', 'Leak Detected');
+        $this->postJson('/api/water-data', $reading(9))->assertCreated();
+        $this->postJson('/api/water-data', $reading(10))->assertCreated();
+
+        $this->assertDatabaseCount('notifications', 1);
+        $this->assertDatabaseHas('notifications', ['user_id' => $user->id, 'type' => 'possible_leak']);
+
+        // A second event on the same municipal calendar day does not duplicate the notice.
+        $this->postJson('/api/water-data', $reading(2))->assertCreated();
+        $this->postJson('/api/water-data', $reading(8.5))->assertCreated();
+        $this->assertDatabaseCount('notifications', 1);
+
+        // If it remains unresolved, the next day creates exactly one daily reminder.
+        Carbon::setTestNow(now()->addDay()->startOfDay()->addHour());
+        $this->postJson('/api/water-data', $reading(9))->assertCreated();
+        $this->postJson('/api/water-data', $reading(10))->assertCreated();
+        $this->assertDatabaseCount('notifications', 2);
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $user->id,
+            'type' => 'possible_leak',
+            'title' => 'Unresolved water leak reminder',
+        ]);
+        Carbon::setTestNow();
+    }
+
     public function test_notifications_can_be_marked_as_read(): void
     {
         $user = User::factory()->create();
+        Sanctum::actingAs($user);
 
         $notification = Notification::create([
             'user_id' => $user->id,
@@ -110,7 +168,7 @@ class WaterApiTest extends TestCase
             'sent_at' => now(),
         ]);
 
-        $this->patchJson('/api/notifications/' . $notification->id . '/read')
+        $this->patchJson('/api/notifications/'.$notification->id.'/read')
             ->assertOk()
             ->assertJsonPath('data.is_read', true);
 
@@ -118,6 +176,36 @@ class WaterApiTest extends TestCase
             'id' => $notification->id,
             'is_read' => true,
         ]);
+    }
+
+    public function test_user_can_delete_one_or_clear_all_notifications_without_erasing_municipal_records(): void
+    {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+        $first = Notification::create([
+            'user_id' => $user->id, 'type' => 'announcement', 'title' => 'First',
+            'message' => 'First notice', 'sent_at' => now(),
+        ]);
+        $second = Notification::create([
+            'user_id' => $user->id, 'type' => 'possible_leak', 'title' => 'Leak',
+            'message' => 'Leak notice', 'sent_at' => now(),
+        ]);
+        $other = Notification::create([
+            'user_id' => $otherUser->id, 'type' => 'announcement', 'title' => 'Other',
+            'message' => 'Other notice', 'sent_at' => now(),
+        ]);
+        Sanctum::actingAs($user);
+
+        $this->deleteJson('/api/notifications/received/'.$other->id)->assertForbidden();
+        $this->deleteJson('/api/notifications/received/'.$first->id)->assertOk();
+        $this->getJson('/api/notifications')->assertOk()->assertJsonCount(1, 'data.data');
+        $this->deleteJson('/api/notifications/received/all')
+            ->assertOk()->assertJsonPath('data.deleted_count', 1);
+        $this->getJson('/api/notifications')->assertOk()->assertJsonCount(0, 'data.data');
+
+        $this->assertDatabaseHas('notifications', ['id' => $first->id]);
+        $this->assertDatabaseHas('notifications', ['id' => $second->id]);
+        $this->assertDatabaseHas('notifications', ['id' => $other->id, 'user_deleted_at' => null]);
     }
 
     public function test_readings_are_scoped_to_the_authenticated_user(): void
@@ -143,7 +231,7 @@ class WaterApiTest extends TestCase
 
         $this->getJson('/api/readings')
             ->assertOk()
-            ->assertJsonCount(0);
+            ->assertJsonCount(0, 'data');
     }
 
     public function test_authenticated_user_can_view_dashboard_summary(): void

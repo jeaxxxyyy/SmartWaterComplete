@@ -28,7 +28,7 @@
                     <span class="status-chip status-chip-muted" data-device-connection-status>Device: --</span>
                     <span class="status-chip status-chip-muted" data-server-connection-status>Server: --</span>
                     <span class="status-chip status-chip-alert" data-water-limit>Limit: --</span>
-                    <span class="status-chip status-chip-muted">Auto refresh: 15s</span>
+                    <span class="status-chip status-chip-muted">Auto refresh: 3s</span>
                     <span class="status-chip status-chip-soft" data-leak-status>Normal</span>
                     <span class="status-chip status-chip-muted" data-last-updated-label>Last updated: --</span>
                 </div>
@@ -42,7 +42,7 @@
                 </div>
                 <div class="mini-card">
                     <span class="mini-label">Total consumed</span>
-                    <strong data-total-consumed>-- m3</strong>
+                    <strong data-total-consumed>-- m³</strong>
                     <small>Current month water consumption.</small>
                 </div>
                 <div class="mini-card">
@@ -52,7 +52,7 @@
                 </div>
                 <div class="mini-card">
                     <span class="mini-label">Leak detection</span>
-                    <strong class="rose" data-leak-summary>Normal</strong>
+                    <strong class="mint" data-leak-summary>Normal</strong>
                     <small>Immediate status for possible leaks.</small>
                 </div>
                 <div class="mini-card">
@@ -75,7 +75,7 @@
                 <small>Latest usage snapshot from the system.</small>
             </article>
             <article class="stat-card">
-                <span class="stat-label">Rate per m3</span>
+                <span class="stat-label">Rate per m³</span>
                 <strong class="amber" data-water-rate>--</strong>
                 <small>Active water rate for this household.</small>
             </article>
@@ -121,7 +121,7 @@
                     <span>Estimated bill</span>
                     <span>Status</span>
                 </div>
-                <div class="table-body" data-readings-list>
+                <div class="table-body" data-live-readings-list>
                     <div class="empty-state">Connect a token to load live readings.</div>
                 </div>
             </div>
@@ -134,10 +134,10 @@
                     <p class="eyebrow">Monitoring Graph</p>
                     <h2>Real-time consumption trend</h2>
                 </div>
-                <span class="status-pill">Optional graph</span>
+                <span class="status-pill">Monitoring graph</span>
             </div>
             <div class="chart-legend">
-                <span><i class="legend-dot usage-dot"></i>m3</span>
+                <span><i class="legend-dot usage-dot"></i>m³</span>
                 <span><i class="legend-dot bill-dot"></i>Estimated bill</span>
             </div>
             <div class="usage-chart" data-household-monthly-chart>
@@ -147,6 +147,11 @@
     </section>
 
     <section class="dashboard-view" data-household-view="history">
+        <div class="auth-tabs" data-history-tabs>
+            <button type="button" class="tab-button is-active" data-history-period="daily">Daily</button>
+            <button type="button" class="tab-button" data-history-period="weekly">Weekly</button>
+            <button type="button" class="tab-button" data-history-period="monthly">Monthly</button>
+        </div>
         <article class="panel panel-table">
             <div class="panel-head">
                 <div>
@@ -156,17 +161,16 @@
             </div>
             <div class="table">
                 <div class="table-head">
-                    <span>Date</span>
-                    <span>Flow rate</span>
-                    <span>Consumed</span>
+                    <span>Period</span>
+                    <span>Total liters</span>
+                    <span>Total m³</span>
                     <span>Estimated bill</span>
-                    <span>Status</span>
+                    <span>Alerts</span>
                 </div>
-                <div class="table-body" data-readings-list>
-                    <div class="empty-state">No readings loaded yet.</div>
+                <div class="table-body" data-history-list>
+                    <div class="empty-state">No consumption totals loaded yet.</div>
                 </div>
             </div>
-            <div class="pager" data-readings-pager></div>
         </article>
     </section>
 
@@ -175,11 +179,11 @@
             <article class="stat-card">
                 <span class="stat-label">Water rate</span>
                 <strong data-water-rate>--</strong>
-                <small>Rate per cubic meter.</small>
+                <small>Rate per m³.</small>
             </article>
             <article class="stat-card">
                 <span class="stat-label">Total water consumed</span>
-                    <strong data-total-consumed>-- m3</strong>
+                    <strong data-total-consumed>-- m³</strong>
                 <small>Usage basis for billing.</small>
             </article>
             <article class="stat-card">
@@ -203,7 +207,7 @@
                     <dd data-balance>--</dd>
                 </div>
                 <div>
-                    <dt>Water rate per m3</dt>
+                    <dt>Water rate per m³</dt>
                     <dd data-water-rate>--</dd>
                 </div>
                 <div>
@@ -245,8 +249,10 @@
 
     <section class="dashboard-view" data-household-view="notifications">
         <article class="panel side-card">
-            <p class="eyebrow">Notifications</p>
-            <h2>Leak, limit, and consumption alerts</h2>
+            <div class="notification-head">
+                <p class="eyebrow">Notifications</p>
+                <button type="button" class="button button-secondary" data-clear-notifications>Clear all</button>
+            </div>
             <div class="notification-list" data-notifications-list>
                 <div class="empty-state">No alerts loaded yet.</div>
             </div>
@@ -257,6 +263,13 @@
         <article class="panel side-card">
             <p class="eyebrow">Account Settings</p>
             <h2>Customer information</h2>
+            <div class="theme-control">
+                <div>
+                    <strong>Appearance</strong>
+                    <small>Choose a calm light or deep-water theme.</small>
+                </div>
+                <button type="button" class="button button-ghost" data-theme-toggle aria-pressed="false">Use dark theme</button>
+            </div>
             <dl class="summary-list">
                 <div>
                     <dt>Name</dt>
@@ -283,6 +296,17 @@
                     <dd><button type="button" class="link-button" data-logout>Logout</button></dd>
                 </div>
             </dl>
+            <form class="stack-form" data-account-form>
+                <label>Email <input type="email" name="email" required></label>
+                <label>Phone <input type="text" name="phone"></label>
+                <button class="button button-primary" type="submit">Update contact details</button>
+            </form>
+            <form class="stack-form" data-password-form>
+                <label>Current password <input type="password" name="current_password" required></label>
+                <label>New password <input type="password" name="password" minlength="8" required></label>
+                <label>Confirm new password <input type="password" name="password_confirmation" minlength="8" required></label>
+                <button class="button button-ghost" type="submit">Change password</button>
+            </form>
         </article>
     </section>
 @endsection

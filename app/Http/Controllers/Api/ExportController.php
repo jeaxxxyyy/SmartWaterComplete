@@ -4,150 +4,89 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\BillingStatement;
-use App\Services\BillingStatementService;
 use App\Models\Notification;
 use App\Models\WaterReading;
+use App\Services\BillingStatementService;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class ExportController extends Controller
 {
-    public function __construct(
-        protected BillingStatementService $billingStatementService
-    ) {
-    }
+    public function __construct(protected BillingStatementService $billingStatementService) {}
 
     public function readings(Request $request)
     {
-        $query = WaterReading::query()->latest('recorded_at');
+        $items = WaterReading::query()
+            ->join('users', 'users.id', '=', 'water_readings.user_id')
+            ->when($request->filled('user_id'), fn ($query) => $query->where('water_readings.user_id', $request->integer('user_id')))
+            ->selectRaw('users.account_number, users.name, date(water_readings.recorded_at) as period, sum(water_readings.liters_used) as total_liters, sum(water_readings.cubic_meter) as total_cubic_meter, sum(water_readings.estimated_bill) as estimated_bill, sum(case when water_readings.is_possible_leak = 1 then 1 else 0 end) as leak_count')
+            ->groupBy('users.id', 'users.account_number', 'users.name', 'period')
+            ->orderByDesc('period')
+            ->get();
 
-        if ($request->filled('user_id')) {
-            $query->where('user_id', $request->integer('user_id'));
-        }
-
-        $this->billingStatementService->recordAudit(
-            $request->user(),
-            'export_readings',
-            'Exported water readings to CSV.',
-            ['user_id' => $request->integer('user_id')],
-        );
-
-        return response()->streamDownload(function () use ($query): void {
-            $output = fopen('php://output', 'w');
-            fputcsv($output, [
-                'id',
-                'user_id',
-                'flow_rate',
-                'liters_used',
-                'cubic_meter',
-                'estimated_bill',
-                'recorded_at',
-            ]);
-
-            foreach ($query->cursor() as $reading) {
-                fputcsv($output, [
-                    $reading->id,
-                    $reading->user_id,
-                    $reading->flow_rate,
-                    $reading->liters_used,
-                    $reading->cubic_meter,
-                    $reading->estimated_bill,
-                    optional($reading->recorded_at)->toDateTimeString(),
-                ]);
-            }
-
-            fclose($output);
-        }, 'water-readings.csv', [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-        ]);
+        return $this->pdf($request, 'Water Consumption Readings', 'water-readings.pdf',
+            ['Account', 'Day', 'Total liters', 'Total volume', 'Estimated bill', 'Leak alerts'],
+            $items->map(fn ($item) => [
+                $item->account_number ?? $item->name ?? '—',
+                optional($item->period ? Carbon::parse($item->period) : null)->format('F j, Y') ?? '—',
+                number_format((float) $item->total_liters, 3).' L',
+                number_format((float) $item->total_cubic_meter, 4).' m³',
+                'PHP '.number_format((float) $item->estimated_bill, 2),
+                (string) $item->leak_count,
+            ])->all(), 'export_readings');
     }
 
     public function billingStatements(Request $request)
     {
-        $query = BillingStatement::query()->latest('billing_month');
+        $items = BillingStatement::query()->with('user:id,name,account_number')
+            ->when($request->filled('user_id'), fn ($query) => $query->where('user_id', $request->integer('user_id')))
+            ->latest('billing_month')->get();
 
-        if ($request->filled('user_id')) {
-            $query->where('user_id', $request->integer('user_id'));
-        }
-
-        $this->billingStatementService->recordAudit(
-            $request->user(),
-            'export_billing_statements',
-            'Exported billing statements to CSV.',
-            ['user_id' => $request->integer('user_id')],
-        );
-
-        return response()->streamDownload(function () use ($query): void {
-            $output = fopen('php://output', 'w');
-            fputcsv($output, [
-                'id',
-                'user_id',
-                'billing_month',
-                'opening_balance',
-                'current_charge',
-                'amount_paid',
-                'remaining_balance',
-                'status',
-            ]);
-
-            foreach ($query->cursor() as $statement) {
-                fputcsv($output, [
-                    $statement->id,
-                    $statement->user_id,
-                    optional($statement->billing_month)->toDateString(),
-                    $statement->opening_balance,
-                    $statement->current_charge,
-                    $statement->amount_paid,
-                    $statement->remaining_balance,
-                    $statement->status,
-                ]);
-            }
-
-            fclose($output);
-        }, 'billing-statements.csv', [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-        ]);
+        return $this->pdf($request, 'Billing Statements', 'billing-statements.pdf',
+            ['Account', 'Month', 'Consumption', 'Rate / m³', 'Charge', 'Paid', 'Balance', 'Status'],
+            $items->map(fn ($item) => [
+                $item->user?->account_number ?? $item->user?->name ?? '—',
+                optional($item->billing_month)->format('F Y') ?? '—',
+                number_format((float) $item->total_cubic_meter, 4).' m³',
+                'PHP '.number_format((float) $item->water_rate, 2),
+                'PHP '.number_format((float) $item->current_charge, 2),
+                'PHP '.number_format((float) $item->amount_paid, 2),
+                'PHP '.number_format((float) $item->remaining_balance, 2),
+                ucfirst($item->status),
+            ])->all(), 'export_billing_statements');
     }
 
     public function notifications(Request $request)
     {
-        $query = Notification::query()->latest();
+        $items = Notification::query()->with('user:id,name,account_number')
+            ->when($request->filled('user_id'), fn ($query) => $query->where('user_id', $request->integer('user_id')))
+            ->latest()->get();
 
-        if ($request->filled('user_id')) {
-            $query->where('user_id', $request->integer('user_id'));
-        }
+        return $this->pdf($request, 'Notification Records', 'notifications.pdf',
+            ['Account', 'Type', 'Title', 'Message', 'Status', 'Sent'],
+            $items->map(fn ($item) => [
+                $item->user?->account_number ?? $item->user?->name ?? '—',
+                ucwords(str_replace('_', ' ', $item->type)),
+                $item->title,
+                $item->message,
+                $item->is_read ? 'Read' : 'Unread',
+                optional($item->sent_at ?? $item->created_at)->format('M d, Y H:i') ?? '—',
+            ])->all(), 'export_notifications');
+    }
 
+    private function pdf(Request $request, string $title, string $filename, array $headers, array $rows, string $auditAction)
+    {
         $this->billingStatementService->recordAudit(
-            $request->user(),
-            'export_notifications',
-            'Exported notifications to CSV.',
+            $request->user(), $auditAction, "Exported {$title} to PDF.",
             ['user_id' => $request->integer('user_id')],
         );
 
-        return response()->streamDownload(function () use ($query): void {
-            $output = fopen('php://output', 'w');
-            fputcsv($output, [
-                'id',
-                'user_id',
-                'type',
-                'title',
-                'is_read',
-                'sent_at',
-            ]);
-
-            foreach ($query->cursor() as $notification) {
-                fputcsv($output, [
-                    $notification->id,
-                    $notification->user_id,
-                    $notification->type,
-                    $notification->title,
-                    $notification->is_read ? 'yes' : 'no',
-                    optional($notification->sent_at)->toDateTimeString(),
-                ]);
-            }
-
-            fclose($output);
-        }, 'notifications.csv', [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-        ]);
+        return Pdf::loadView('reports.pdf', [
+            'title' => $title,
+            'headers' => $headers,
+            'rows' => $rows,
+            'generatedAt' => now(),
+        ])->setPaper('a4', 'landscape')->stream($filename);
     }
 }

@@ -12,8 +12,7 @@ class UserManagementController extends Controller
 {
     public function __construct(
         protected BillingStatementService $billingStatementService
-    ) {
-    }
+    ) {}
 
     public function index(Request $request)
     {
@@ -25,9 +24,9 @@ class UserManagementController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $users = User::query()
+        $users = User::query()->with('assignedHousehold:id,name,email,account_number')
             ->when(! empty($validated['search']), function ($query) use ($validated): void {
-                $search = '%' . $validated['search'] . '%';
+                $search = '%'.$validated['search'].'%';
                 $query->where(function ($builder) use ($search): void {
                     $builder->where('name', 'like', $search)
                         ->orWhere('email', 'like', $search)
@@ -52,6 +51,7 @@ class UserManagementController extends Controller
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'role' => ['required', Rule::in(['user', 'admin', 'device'])],
+            'assigned_user_id' => ['nullable', 'integer', 'exists:users,id'],
             'address' => ['nullable', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
             'is_active' => ['sometimes', 'boolean'],
@@ -59,6 +59,7 @@ class UserManagementController extends Controller
 
         $user = User::create([
             ...$validated,
+            'assigned_user_id' => ($validated['role'] ?? null) === 'device' ? ($validated['assigned_user_id'] ?? null) : null,
             'account_number' => User::generateAccountNumber(),
             'created_by_admin' => true,
         ]);
@@ -91,6 +92,7 @@ class UserManagementController extends Controller
             'email' => ['sometimes', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'password' => ['sometimes', 'nullable', 'string', 'min:8'],
             'role' => ['sometimes', Rule::in(['user', 'admin', 'device'])],
+            'assigned_user_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
             'account_number' => ['sometimes', 'nullable', 'string', 'max:255', Rule::unique('users', 'account_number')->ignore($user->id)],
             'address' => ['sometimes', 'nullable', 'string', 'max:255'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:50'],
@@ -99,6 +101,11 @@ class UserManagementController extends Controller
 
         if (array_key_exists('password', $validated) && $validated['password'] === null) {
             unset($validated['password']);
+        }
+
+        $nextRole = $validated['role'] ?? $user->role;
+        if ($nextRole !== 'device') {
+            $validated['assigned_user_id'] = null;
         }
 
         $user->update($validated);

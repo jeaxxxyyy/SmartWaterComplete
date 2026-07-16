@@ -11,16 +11,19 @@ class Notification extends Model
         'user_id',
         'water_reading_id',
         'type',
+        'batch_id',
         'title',
         'message',
         'metadata',
         'is_read',
+        'user_deleted_at',
         'sent_at',
     ];
 
     protected $casts = [
         'metadata' => 'array',
         'is_read' => 'boolean',
+        'user_deleted_at' => 'datetime',
         'sent_at' => 'datetime',
     ];
 

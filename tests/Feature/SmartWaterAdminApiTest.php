@@ -242,7 +242,7 @@ class SmartWaterAdminApiTest extends TestCase
         ])->assertForbidden();
     }
 
-    public function test_admin_can_issue_list_and_revoke_device_tokens(): void
+    public function test_legacy_manual_token_routes_are_not_exposed(): void
     {
         $admin = User::factory()->admin()->create();
         $device = User::factory()->create([
@@ -250,26 +250,7 @@ class SmartWaterAdminApiTest extends TestCase
         ]);
 
         Sanctum::actingAs($admin);
-
-        $issueResponse = $this->postJson('/api/devices/' . $device->id . '/tokens', [
-            'name' => 'ESP32 Core2',
-            'abilities' => ['device-upload'],
-        ]);
-
-        $issueResponse->assertCreated()
-            ->assertJsonPath('data.token', fn ($value) => is_string($value) && $value !== '');
-
-        $tokenId = $device->tokens()->firstOrFail()->id;
-
-        $this->getJson('/api/devices/' . $device->id . '/tokens')
-            ->assertOk()
-            ->assertJsonCount(1, 'data');
-
-        $this->deleteJson('/api/devices/' . $device->id . '/tokens/' . $tokenId)
-            ->assertOk();
-
-        $this->assertDatabaseMissing('personal_access_tokens', [
-            'id' => $tokenId,
-        ]);
+        $this->postJson('/api/devices/'.$device->id.'/tokens')->assertNotFound();
+        $this->getJson('/api/devices/'.$device->id.'/tokens')->assertNotFound();
     }
 }

@@ -18,6 +18,7 @@
 @section('content')
     <section class="dashboard-view is-active" data-admin-view="admin-dashboard">
         <section class="panel panel-hero admin-hero">
+            <button type="button" class="button button-ghost admin-theme-toggle" data-theme-toggle aria-pressed="false">Use dark theme</button>
             <div class="hero-copy">
                 <p class="eyebrow">Admin Functionalities</p>
                 <h1>Run the Smart Water Monitoring System from a single operations console.</h1>
@@ -45,19 +46,6 @@
                     <strong class="rose" data-admin-offline-devices>--</strong>
                     <small>Devices without active tokens.</small>
                 </div>
-            </div>
-        </section>
-
-        <section class="panel token-panel">
-            <div>
-                <p class="eyebrow">API Access</p>
-                <h2>Connect admin tools</h2>
-                <p class="subtle">Use an admin bearer token to load users, device tokens, billing settings, and reports.</p>
-            </div>
-            <div class="token-controls">
-                <input type="password" data-token-input placeholder="Paste bearer token" class="token-input">
-                <button type="button" data-token-save class="button button-primary">Save token</button>
-                <button type="button" data-refresh class="button button-ghost">Refresh</button>
             </div>
         </section>
 
@@ -93,7 +81,7 @@
                 <span class="status-pill">System overview</span>
             </div>
             <div class="chart-legend">
-                <span><i class="legend-dot usage-dot"></i>m3</span>
+                <span><i class="legend-dot usage-dot"></i>m³</span>
             </div>
             <div class="usage-chart single-series" data-admin-monthly-chart>
                 <div class="empty-state">No usage data yet.</div>
@@ -137,6 +125,9 @@
                         <option value="admin">Admin</option>
                         <option value="device">Device</option>
                     </select>
+                    <select name="assigned_user_id" data-household-select>
+                        <option value="">Assign device to household (devices only)</option>
+                    </select>
                     <input type="text" name="address" placeholder="Address">
                     <input type="text" name="phone" placeholder="Phone">
                     <button class="button button-primary" type="submit">Create user</button>
@@ -149,22 +140,28 @@
         <section class="admin-grid">
             <article class="panel admin-card">
                 <p class="eyebrow">Device Management</p>
-                <h2>Device IDs, status, and last connected time</h2>
-                <div class="notification-list" data-device-tokens>
-                    <div class="empty-state">No device tokens loaded yet.</div>
+                <h2>Meters and Connection Health</h2>
+                <div class="notification-list" data-municipal-devices>
+                    <div class="empty-state">No registered meters loaded yet.</div>
                 </div>
             </article>
 
             <article class="panel admin-card">
-                <p class="eyebrow">Assign M5Stack</p>
-                <h2>Issue or revoke device tokens</h2>
-                <form class="stack-form" data-device-token-form>
-                    <select name="user_id" required data-device-select>
-                        <option value="">Choose device account</option>
+                <p class="eyebrow">Register M5Stack</p>
+                <h2>Assign a meter to a household</h2>
+                <form class="stack-form" data-device-register-form>
+                    <select name="household_id" required data-device-household-select>
+                        <option value="">Choose household</option>
                     </select>
-                    <input type="text" name="name" placeholder="Device name" value="M5Stack Core">
-                    <button class="button button-primary" type="submit">Issue token</button>
+                    <input type="text" name="asset_number" placeholder="Municipal asset no. (MWM-2026-0002)" required>
+                    <input type="text" name="serial_number" placeholder="Manufacturer serial no." required>
+                    <input type="text" name="name" placeholder="Meter name" value="M5Stack CoreS3 Household Meter" required>
+                    <input type="text" name="installation_address" placeholder="Installation address">
+                    <label>Installation date <input type="date" name="installed_at"></label>
+                    <textarea name="notes" placeholder="Installation or maintenance notes"></textarea>
+                    <button class="button button-primary" type="submit">Register and create activation code</button>
                 </form>
+                <div class="notification-list" data-activation-result></div>
             </article>
         </section>
     </section>
@@ -175,7 +172,7 @@
             <h2>Update rates without changing source code</h2>
             <form class="stack-form" data-billing-form>
                 <label>
-                    Water rate per m3
+                    Water rate per m³
                     <input type="number" step="0.01" name="water_rate" placeholder="Example: 40.00" required>
                 </label>
                 <label>
@@ -211,8 +208,8 @@
                 <div><dt>Loading</dt><dd>--</dd></div>
             </div>
             <div class="token-controls">
-                <a class="button button-ghost" href="/api/exports/billing-statements">Export billing records</a>
-                <a class="button button-ghost" href="/api/exports/readings">Export reading history</a>
+                <button class="button button-ghost" type="button" data-pdf-export="/api/exports/billing-statements">Export billing records</button>
+                <button class="button button-ghost" type="button" data-pdf-export="/api/exports/readings">Export reading history</button>
             </div>
         </article>
     </section>
@@ -271,7 +268,7 @@
     <section class="dashboard-view" data-admin-view="leak-monitoring">
         <article class="panel admin-card">
             <p class="eyebrow">Leak Monitoring</p>
-            <h2>Household leak status, date and time, and resolution state</h2>
+            <h2>Affected household, latest flow, daily notice, and resolution state</h2>
             <div class="notification-list" data-admin-alerts>
                 <div class="empty-state">Connect an admin token to load alerts.</div>
             </div>
@@ -286,9 +283,9 @@
                 <div><dt>Loading</dt><dd>--</dd></div>
             </div>
             <div class="token-controls">
-                <a class="button button-ghost" href="/api/exports/readings">Export readings</a>
-                <a class="button button-ghost" href="/api/exports/billing-statements">Export billing</a>
-                <a class="button button-ghost" href="/api/exports/notifications">Export notifications</a>
+                <button class="button button-ghost" type="button" data-pdf-export="/api/exports/readings">Export readings PDF</button>
+                <button class="button button-ghost" type="button" data-pdf-export="/api/exports/billing-statements">Export billing PDF</button>
+                <button class="button button-ghost" type="button" data-pdf-export="/api/exports/notifications">Export notifications PDF</button>
             </div>
         </article>
     </section>
@@ -297,9 +294,43 @@
         <article class="panel admin-card">
             <p class="eyebrow">Notification Management</p>
             <h2>Service interruptions, maintenance, and announcements</h2>
-            <div class="notification-list" data-admin-notifications>
-                <div class="empty-state">Connect an admin token to load notifications.</div>
-            </div>
+            <form class="stack-form" data-announcement-form>
+                <select name="type" required>
+                    <option value="announcement">General announcement</option>
+                    <option value="maintenance">Maintenance schedule</option>
+                    <option value="service_interruption">Service interruption</option>
+                </select>
+                <select name="user_id" data-announcement-user>
+                    <option value="">All active households</option>
+                </select>
+                <input type="text" name="title" placeholder="Title" required>
+                <textarea name="message" placeholder="Message" required></textarea>
+                <button class="button button-primary" type="submit">Send notification</button>
+                <button class="button button-ghost" type="button" data-delete-all-sent-notifications>Delete all sent notifications</button>
+            </form>
         </article>
+        <section class="admin-grid">
+            <article class="panel admin-card">
+                <p class="eyebrow">Service Interruptions</p>
+                <h2>Sent interruption records</h2>
+                <div class="notification-list" data-admin-sent-type="service_interruption">
+                    <div class="empty-state">No sent records.</div>
+                </div>
+            </article>
+            <article class="panel admin-card">
+                <p class="eyebrow">Maintenance</p>
+                <h2>Sent maintenance records</h2>
+                <div class="notification-list" data-admin-sent-type="maintenance">
+                    <div class="empty-state">No sent records.</div>
+                </div>
+            </article>
+            <article class="panel admin-card">
+                <p class="eyebrow">Announcements</p>
+                <h2>Sent announcement records</h2>
+                <div class="notification-list" data-admin-sent-type="announcement">
+                    <div class="empty-state">No sent records.</div>
+                </div>
+            </article>
+        </section>
     </section>
 @endsection

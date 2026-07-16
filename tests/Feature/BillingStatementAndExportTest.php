@@ -21,7 +21,7 @@ class BillingStatementAndExportTest extends TestCase
 
         Billing::create([
             'water_rate' => 20,
-            'subsidy_deduction' => 5,
+            'subsidy_deduction' => 0,
             'threshold_liters' => 100,
             'leak_flow_rate_threshold' => 2,
             'quiet_hours_start' => 22,
@@ -60,17 +60,21 @@ class BillingStatementAndExportTest extends TestCase
 
         $this->get('/api/exports/readings')
             ->assertOk()
-            ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+            ->assertHeader('content-type', 'application/pdf');
 
         $this->get('/api/exports/billing-statements')
             ->assertOk()
-            ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+            ->assertHeader('content-type', 'application/pdf');
+
+        $this->get('/api/exports/notifications')
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
 
         $this->get('/api/audit-logs')
             ->assertOk()
             ->assertJsonFragment(['action' => 'billing_statement_generated']);
 
-        $this->assertDatabaseCount('audit_logs', 3);
+        $this->assertDatabaseCount('audit_logs', 4);
     }
 
     public function test_user_can_view_own_billing_statements_only(): void

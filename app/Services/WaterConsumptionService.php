@@ -72,8 +72,7 @@ class WaterConsumptionService
             return false;
         }
 
-        return $flowRate >= (float) $settings->leak_flow_rate_threshold
-            && $this->isNightTime($recordedAt, $settings);
+        return $flowRate >= (float) $settings->leak_flow_rate_threshold;
     }
 
     public function storeReading(array $data): array
@@ -89,7 +88,11 @@ class WaterConsumptionService
         $monitoringStatus = (string) ($data['monitoring_status'] ?? 'online');
         $deviceConnectionStatus = (string) ($data['device_connection_status'] ?? 'connected');
         $serverConnectionStatus = (string) ($data['server_connection_status'] ?? 'connected');
-        $leakDetectionStatus = (string) ($data['leak_detection_status'] ?? 'Normal');
+        $previousReading = WaterReading::query()
+            ->where('user_id', $data['user_id'])
+            ->latest('recorded_at')
+            ->latest('id')
+            ->first();
         $payload = Arr::only($data, [
             'device_name',
             'flow_rate',
@@ -108,8 +111,11 @@ class WaterConsumptionService
 
         $estimatedBill = $this->calculateEstimatedBill($data['cubic_meter'], $settings);
         $isThresholdExceeded = $waterLimitLiters > 0 && $litersUsed >= $waterLimitLiters;
-        $isPossibleLeak = str_contains(strtolower($leakDetectionStatus), 'leak')
-            || $this->detectPossibleLeak($data['flow_rate'], $settings, $recordedAt);
+        // The configured municipal flow-rate threshold is authoritative. A device cannot
+        // declare a leak merely because its accumulated usage reached the water limit.
+        $isPossibleLeak = $this->detectPossibleLeak($data['flow_rate'], $settings, $recordedAt);
+        $leakDetectionStatus = $isPossibleLeak ? 'Leak Detected' : 'Normal';
+        $payload['leak_detection_status'] = $leakDetectionStatus;
 
         $reading = WaterReading::create([
             'user_id' => $data['user_id'],
@@ -135,7 +141,7 @@ class WaterConsumptionService
 
         $notifications = collect();
 
-        if ($isThresholdExceeded) {
+        if ($isThresholdExceeded && ! $previousReading?->is_threshold_exceeded) {
             $notifications->push(Notification::create([
                 'user_id' => $data['user_id'],
                 'water_reading_id' => $reading->id,
@@ -150,17 +156,27 @@ class WaterConsumptionService
             ]));
         }
 
-        if ($isPossibleLeak) {
+        $leakNoticeSentToday = Notification::query()
+            ->where('user_id', $data['user_id'])
+            ->where('type', 'possible_leak')
+            ->whereDate('sent_at', now()->toDateString())
+            ->exists();
+
+        if ($isPossibleLeak && ! $leakNoticeSentToday) {
+            $isReminder = $previousReading?->is_possible_leak === true;
             $notifications->push(Notification::create([
                 'user_id' => $data['user_id'],
                 'water_reading_id' => $reading->id,
                 'type' => 'possible_leak',
-                'title' => 'Possible water leak detected',
-                'message' => 'Unusual water flow was detected during quiet hours.',
+                'title' => $isReminder ? 'Unresolved water leak reminder' : 'Possible water leak detected',
+                'message' => $isReminder
+                    ? 'The possible water leak remains unresolved. This is the daily reminder.'
+                    : 'Water flow reached the configured municipal leak threshold.',
                 'metadata' => [
                     'flow_rate' => $data['flow_rate'],
                     'leak_flow_rate_threshold' => $settings->leak_flow_rate_threshold,
                     'recorded_at' => $recordedAt->toIso8601String(),
+                    'daily_reminder' => $isReminder,
                 ],
                 'sent_at' => now(),
             ]));
