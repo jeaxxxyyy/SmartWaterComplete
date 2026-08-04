@@ -118,6 +118,41 @@ class ThemeToggleTest extends TestCase
             ->assertSee('Administrator');
     }
 
+    public function test_administrator_workspace_uses_the_unified_responsive_layout_contract(): void
+    {
+        $this->get('/admin')
+            ->assertOk()
+            ->assertSee('admin-workspace-layout', false)
+            ->assertSee('admin-device-layout', false)
+            ->assertSee('admin-device-list-card', false)
+            ->assertSee('admin-device-form-card', false)
+            ->assertSee('admin-device-register-form', false)
+            ->assertSee('consumption-filter-panel', false)
+            ->assertSee('admin-leak-monitoring-card', false)
+            ->assertSee('data-report-page-size', false)
+            ->assertSee('5 rows')
+            ->assertSee('data-admin-notification-toggle', false)
+            ->assertSee('aria-controls="admin-notification-dropdown"', false)
+            ->assertSee('data-admin-notification-dropdown', false)
+            ->assertSee('data-admin-notification-dropdown-list', false)
+            ->assertSee('data-admin-notification-view-all', false)
+            ->assertSee('admin-refresh-button', false)
+            ->assertSee('admin-analytics-range-control', false)
+            ->assertSee('admin-analytics-custom-range', false)
+            ->assertSee('input-with-currency', false)
+            ->assertSee('name="currency" value="PHP"', false)
+            ->assertDontSee('data-billing-currency', false)
+            ->assertSee('class="filter-bar admin-notification-filters"', false)
+            ->assertSee('data-admin-view="customer-management"', false)
+            ->assertSee('data-admin-view="device-management"', false)
+            ->assertSee('data-admin-view="water-rates"', false)
+            ->assertSee('data-admin-view="billing-management"', false)
+            ->assertSee('data-admin-view="consumption-monitoring"', false)
+            ->assertSee('data-admin-view="leak-monitoring"', false)
+            ->assertSee('data-admin-view="reports"', false)
+            ->assertSee('data-admin-view="notifications"', false);
+    }
+
     public function test_login_exposes_an_accessible_password_visibility_control(): void
     {
         $this->get('/login')

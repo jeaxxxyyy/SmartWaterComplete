@@ -2031,20 +2031,38 @@ body[data-page="admin"] .site-header-container {
     gap: 0.55rem;
 }
 
+.admin-notification-control {
+    position: relative;
+}
+
 .admin-notification-badge {
     position: absolute;
-    min-width: 1rem;
-    min-height: 1rem;
-    margin: -1.55rem 0 0 1rem;
-    padding: 0.08rem 0.25rem;
-    border: 2px solid #ffffff;
+    top: -0.12rem;
+    right: -0.12rem;
+    width: 0.58rem;
+    height: 0.58rem;
+    border: 2px solid var(--surface);
     border-radius: 999px;
-    color: #ffffff;
     background: #ef6b7a;
-    font-size: 0.58rem;
-    font-weight: 800;
-    line-height: 1;
-    text-align: center;
+    box-shadow: 0 0 0 1px rgb(239 107 122 / 24%);
+}
+
+.admin-notification-badge[hidden] {
+    display: none;
+}
+
+.admin-notification-button.has-unread {
+    color: var(--danger);
+    border-color: color-mix(in srgb, var(--danger) 58%, var(--line));
+    background: color-mix(in srgb, var(--danger) 9%, var(--surface));
+}
+
+.admin-notification-button.has-unread:hover,
+.admin-notification-button.has-unread:focus-visible,
+.admin-notification-control.is-open .admin-notification-button.has-unread {
+    color: var(--danger);
+    border-color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 14%, var(--surface));
 }
 
 .admin-profile {
@@ -2056,8 +2074,6 @@ body[data-page="admin"] .site-header-container {
     color: var(--admin-ink);
     background: transparent;
 }
-
-.admin-profile::after { color: #9aa9b8; }
 
 .admin-avatar {
     display: grid;
@@ -2079,8 +2095,6 @@ body[data-page="admin"] .site-header-container {
 
 .admin-profile-copy strong { font-size: 0.82rem; }
 .admin-profile-copy small { color: var(--admin-muted); font-size: 0.7rem; }
-
-.admin-profile-menu { border-color: var(--admin-line); box-shadow: 0 14px 32px rgb(15 23 42 / 12%); }
 
 body[data-page="admin"] .app-shell {
     width: 100%;
@@ -3306,8 +3320,7 @@ html.dark body[data-page="admin"] {
 
 html.dark body[data-page="admin"] .topbar,
 html.dark body[data-page="admin"] .admin-sidebar,
-html.dark body[data-page="admin"] .admin-profile,
-html.dark body[data-page="admin"] .admin-profile-menu { background: #16384a; }
+html.dark body[data-page="admin"] .admin-profile { background: #16384a; }
 
 html.dark body[data-page="admin"] .shell-dashboard { background: #102a3a; }
 html.dark body[data-page="admin"] .admin-search { background: #143547; }
@@ -5269,16 +5282,18 @@ body[data-page="household"] .household-account-button:focus-visible {
 
 .header-action-count,
 .sidebar-count {
-    display: inline-grid;
-    min-width: 1.25rem;
-    min-height: 1.25rem;
-    place-items: center;
-    padding: 0 0.3rem;
+    display: inline-block;
+    width: 0.52rem;
+    height: 0.52rem;
+    flex: 0 0 0.52rem;
     border-radius: 999px;
-    color: #ffffff;
     background: var(--danger);
-    font-size: 0.68rem;
-    line-height: 1;
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+.header-action-count[hidden],
+.sidebar-count[hidden] {
+    display: none;
 }
 
 .account-role-badge {
@@ -7823,6 +7838,10 @@ html.dark body[data-page="household"] [data-household-view="billing"] :is([class
     display: block;
 }
 
+.admin-notification-button.has-unread + .admin-notification-dropdown .notification-live-dot {
+    display: block;
+}
+
 .notification-dropdown-list {
     max-height: min(25rem, calc(100dvh - 11rem));
     overflow-y: auto;
@@ -7926,6 +7945,10 @@ html.dark body[data-page="household"] [data-household-view="billing"] :is([class
     display: block;
 }
 
+.admin-notification-dropdown-item {
+    cursor: default;
+}
+
 .notification-dropdown-empty {
     display: grid;
     min-height: 11rem;
@@ -7974,7 +7997,8 @@ html.dark body[data-page="household"] [data-household-view="billing"] :is([class
     background: var(--surface-soft);
 }
 
-html.dark .household-notification-dropdown {
+html.dark .household-notification-dropdown,
+html.dark .admin-notification-dropdown {
     box-shadow: 0 24px 60px rgb(0 6 16 / 42%);
 }
 
@@ -8249,7 +8273,7 @@ html.dark body.page .history-filter-control :is(input, select) {
 }
 
 body[data-page="household"] [data-history-chart].is-empty {
-    min-height: 10.5rem;
+    min-height: 17rem;
     margin-top: 0.5rem;
     padding: 0;
 }
@@ -8260,8 +8284,54 @@ body[data-page="household"] [data-history-chart].is-empty::after {
 }
 
 body[data-page="household"] [data-history-chart].is-empty .chart-empty-state {
-    min-height: 9.5rem;
-    padding: 1.25rem;
+    min-height: 0;
+    padding: 0.9rem 1.1rem;
+}
+
+body[data-page="household"] [data-history-chart].has-empty-chart .area-chart-empty-shell {
+    min-height: 17rem;
+}
+
+body[data-page="household"] [data-history-chart].has-empty-chart .area-line-chart {
+    opacity: 0.72;
+}
+
+.area-chart-axis-unit {
+    fill: var(--muted);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 750;
+}
+
+.area-chart-zero-line {
+    stroke: color-mix(in srgb, var(--primary) 54%, var(--line-strong));
+    stroke-dasharray: 7 7;
+    stroke-width: 2;
+}
+
+.area-chart-empty-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+}
+
+.area-chart-empty-overlay .chart-empty-state {
+    min-height: 0;
+    max-width: min(28rem, calc(100% - 3rem));
+    padding: 0.9rem 1.15rem;
+    border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--line));
+    border-radius: 0.85rem;
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    box-shadow: 0 10px 28px rgb(20 36 56 / 7%);
+    backdrop-filter: blur(4px);
+}
+
+html.dark .area-chart-empty-overlay .chart-empty-state {
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    box-shadow: 0 12px 30px rgb(0 7 18 / 18%);
 }
 
 /* Compact household summary ------------------------------------------
@@ -9067,4 +9137,1383 @@ body.page .button:disabled {
     body[data-page="household"] .household-status-panel .summary-list > div:last-child {
         border-bottom: 0;
     }
+}
+
+/* Unified administrator workspace --------------------------------------
+ * The admin console uses the same compact surfaces, spacing rhythm, and
+ * contrast model as the household dashboard. Page-specific layouts stay
+ * fluid so management forms never squeeze their adjacent data tables.
+ */
+body.page[data-page="admin"] {
+    --admin-panel-radius: 1rem;
+    --admin-control-radius: 0.72rem;
+    --admin-content-gap: 1rem;
+    color: var(--text);
+    background: var(--bg);
+}
+
+body.page[data-page="admin"] .topbar {
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    box-shadow: 0 1px 0 var(--line), 0 8px 24px rgb(20 36 56 / 5%);
+}
+
+body.page[data-page="admin"] .site-header-container {
+    gap: 0.85rem;
+}
+
+body.page[data-page="admin"] .admin-search,
+body.page[data-page="admin"] .admin-icon-button,
+body.page[data-page="admin"] .admin-sidebar-toggle {
+    border-color: var(--line);
+    color: var(--muted);
+    background: var(--surface-soft);
+}
+
+body.page[data-page="admin"] .admin-search:focus-within,
+body.page[data-page="admin"] .admin-icon-button:hover,
+body.page[data-page="admin"] .admin-sidebar-toggle:hover {
+    border-color: color-mix(in srgb, var(--primary) 58%, var(--line));
+    color: var(--primary-dark);
+    background: var(--surface);
+}
+
+body.page[data-page="admin"] .admin-sidebar {
+    display: flex;
+    flex-direction: column;
+    border-color: var(--line);
+    color: var(--text);
+    background: var(--surface);
+}
+
+body.page[data-page="admin"] .admin-sidebar-brand {
+    padding-bottom: 1rem;
+    border-color: var(--line);
+}
+
+body.page[data-page="admin"] .admin-sidebar-nav {
+    flex: 1 1 auto;
+}
+
+body.page[data-page="admin"] .admin-sidebar-nav .sidebar-section-title {
+    margin: 0.5rem 0.65rem 0.2rem;
+    color: var(--muted);
+}
+
+body.page[data-page="admin"] .admin-sidebar-nav button {
+    min-height: 2.35rem;
+    padding: 0.52rem 0.7rem;
+    border-radius: 0.7rem;
+    color: var(--muted);
+    background: transparent;
+    font-size: 0.78rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+body.page[data-page="admin"] .admin-sidebar-nav button:hover,
+body.page[data-page="admin"] .admin-sidebar-nav button.is-active {
+    border-color: color-mix(in srgb, var(--primary) 25%, var(--line));
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+}
+
+body.page[data-page="admin"] .admin-sidebar-logout {
+    flex: 0 0 auto;
+    border-color: var(--line);
+}
+
+body.page[data-page="admin"] .shell-dashboard {
+    gap: var(--admin-content-gap);
+    padding: clamp(1rem, 2vw, 1.65rem);
+    background: var(--bg);
+}
+
+body.page[data-page="admin"] .dashboard-view,
+body.page[data-page="admin"] .admin-overview-section {
+    gap: var(--admin-content-gap);
+}
+
+body.page[data-page="admin"] :is(.admin-card, .filter-panel, .chart-panel, .admin-overview-header, .admin-overview-list-panel) {
+    min-width: 0;
+    padding: clamp(1rem, 1.7vw, 1.3rem);
+    border: 1px solid var(--line);
+    border-radius: var(--admin-panel-radius);
+    color: var(--text);
+    background: var(--surface);
+    box-shadow: 0 8px 26px rgb(20 36 56 / 5%);
+}
+
+html.dark body.page[data-page="admin"] :is(.admin-card, .filter-panel, .chart-panel, .admin-overview-header, .admin-overview-list-panel) {
+    background: var(--surface);
+    box-shadow: 0 12px 30px rgb(0 7 18 / 18%);
+}
+
+body.page[data-page="admin"] :is(.admin-overview-header, .water-rate-management-header, .billing-management-header, .reports-header) {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 6%, var(--surface)), var(--surface));
+}
+
+body.page[data-page="admin"] :is(.panel-head h1, .panel-head h2, .admin-card > h2, .filter-panel > div > h2, .admin-overview-heading h1) {
+    margin: 0.25rem 0 0;
+    color: var(--text);
+    font-size: clamp(1.08rem, 1.55vw, 1.3rem);
+    line-height: 1.25;
+    letter-spacing: -0.025em;
+}
+
+body.page[data-page="admin"] :is(.field-hint, .subtle, .table-secondary, .notification-card small, .notification-card p) {
+    color: var(--muted);
+}
+
+body.page[data-page="admin"] .panel-head {
+    align-items: center;
+}
+
+body.page[data-page="admin"] .admin-refresh-control .button {
+    gap: 0.4rem;
+}
+
+body.page[data-page="admin"] .eyebrow {
+    color: var(--primary-dark);
+    font-size: 0.64rem;
+    letter-spacing: 0.075em;
+}
+
+/* Compact, uniform administrative metrics. */
+body.page[data-page="admin"] :is(.admin-overview-kpis, .admin-overview-period-stats, .billing-management-summary, .reports-summary) {
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--admin-panel-radius);
+    background: var(--surface);
+    box-shadow: 0 8px 24px rgb(20 36 56 / 4%);
+}
+
+body.page[data-page="admin"] :is(.admin-overview-kpis, .admin-overview-period-stats, .billing-management-summary, .reports-summary) .stat-card {
+    min-width: 0;
+    min-height: 6.35rem;
+    padding: 0.78rem 0.85rem;
+    border: 0;
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+body.page[data-page="admin"] .admin-overview-kpis .stat-card {
+    min-height: 7.35rem;
+}
+
+body.page[data-page="admin"] :is(.admin-overview-kpis, .admin-overview-period-stats, .billing-management-summary, .reports-summary) .stat-card strong {
+    margin-top: 0.28rem;
+    color: var(--text);
+    font-size: clamp(1.12rem, 1.45vw, 1.38rem);
+    line-height: 1.1;
+}
+
+body.page[data-page="admin"] .admin-overview-period-stats .stat-card strong {
+    font-size: clamp(1.05rem, 1.35vw, 1.22rem);
+}
+
+body.page[data-page="admin"] :is(.admin-overview-kpis, .admin-overview-period-stats, .billing-management-summary, .reports-summary) .stat-card small {
+    margin-top: 0.25rem;
+    color: var(--muted);
+    font-size: 0.68rem;
+    line-height: 1.4;
+}
+
+body.page[data-page="admin"] .admin-overview-kpis .stat-card .link-button,
+body.page[data-page="admin"] .admin-overview-period-stats .stat-card .link-button {
+    min-height: auto;
+    margin-top: auto;
+    padding: 0.22rem 0 0;
+    border: 0;
+    background: transparent;
+    font-size: 0.69rem;
+}
+
+body.page[data-page="admin"] .stat-card-top {
+    display: flex;
+    align-items: center;
+    gap: 0.38rem;
+    margin-bottom: 0.48rem;
+}
+
+body.page[data-page="admin"] :is(.stat-card-icon, .admin-section-icon) {
+    border-color: color-mix(in srgb, var(--primary) 24%, var(--line));
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+}
+
+body.page[data-page="admin"] .stat-card-badge {
+    padding: 0;
+    color: var(--primary-dark);
+    background: transparent;
+    font-size: 0.68rem;
+}
+
+/* Tables and filters share one density and never compress their columns. */
+body.page[data-page="admin"] :is(.admin-customer-filters, .admin-notification-filters) {
+    margin: 1rem 0 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+body.page[data-page="admin"] :is(.filter-bar, .reports-filter-form) {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.5rem), 1fr));
+    align-items: end;
+    gap: 0.58rem;
+    width: 100%;
+}
+
+body.page[data-page="admin"] :is(.filter-bar, .reports-filter-form) > :is(input, select, label, button, .filter-actions) {
+    min-width: 0;
+    width: 100%;
+}
+
+body.page[data-page="admin"] :is(.filter-date, .billing-date-field, .reports-filter-form > label) {
+    display: grid;
+    gap: 0.32rem;
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 750;
+}
+
+body.page[data-page="admin"] .filter-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+}
+
+body.page[data-page="admin"] :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea, .filter-input) {
+    min-height: 2.5rem;
+    padding: 0.58rem 0.72rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--admin-control-radius);
+    outline: 0;
+    color: var(--text);
+    background: var(--surface-soft);
+    box-shadow: none;
+    font-size: 0.8rem;
+    transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+
+body.page[data-page="admin"] :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea, .filter-input):focus,
+body.page[data-page="admin"] :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea, .filter-input):focus-visible {
+    border-color: var(--primary);
+    outline: 0;
+    background: var(--surface);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+body.page[data-page="admin"] :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):disabled {
+    border-color: var(--line);
+    color: var(--muted);
+    background: var(--surface-soft);
+    box-shadow: none;
+    opacity: 1;
+    cursor: not-allowed;
+}
+
+html.dark body.page[data-page="admin"] :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+    color-scheme: dark;
+}
+
+body.page[data-page="admin"] textarea {
+    min-height: 6rem;
+    padding: 0.75rem 0.85rem;
+    resize: vertical;
+}
+
+body.page[data-page="admin"] .table {
+    width: 100%;
+    max-width: 100%;
+    border-color: var(--line);
+    background: var(--surface);
+}
+
+/* Bootstrap also owns a `.table` selector. Neutralize its cell paint for
+ * the application's grid-backed tables so dark mode never produces white
+ * blocks or content that visually escapes the table surface. */
+body.page[data-page="admin"] .table > :not(caption) > * > * {
+    padding: 0;
+    border: 0;
+    color: inherit;
+    background: transparent;
+    box-shadow: none;
+}
+
+body.page[data-page="admin"] .table-head {
+    min-height: 2.55rem;
+    padding: 0.68rem 0.82rem;
+    font-size: 0.64rem;
+}
+
+body.page[data-page="admin"] .table-row {
+    min-height: 3.15rem;
+    padding: 0.72rem 0.82rem;
+    font-size: 0.78rem;
+}
+
+body.page[data-page="admin"] :is(.table-primary, .table-secondary) {
+    overflow-wrap: anywhere;
+}
+
+body.page[data-page="admin"] .table-primary {
+    font-size: 0.77rem;
+}
+
+body.page[data-page="admin"] .table-secondary {
+    font-size: 0.68rem;
+}
+
+body.page[data-page="admin"] :is(.table-body, .table-row) {
+    color: var(--text);
+    background: var(--surface);
+}
+
+body.page[data-page="admin"] .table-row:hover {
+    background: color-mix(in srgb, var(--primary) 5%, var(--surface));
+}
+
+body.page[data-page="admin"] :is(.admin-table-head, .admin-table-row) {
+    min-width: 58rem;
+    grid-template-columns: minmax(10rem, 1.15fr) minmax(13rem, 1.45fr) minmax(10rem, 1fr) minmax(7rem, 0.7fr) minmax(8.5rem, 0.8fr);
+}
+
+body.page[data-page="admin"] .billing-management-table {
+    min-width: 0;
+}
+
+body.page[data-page="admin"] .billing-management-table .table-head,
+body.page[data-page="admin"] .billing-management-row {
+    min-width: 58rem;
+    grid-template-columns: 1.3fr 0.9fr 0.72fr 1fr 1fr 0.85fr 1.05fr;
+}
+
+body.page[data-page="admin"] :is(.consumption-monitoring-table, .consumption-monitoring-row) {
+    min-width: 58rem;
+    grid-template-columns: 1.2fr 1.1fr 0.85fr 0.78fr 1.05fr 0.75fr 0.65fr;
+}
+
+body.page[data-page="admin"] .empty-state {
+    min-height: 5.75rem;
+    align-content: center;
+    justify-items: center;
+    padding: 1.25rem;
+    color: var(--muted);
+    text-align: center;
+}
+
+body.page[data-page="admin"] .table-empty-state {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+}
+
+/* Wide data first, compact editing forms second. */
+body.page[data-page="admin"] :is(.customer-management-layout, .admin-device-layout) {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+body.page[data-page="admin"] :is(.customer-management-table-card, .admin-device-list-card) {
+    grid-column: 1 / -1;
+}
+
+body.page[data-page="admin"] .customer-management-form-card {
+    position: static;
+}
+
+body.page[data-page="admin"] :is(.customer-management-form-card .stack-form, .admin-device-register-form) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+    column-gap: 0.85rem;
+    row-gap: 0.95rem;
+}
+
+body.page[data-page="admin"] :is(.customer-management-form-card .stack-form, .admin-device-register-form) > .button {
+    align-self: end;
+}
+
+body.page[data-page="admin"] .admin-device-register-form > :is([data-device-household-status], label:has(textarea)) {
+    grid-column: span 2;
+}
+
+body.page[data-page="admin"] .admin-device-register-form > label:first-of-type,
+body.page[data-page="admin"] .admin-device-register-form > label:has(input[name="installation_address"]) {
+    grid-column: span 2;
+}
+
+body.page[data-page="admin"] .admin-device-register-form > [data-device-household-status] {
+    grid-column: span 1;
+    align-self: end;
+    padding-bottom: 0.65rem;
+}
+
+body.page[data-page="admin"] .admin-device-register-form > label {
+    gap: 0.42rem;
+    margin: 0;
+}
+
+body.page[data-page="admin"] .admin-device-register-form .admin-field-label {
+    display: inline-flex;
+    align-items: baseline;
+    min-height: 1rem;
+    gap: 0.32rem;
+    color: var(--text);
+    font-size: 0.78rem;
+    font-weight: 720;
+    line-height: 1.3;
+}
+
+body.page[data-page="admin"] .admin-device-register-form .admin-field-label .field-hint {
+    font-size: 0.66rem;
+    font-weight: 550;
+}
+
+body.page[data-page="admin"] .admin-device-list-card [data-municipal-devices] {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr));
+}
+
+body.page[data-page="admin"] .device-health-card {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+body.page[data-page="admin"] .device-health-card > :is(.notification-head, .button-row) {
+    grid-column: 1 / -1;
+}
+
+body.page[data-page="admin"] .device-health-card .button-row {
+    margin-top: auto;
+    padding-top: 0.65rem;
+}
+
+/* Rate configuration uses full-width horizontal cards instead of three
+ * narrow columns that cause labels and controls to overlap. */
+body.page[data-page="admin"] .admin-water-rate-grid {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+body.page[data-page="admin"] .water-rate-section-card .stack-form {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: end;
+}
+
+body.page[data-page="admin"] .water-rate-section-card .form-grid-two {
+    display: contents;
+}
+
+body.page[data-page="admin"] .water-rate-section-card .admin-checkbox-field > span:last-child {
+    justify-content: flex-start;
+    min-height: 2.5rem;
+    padding: 0.55rem 0.7rem;
+    gap: 0.55rem;
+    border-color: var(--line-strong);
+    border-radius: var(--admin-control-radius);
+    color: var(--text);
+    background: var(--surface-soft);
+    font-size: 0.78rem;
+    font-weight: 650;
+}
+
+body.page[data-page="admin"] .water-rate-section-card .admin-checkbox-field input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    min-height: 1rem;
+    flex: 0 0 1rem;
+    margin: 0;
+    padding: 0;
+    border-radius: 0.25rem;
+    accent-color: var(--primary);
+}
+
+body.page[data-page="admin"] .water-rate-section-card .stack-form > .button {
+    width: auto;
+    min-width: 10.5rem;
+    justify-self: start;
+    padding-inline: 1rem;
+    box-shadow: none;
+}
+
+/* Admin header controls keep a single, correctly aligned focus treatment. */
+body.page[data-page="admin"] .admin-search input:focus,
+body.page[data-page="admin"] .admin-search input:focus-visible {
+    outline: 0;
+    box-shadow: none;
+}
+
+body.page[data-page="admin"] .admin-search:focus-within {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+body.page[data-page="admin"] .admin-search {
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+body.page[data-page="admin"] .admin-search input,
+body.page[data-page="admin"] .admin-search input:focus,
+body.page[data-page="admin"] .admin-search input:focus-visible {
+    width: auto;
+    max-width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 auto;
+    margin: 0;
+    padding: 0;
+    border: 0 !important;
+    border-radius: 0 !important;
+    outline: 0 !important;
+    appearance: none;
+    color: var(--text);
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+body.page[data-page="admin"] .admin-refresh-button {
+    display: inline-flex;
+    width: 6.35rem;
+    min-width: 6.35rem;
+    justify-content: center;
+    white-space: nowrap;
+}
+
+body.page[data-page="admin"] .admin-refresh-button.is-loading .admin-refresh-icon {
+    animation: dashboard-refresh-spin 700ms linear infinite;
+}
+
+body.page[data-page="admin"] .admin-analytics-period-field {
+    display: grid;
+    gap: 0.3rem;
+}
+
+body.page[data-page="admin"] .admin-analytics-period-field > .field-hint {
+    margin: 0;
+}
+
+body.page[data-page="admin"] .admin-analytics-range-control {
+    position: relative;
+    min-width: 11rem;
+}
+
+body.page[data-page="admin"] .admin-analytics-custom-range {
+    top: calc(100% + 0.5rem);
+    right: 0;
+    width: min(21rem, calc(100vw - 2rem));
+    padding: 0.85rem;
+    border-color: var(--line-strong);
+    background: var(--surface);
+    box-shadow: 0 18px 42px rgb(3 15 24 / 22%);
+}
+
+html.dark body.page[data-page="admin"] .admin-analytics-custom-range {
+    border-color: var(--line-strong);
+    background: var(--surface);
+    box-shadow: 0 20px 46px rgb(0 7 18 / 38%);
+}
+
+/* Supersede legacy dark strips behind compact administrative filters. */
+html.dark body.page[data-page="admin"] :is(.admin-customer-filters, .admin-notification-filters) {
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+/* Currency is an integrated leading adornment, not a detached suffix. */
+body.page[data-page="admin"] .input-with-currency {
+    display: grid;
+    min-width: 0;
+    min-height: 2.75rem;
+    grid-template-columns: auto minmax(0, 1fr);
+    overflow: hidden;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--admin-control-radius);
+    background: var(--surface);
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+body.page[data-page="admin"] .input-with-currency:focus-within {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+body.page[data-page="admin"] .input-with-currency > span {
+    display: inline-flex;
+    min-width: 3.6rem;
+    align-items: center;
+    justify-content: center;
+    padding-inline: 0.72rem;
+    border-right: 1px solid var(--line-strong);
+    color: var(--primary-dark);
+    background: var(--surface-soft);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.035em;
+}
+
+body.page[data-page="admin"] .input-with-currency > input,
+body.page[data-page="admin"] .input-with-currency > input:focus,
+body.page[data-page="admin"] .input-with-currency > input:focus-visible {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    border-radius: 0;
+    outline: 0;
+    box-shadow: none;
+    background: var(--surface);
+}
+
+body.page[data-page="admin"] .billing-rate-actions {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(14rem, 1fr) auto;
+    align-items: end;
+    gap: 0.75rem;
+}
+
+body.page[data-page="admin"] .billing-rate-actions > label {
+    min-width: 0;
+}
+
+body.page[data-page="admin"] .billing-rate-actions > .button {
+    width: auto;
+    min-width: 10.5rem;
+    padding-inline: 1rem;
+    box-shadow: none;
+}
+
+body.page[data-page="admin"] .water-rate-current-summary,
+body.page[data-page="admin"] .consumption-monitoring-summary,
+body.page[data-page="admin"] .admin-notification-guidance .summary-list,
+body.page[data-page="admin"] .leak-alert-summary {
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 0.85rem;
+    background: var(--surface-soft);
+}
+
+body.page[data-page="admin"] :is(.water-rate-current-summary, .consumption-monitoring-summary, .admin-notification-guidance .summary-list, .leak-alert-summary) > div {
+    display: grid;
+    align-content: center;
+    justify-content: initial;
+    gap: 0.28rem;
+    min-height: 4.5rem;
+    padding: 0.75rem 0.9rem;
+    border-right: 1px solid var(--line);
+}
+
+body.page[data-page="admin"] :is(.water-rate-current-summary, .consumption-monitoring-summary, .admin-notification-guidance .summary-list, .leak-alert-summary) dt {
+    font-size: 0.68rem;
+    font-weight: 750;
+    text-transform: uppercase;
+}
+
+body.page[data-page="admin"] :is(.water-rate-current-summary, .consumption-monitoring-summary, .admin-notification-guidance .summary-list, .leak-alert-summary) dd {
+    overflow-wrap: anywhere;
+    font-size: 0.86rem;
+}
+
+/* Monitoring, reports, and notification management. */
+body.page[data-page="admin"] .admin-leak-monitoring-card > [data-admin-alerts]:has(> .empty-state:only-child) {
+    margin-top: 1rem;
+    border: 1px dashed var(--line-strong);
+    border-radius: 0.9rem;
+    background: color-mix(in srgb, var(--primary) 4%, var(--surface));
+}
+
+body.page[data-page="admin"] .leak-alert-card {
+    padding: 1rem;
+    border-color: var(--line);
+    border-radius: 0.9rem;
+    background: var(--surface-soft);
+}
+
+body.page[data-page="admin"] .leak-alert-update-form,
+body.page[data-page="admin"] .leak-alert-notify-form {
+    grid-template-columns: minmax(12rem, 0.7fr) minmax(16rem, 1.3fr) auto;
+    align-items: end;
+}
+
+body.page[data-page="admin"] .leak-alert-notify-form {
+    grid-template-columns: minmax(14rem, 0.8fr) minmax(18rem, 1.4fr) auto;
+}
+
+body.page[data-page="admin"] .reports-filter-form > label {
+    min-width: 0;
+}
+
+body.page[data-page="admin"] .reports-search-field {
+    min-width: 0;
+}
+
+body.page[data-page="admin"] .reports-filter-form .filter-actions {
+    grid-column: span 2;
+    grid-template-columns: repeat(2, minmax(7.5rem, 1fr));
+}
+
+body.page[data-page="admin"] .reports-filter-form .button {
+    white-space: nowrap;
+}
+
+body.page[data-page="admin"] .reports-period-description {
+    display: flex;
+    min-height: 2.5rem;
+    grid-column: 1 / -1;
+    align-items: center;
+    margin: 0;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--line);
+    border-radius: var(--admin-control-radius);
+    color: var(--muted);
+    background: var(--surface-soft);
+    font-size: 0.75rem;
+}
+
+body.page[data-page="admin"] .report-preview-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    justify-content: flex-end;
+    gap: 0.65rem;
+}
+
+body.page[data-page="admin"] .report-page-size {
+    display: grid;
+    gap: 0.25rem;
+    color: var(--muted);
+    font-size: 0.65rem;
+    font-weight: 750;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+body.page[data-page="admin"] .report-page-size select {
+    width: 7.5rem;
+    min-height: 2.35rem;
+    padding: 0.5rem 0.65rem;
+    font-size: 0.75rem;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+body.page[data-page="admin"] :is(.button, .link-button) {
+    font-size: 0.78rem;
+}
+
+body.page[data-page="admin"] .button {
+    min-height: 2.5rem;
+    padding: 0.58rem 0.82rem;
+}
+
+body.page[data-page="admin"] .table-actions :is(.link-button, .button) {
+    min-height: 2rem;
+    padding: 0.42rem 0.58rem;
+    font-size: 0.7rem;
+}
+
+body.page[data-page="admin"] .pager {
+    padding-top: 0.75rem;
+    font-size: 0.72rem;
+}
+
+body.page[data-page="admin"] .pager button {
+    min-height: 2.1rem;
+    padding: 0.42rem 0.62rem;
+    font-size: 0.7rem;
+}
+
+body.page[data-page="admin"] .admin-notification-layout {
+    grid-template-columns: minmax(0, 1.7fr) minmax(16rem, 0.75fr);
+}
+
+body.page[data-page="admin"] .admin-notification-layout > .admin-card:first-child {
+    grid-column: auto;
+}
+
+body.page[data-page="admin"] .admin-notification-compose-card .stack-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.page[data-page="admin"] .admin-notification-compose-card .stack-form > :is(label:nth-of-type(5), label:nth-of-type(6), .notification-character-count, .button-row) {
+    grid-column: 1 / -1;
+}
+
+body.page[data-page="admin"] .admin-notification-history {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.page[data-page="admin"] .admin-notification-history-item {
+    min-width: 0;
+    border-color: var(--line);
+    border-radius: 0.9rem;
+    background: var(--surface-soft);
+}
+
+body.page[data-page="admin"] .admin-notification-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.page[data-page="admin"] .admin-notification-stats > div {
+    padding: 0.55rem 0;
+    border-bottom: 1px solid var(--line);
+}
+
+body.page[data-page="admin"] .admin-notification-actions {
+    justify-content: flex-start;
+}
+
+@media (min-width: 1100px) {
+    body.page[data-page="admin"] .reports-filter-form {
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+    }
+
+    body.page[data-page="admin"] .reports-filter-form > label:nth-of-type(1) {
+        grid-column: span 2;
+    }
+
+    body.page[data-page="admin"] .reports-filter-form > label:nth-of-type(2) {
+        grid-column: span 3;
+    }
+
+    body.page[data-page="admin"] .reports-filter-form > label:nth-of-type(3),
+    body.page[data-page="admin"] .reports-filter-form > label:nth-of-type(4),
+    body.page[data-page="admin"] .reports-filter-form > label:nth-of-type(6) {
+        grid-column: span 2;
+    }
+
+    body.page[data-page="admin"] .reports-filter-form > label:nth-of-type(5) {
+        grid-column: span 3;
+    }
+
+    body.page[data-page="admin"] .reports-filter-form .filter-actions {
+        grid-column: span 4;
+    }
+
+    body.page[data-page="admin"] .reports-filter-form .reports-period-description {
+        grid-column: span 6;
+    }
+
+    body.page[data-page="admin"] .admin-overview-kpis {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    body.page[data-page="admin"] .admin-overview-kpis .stat-card:nth-child(3n) {
+        border-right: 0;
+    }
+
+    body.page[data-page="admin"] .admin-overview-kpis .stat-card:nth-last-child(-n + 3) {
+        border-bottom: 0;
+    }
+
+    body.page[data-page="admin"] :is(.admin-overview-period-stats, .billing-management-summary, .reports-summary) {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    body.page[data-page="admin"] :is(.admin-overview-period-stats, .billing-management-summary, .reports-summary) .stat-card:last-child {
+        border-right: 0;
+    }
+
+    body.page[data-page="admin"] :is(.admin-overview-period-stats, .billing-management-summary, .reports-summary) .stat-card {
+        border-bottom: 0;
+    }
+}
+
+@media (min-width: 992px) {
+    body.page[data-page="admin"] .admin-sidebar {
+        padding: 0.85rem 0.75rem 0.65rem;
+    }
+
+    body.page[data-page="admin"] .admin-sidebar-brand {
+        gap: 0.6rem;
+        padding: 0 0.35rem 0.7rem;
+    }
+
+    body.page[data-page="admin"] .admin-sidebar-mark {
+        width: 2.2rem;
+        height: 2.2rem;
+    }
+
+    body.page[data-page="admin"] .admin-sidebar-nav {
+        gap: 0.1rem;
+    }
+
+    body.page[data-page="admin"] .admin-sidebar-nav .sidebar-section-title {
+        margin: 0.35rem 0.55rem 0.12rem;
+        font-size: 0.6rem;
+    }
+
+    body.page[data-page="admin"] .admin-sidebar-nav button {
+        min-height: 2.05rem;
+        padding: 0.38rem 0.6rem;
+        font-size: 0.74rem;
+    }
+
+    body.page[data-page="admin"] .admin-sidebar-logout {
+        min-height: 2.25rem;
+        padding: 0.5rem 0.6rem;
+        font-size: 0.75rem;
+    }
+}
+
+@media (min-width: 768px) and (max-width: 1099px) {
+    body.page[data-page="admin"] :is(.admin-overview-kpis, .admin-overview-period-stats, .billing-management-summary, .reports-summary) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body.page[data-page="admin"] :is(.admin-overview-kpis, .admin-overview-period-stats, .billing-management-summary, .reports-summary) .stat-card:nth-child(2n) {
+        border-right: 0;
+    }
+
+    body.page[data-page="admin"] :is(.customer-management-form-card .stack-form, .admin-device-register-form, .water-rate-section-card .stack-form) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body.page[data-page="admin"] .admin-device-register-form > :is(label:first-of-type, label:has(input[name="installation_address"])) {
+        grid-column: span 1;
+    }
+
+    body.page[data-page="admin"] .admin-notification-layout,
+    body.page[data-page="admin"] .admin-notification-history {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 991.98px) {
+    body.page[data-page="admin"] .admin-sidebar {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 1045;
+        width: min(18rem, 86vw);
+        min-height: 0;
+        max-height: 100dvh;
+        overflow-y: auto;
+    }
+}
+
+@media (max-width: 767px) {
+    body.page[data-page="admin"] .site-header-container {
+        gap: 0.55rem;
+    }
+
+    body.page[data-page="admin"] .admin-topbar-actions {
+        gap: 0.35rem;
+    }
+
+    body.page[data-page="admin"] .admin-profile {
+        padding: 0;
+    }
+
+    body.page[data-page="admin"] :is(.admin-overview-kpis, .admin-overview-period-stats, .billing-management-summary, .reports-summary),
+    body.page[data-page="admin"] :is(.customer-management-form-card .stack-form, .admin-device-register-form, .water-rate-section-card .stack-form, .admin-notification-layout, .admin-notification-compose-card .stack-form, .admin-notification-history, .leak-alert-update-form, .leak-alert-notify-form),
+    body.page[data-page="admin"] .admin-device-list-card [data-municipal-devices] {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.page[data-page="admin"] .device-health-card {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.page[data-page="admin"] .device-health-card > :is(.notification-head, .button-row) {
+        grid-column: auto;
+    }
+
+    body.page[data-page="admin"] .reports-filter-form .filter-actions {
+        grid-column: auto;
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.page[data-page="admin"] .billing-rate-actions {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.page[data-page="admin"] .billing-rate-actions > .button {
+        width: 100%;
+    }
+
+    body.page[data-page="admin"] :is(.admin-overview-kpis, .admin-overview-period-stats, .billing-management-summary, .reports-summary) .stat-card {
+        min-height: 0;
+        border-right: 0;
+    }
+
+    body.page[data-page="admin"] :is(.admin-overview-kpis, .admin-overview-period-stats, .billing-management-summary, .reports-summary) .stat-card:last-child {
+        border-bottom: 0;
+    }
+
+    body.page[data-page="admin"] .admin-device-register-form > :is([data-device-household-status], label:has(textarea)),
+    body.page[data-page="admin"] .admin-notification-compose-card .stack-form > :is(label:nth-of-type(5), label:nth-of-type(6), .notification-character-count, .button-row) {
+        grid-column: auto;
+    }
+
+    body.page[data-page="admin"] .admin-device-register-form > :is(label:first-of-type, label:has(input[name="installation_address"])) {
+        grid-column: auto;
+    }
+
+    body.page[data-page="admin"] .panel-head,
+    body.page[data-page="admin"] .customer-management-table-meta,
+    body.page[data-page="admin"] .notification-head {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    body.page[data-page="admin"] .billing-export-actions,
+    body.page[data-page="admin"] .report-export-actions {
+        justify-content: flex-start;
+    }
+
+    body.page[data-page="admin"] .report-preview-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+}
+
+/* Compact administrator navigation mirrors the household workspace behavior. */
+.admin-sidebar-brand-copy {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.admin-sidebar-collapse {
+    display: none;
+    width: 2rem;
+    height: 2rem;
+    flex: 0 0 2rem;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 0.65rem;
+    color: var(--muted);
+    background: var(--surface-soft);
+    cursor: pointer;
+    transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease;
+}
+
+.admin-sidebar-collapse:hover,
+.admin-sidebar-collapse:focus-visible {
+    color: var(--primary-dark);
+    border-color: var(--primary);
+    outline: 0;
+}
+
+.admin-sidebar-collapse .ui-icon {
+    transition: transform 200ms ease;
+}
+
+@media (min-width: 992px) {
+    body.page[data-page="admin"] .app-shell {
+        transition: padding-left 200ms ease;
+    }
+
+    body.page[data-page="admin"] .admin-sidebar {
+        transition: width 200ms ease, padding 200ms ease;
+    }
+
+    body.page[data-page="admin"] .admin-sidebar-collapse {
+        display: grid;
+    }
+
+    body.page[data-page="admin"].admin-sidebar-collapsed .app-shell {
+        padding-left: 5.5rem;
+    }
+
+    body.page[data-page="admin"].admin-sidebar-collapsed .admin-sidebar {
+        width: 5.5rem;
+        padding-inline: 0.7rem;
+    }
+
+    body.page[data-page="admin"].admin-sidebar-collapsed .admin-sidebar-brand {
+        justify-content: center;
+        padding-inline: 0;
+    }
+
+    body.page[data-page="admin"].admin-sidebar-collapsed :is(.admin-sidebar-mark, .admin-sidebar-brand-copy, .admin-sidebar-nav .sidebar-section-title, .admin-sidebar-nav button span, .admin-sidebar-logout span) {
+        display: none;
+    }
+
+    body.page[data-page="admin"].admin-sidebar-collapsed .admin-sidebar-collapse .ui-icon {
+        transform: rotate(180deg);
+    }
+
+    body.page[data-page="admin"].admin-sidebar-collapsed .admin-sidebar-collapse {
+        width: 2.35rem;
+        height: 2.35rem;
+        flex-basis: 2.35rem;
+    }
+
+    body.page[data-page="admin"].admin-sidebar-collapsed .admin-sidebar-nav {
+        align-items: center;
+    }
+
+    body.page[data-page="admin"].admin-sidebar-collapsed .admin-sidebar-nav button,
+    body.page[data-page="admin"].admin-sidebar-collapsed .admin-sidebar-logout {
+        width: 3.15rem;
+        min-width: 3.15rem;
+        min-height: 3rem;
+        flex: 0 0 3rem;
+        justify-content: center;
+        gap: 0;
+        margin-inline: auto;
+        padding-inline: 0.55rem;
+        border-radius: 0.8rem;
+    }
+
+    body.page[data-page="admin"].admin-sidebar-collapsed .admin-sidebar-nav button i {
+        display: grid;
+        width: 1.4rem;
+        height: 1.4rem;
+        margin: 0;
+        place-items: center;
+        font-size: 1.3rem;
+        line-height: 1;
+    }
+
+    body.page[data-page="admin"].admin-sidebar-collapsed .admin-sidebar-nav button:hover,
+    body.page[data-page="admin"].admin-sidebar-collapsed .admin-sidebar-nav button.is-active {
+        border-color: color-mix(in srgb, var(--primary) 48%, var(--line));
+        background: color-mix(in srgb, var(--primary) 16%, var(--surface));
+    }
+
+    body.page[data-page="admin"].admin-sidebar-collapsed .admin-sidebar-logout i {
+        font-size: 1.15rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body.page[data-page="admin"] :is(.app-shell, .admin-sidebar),
+    .admin-sidebar-collapse .ui-icon {
+        transition: none;
+    }
+}
+
+/* Structured administrator overview header. */
+body.page[data-page="admin"] .admin-overview-header {
+    gap: clamp(1.25rem, 2.5vw, 2.25rem);
+    padding: clamp(1.15rem, 2vw, 1.5rem);
+}
+
+body.page[data-page="admin"] .admin-overview-heading {
+    min-width: 0;
+}
+
+body.page[data-page="admin"] .admin-overview-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--primary-dark);
+    font-size: 0.65rem;
+    font-weight: 850;
+    letter-spacing: 0.09em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+body.page[data-page="admin"] .admin-overview-dot {
+    width: 0.45rem;
+    height: 0.45rem;
+    flex: 0 0 0.45rem;
+    border-radius: 999px;
+    background: var(--primary);
+    box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+body.page[data-page="admin"] .admin-overview-heading h1 {
+    margin-top: 0.55rem;
+}
+
+body.page[data-page="admin"] .admin-overview-heading p:last-child {
+    max-width: 48ch;
+    margin-top: 0.45rem;
+    line-height: 1.55;
+}
+
+body.page[data-page="admin"] .admin-refresh-control,
+body.page[data-page="admin"] .admin-analytics-controls {
+    width: 100%;
+}
+
+body.page[data-page="admin"] .admin-refresh-control {
+    justify-content: space-between;
+}
+
+body.page[data-page="admin"] .admin-refresh-label {
+    line-height: 1.35;
+}
+
+body.page[data-page="admin"] .admin-analytics-timezone {
+    display: inline-flex;
+    min-height: 2.5rem;
+    align-items: center;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--line);
+    border-radius: 0.65rem;
+    background: var(--surface-soft);
+    white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+    body.page[data-page="admin"] .admin-overview-header {
+        grid-template-columns: minmax(0, 1.2fr) minmax(25rem, 0.8fr);
+        align-items: stretch;
+    }
+
+    body.page[data-page="admin"] .admin-overview-controls {
+        width: 100%;
+        align-content: center;
+        justify-items: stretch;
+        padding-left: clamp(1rem, 2vw, 1.5rem);
+        border-left: 1px solid var(--line);
+    }
+
+    body.page[data-page="admin"] .admin-analytics-controls {
+        display: grid;
+        grid-template-columns: minmax(11rem, 1fr) auto;
+        align-items: end;
+    }
+
+    body.page[data-page="admin"] .admin-analytics-period-field,
+    body.page[data-page="admin"] .admin-analytics-range-control,
+    body.page[data-page="admin"] .admin-analytics-range-select {
+        width: 100%;
+        min-width: 0;
+    }
+}
+
+@media (max-width: 767px) {
+    body.page[data-page="admin"] .admin-refresh-control {
+        align-items: flex-start;
+    }
+
+    body.page[data-page="admin"] .admin-analytics-timezone {
+        min-height: 0;
+    }
+}
+
+/* Fit the complete compact navigation rail within the viewport. */
+@media (min-width: 992px) {
+    body.page[data-page="admin"].admin-sidebar-collapsed .admin-sidebar {
+        overflow-y: hidden;
+    }
+
+    body.page[data-page="admin"].admin-sidebar-collapsed .admin-sidebar-brand {
+        flex: 0 0 2.85rem;
+        min-height: 2.85rem;
+        padding-bottom: 0.45rem;
+    }
+
+    body.page[data-page="admin"].admin-sidebar-collapsed .admin-sidebar-collapse {
+        width: 2.2rem;
+        height: 2.2rem;
+        flex-basis: 2.2rem;
+    }
+
+    body.page[data-page="admin"].admin-sidebar-collapsed .admin-sidebar-nav {
+        display: grid;
+        min-height: 0;
+        grid-template-rows: repeat(9, minmax(0, 1fr));
+        align-items: stretch;
+        gap: 0.14rem;
+        padding-block: 0.35rem;
+    }
+
+    body.page[data-page="admin"].admin-sidebar-collapsed .admin-sidebar-nav button {
+        width: 3rem;
+        min-width: 3rem;
+        min-height: 0;
+        max-height: 2.7rem;
+        height: 100%;
+        justify-self: center;
+        align-self: center;
+        flex-basis: auto;
+    }
+
+    body.page[data-page="admin"].admin-sidebar-collapsed .admin-sidebar-logout {
+        width: 3rem;
+        min-width: 3rem;
+        min-height: 2.35rem;
+        max-height: 2.35rem;
+        flex: 0 0 2.35rem;
+        margin-inline: auto;
+    }
+
+    body.page[data-page="admin"].admin-sidebar-collapsed .admin-sidebar-nav button i {
+        width: 1.3rem;
+        height: 1.3rem;
+        font-size: 1.18rem;
+    }
+}
+
+/* Customer table: one rounded shell, one continuous surface. */
+body.page[data-page="admin"] .customer-management-table-shell {
+    margin-top: 0.75rem;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 0.85rem;
+    background: var(--surface);
+    box-shadow: 0 8px 22px rgb(20 36 56 / 4%);
+}
+
+body.page[data-page="admin"] .customer-management-table {
+    width: 100%;
+    margin: 0;
+    overflow-x: auto;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    scrollbar-width: thin;
+    overscroll-behavior-x: contain;
+}
+
+body.page[data-page="admin"] .customer-management-table .admin-table-head {
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    background: color-mix(in srgb, var(--primary) 6%, var(--surface-soft));
+}
+
+body.page[data-page="admin"] .customer-management-table .table-body {
+    max-height: none;
+    overflow: visible;
+    background: var(--surface);
+}
+
+body.page[data-page="admin"] .customer-management-table .admin-table-row {
+    border-top: 1px solid var(--line);
+    background: transparent;
+    transition: background-color 150ms ease;
+}
+
+body.page[data-page="admin"] .customer-management-table .admin-table-row:first-child {
+    border-top: 0;
+}
+
+body.page[data-page="admin"] .customer-management-table .admin-table-row:hover {
+    background: color-mix(in srgb, var(--primary) 6%, var(--surface));
+}
+
+body.page[data-page="admin"] .customer-management-table .table-actions {
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 0.45rem;
+}
+
+body.page[data-page="admin"] .customer-management-table .table-actions .link-button {
+    min-height: 2rem;
+    padding: 0.4rem 0.65rem;
+    border-radius: 0.55rem;
+    white-space: nowrap;
+}
+
+html.dark body.page[data-page="admin"] .customer-management-table-shell {
+    box-shadow: 0 10px 26px rgb(0 7 18 / 18%);
 }

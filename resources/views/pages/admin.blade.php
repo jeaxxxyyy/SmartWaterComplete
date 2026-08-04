@@ -15,31 +15,53 @@
     <div class="admin-topbar-title"><span>Administrator workspace</span><strong data-admin-page-title>Dashboard</strong></div>
     <label class="admin-search" aria-label="Search administrator workspace"><i class="bi bi-search" aria-hidden="true"></i><input type="search" placeholder="Search workspace" data-admin-search></label>
     <div class="admin-topbar-actions">
-        <button class="admin-icon-button" type="button" data-admin-nav="notifications" aria-label="Open notifications" title="Notifications"><i class="bi bi-bell" aria-hidden="true"></i><span class="admin-notification-badge" data-admin-alert-count>--</span></button>
+        <div class="admin-notification-control" data-admin-notification-control>
+            <button class="admin-icon-button admin-notification-button" type="button" data-admin-notification-toggle aria-haspopup="dialog" aria-expanded="false" aria-controls="admin-notification-dropdown" aria-label="Open administrator notifications" title="Notifications">
+                <i class="bi bi-bell" aria-hidden="true"></i>
+                <span class="admin-notification-badge" data-admin-alert-count aria-hidden="true" hidden></span>
+            </button>
+            <section class="household-notification-dropdown admin-notification-dropdown" id="admin-notification-dropdown" data-admin-notification-dropdown role="dialog" aria-label="Recent administrator notifications" hidden>
+                <header class="notification-dropdown-header">
+                    <div>
+                        <strong>Notifications</strong>
+                        <small data-admin-notification-dropdown-summary>No unread household messages</small>
+                    </div>
+                    <span class="notification-live-dot" aria-hidden="true"></span>
+                </header>
+                <div class="notification-dropdown-list" data-admin-notification-dropdown-list>
+                    <div class="notification-dropdown-empty">Loading notifications...</div>
+                </div>
+                <button class="notification-dropdown-footer" type="button" data-admin-notification-view-all>View all notifications</button>
+            </section>
+        </div>
         @include('components.theme-toggle', ['class' => 'admin-icon-button'])
-        <div class="dropdown">
-            <button class="admin-profile dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"><span class="admin-avatar">AD</span><span class="admin-profile-copy"><strong data-account-role>Administrator</strong><small>Municipal Admin</small></span></button>
-            <ul class="dropdown-menu dropdown-menu-end admin-profile-menu"><li><span class="dropdown-item-text">Smart Water Operations</span></li><li><hr class="dropdown-divider"></li><li><button class="dropdown-item" type="button" data-logout><i class="bi bi-box-arrow-right me-2"></i>Sign out</button></li></ul>
+        <div class="admin-profile" aria-label="Administrator municipal account">
+            <span class="admin-avatar">AD</span>
+            <span class="admin-profile-copy"><strong data-account-role>Administrator</strong><small>Municipal Account</small></span>
         </div>
     </div>
 @endsection
 
 @section('admin-sidebar')
-    <div class="admin-sidebar-brand"><span class="admin-sidebar-mark"><i class="bi bi-droplet-half" aria-hidden="true"></i></span><div><strong>Smart Water</strong><small>Operations console</small></div></div>
+    <div class="admin-sidebar-brand">
+        <span class="admin-sidebar-mark"><i class="bi bi-droplet-half" aria-hidden="true"></i></span>
+        <div class="admin-sidebar-brand-copy"><strong>Smart Water</strong><small>Operations console</small></div>
+        <button class="admin-sidebar-collapse" type="button" data-admin-sidebar-collapse aria-controls="admin-sidebar" aria-expanded="true" aria-label="Collapse administrator sidebar" title="Collapse sidebar">@include('components.ui-icon', ['name' => 'sidebar-collapse'])</button>
+    </div>
     <nav class="sidebar-nav admin-sidebar-nav" aria-label="Administrator sections">
         <span class="sidebar-section-title">Dashboard</span>
-        <button type="button" class="is-active" data-admin-nav="admin-dashboard"><i class="bi bi-grid-1x2-fill"></i><span>Overview</span></button>
+        <button type="button" class="is-active" data-admin-nav="admin-dashboard" title="Overview"><i class="bi bi-grid-1x2-fill"></i><span>Overview</span></button>
         <span class="sidebar-section-title">Management</span>
-        <button type="button" data-admin-nav="customer-management"><i class="bi bi-people"></i><span>Customer Management</span></button>
-        <button type="button" data-admin-nav="device-management"><i class="bi bi-cpu"></i><span>Device Management</span></button>
-        <button type="button" data-admin-nav="water-rates"><i class="bi bi-droplet"></i><span>Water Rate Management</span></button>
-        <button type="button" data-admin-nav="billing-management"><i class="bi bi-receipt"></i><span>Billing</span></button>
+        <button type="button" data-admin-nav="customer-management" title="Customer Management"><i class="bi bi-people"></i><span>Customer Management</span></button>
+        <button type="button" data-admin-nav="device-management" title="Device Management"><i class="bi bi-cpu"></i><span>Device Management</span></button>
+        <button type="button" data-admin-nav="water-rates" title="Water Rate Management"><i class="bi bi-droplet"></i><span>Water Rate Management</span></button>
+        <button type="button" data-admin-nav="billing-management" title="Billing"><i class="bi bi-receipt"></i><span>Billing</span></button>
         <span class="sidebar-section-title">Monitoring</span>
-        <button type="button" data-admin-nav="consumption-monitoring"><i class="bi bi-activity"></i><span>Consumption Monitoring</span></button>
-        <button type="button" data-admin-nav="leak-monitoring"><i class="bi bi-exclamation-triangle"></i><span>Leak Monitoring</span></button>
+        <button type="button" data-admin-nav="consumption-monitoring" title="Consumption Monitoring"><i class="bi bi-activity"></i><span>Consumption Monitoring</span></button>
+        <button type="button" data-admin-nav="leak-monitoring" title="Leak Monitoring"><i class="bi bi-exclamation-triangle"></i><span>Leak Monitoring</span></button>
         <span class="sidebar-section-title">Insights</span>
-        <button type="button" data-admin-nav="reports"><i class="bi bi-bar-chart-line"></i><span>Reports</span></button>
-        <button type="button" data-admin-nav="notifications"><i class="bi bi-megaphone"></i><span>Notifications</span></button>
+        <button type="button" data-admin-nav="reports" title="Reports"><i class="bi bi-bar-chart-line"></i><span>Reports</span></button>
+        <button type="button" data-admin-nav="notifications" title="Notifications"><i class="bi bi-megaphone"></i><span>Notifications</span></button>
     </nav>
     <button class="admin-sidebar-logout" type="button" data-logout><i class="bi bi-box-arrow-left"></i><span>Sign out</span></button>
 @endsection
@@ -54,7 +76,6 @@
     <button type="button" data-admin-nav="leak-monitoring">Leak Monitoring</button>
     <button type="button" data-admin-nav="reports">Reports</button>
     <button type="button" data-admin-nav="notifications">Notification Management</button>
-    <button type="button" data-logout>Logout</button>
 @endsection
 
 @section('content')
@@ -71,22 +92,27 @@
             <div class="admin-overview-controls">
                 <div class="admin-refresh-control">
                     <span class="admin-refresh-label">Last refreshed: <time data-admin-last-refreshed>--</time></span>
-                    <button class="button button-ghost" type="button" data-refresh aria-label="Refresh administrator overview"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Refresh</button>
+                    <button class="button button-ghost admin-refresh-button" type="button" data-refresh aria-label="Refresh administrator overview"><i class="bi bi-arrow-clockwise admin-refresh-icon" aria-hidden="true"></i><span>Refresh</span></button>
                 </div>
                 <div class="admin-analytics-controls">
-                    <label class="field-hint" for="admin-analytics-range">Analytics period</label>
-                    <select id="admin-analytics-range" class="filter-input analytics-range-select" data-admin-analytics-range aria-label="Administrator analytics period">
-                        <option value="last_7_days">Last 7 days</option>
-                        <option value="last_30_days">Last 30 days</option>
-                        <option value="last_3_months">Last 3 months</option>
-                        <option value="last_12_months" selected>Last 12 months</option>
-                        <option value="custom">Custom range</option>
-                    </select>
-                    <span class="analytics-custom-range" data-admin-analytics-custom hidden>
-                        <input type="date" class="filter-input" data-admin-analytics-from aria-label="Analytics start date">
-                        <input type="date" class="filter-input" data-admin-analytics-to aria-label="Analytics end date">
-                    </span>
-                    <small class="field-hint">Timezone: <span data-admin-analytics-timezone>UTC</span></small>
+                    <div class="admin-analytics-period-field">
+                        <label class="field-hint" for="admin-analytics-range">Analytics period</label>
+                        <div class="analytics-range-control admin-analytics-range-control">
+                            <select id="admin-analytics-range" class="filter-input analytics-range-select" data-admin-analytics-range aria-label="Administrator analytics period">
+                                <option value="last_7_days">Last 7 days</option>
+                                <option value="last_30_days">Last 30 days</option>
+                                <option value="last_3_months">Last 3 months</option>
+                                <option value="last_12_months" selected>Last 12 months</option>
+                                <option value="custom">Custom range</option>
+                            </select>
+                            <span class="analytics-custom-range admin-analytics-custom-range" data-admin-analytics-custom hidden>
+                                <strong>Choose a custom period</strong>
+                                <label><span>From</span><input type="date" class="filter-input" data-admin-analytics-from aria-label="Analytics start date"></label>
+                                <label><span>To</span><input type="date" class="filter-input" data-admin-analytics-to aria-label="Analytics end date"></label>
+                            </span>
+                        </div>
+                    </div>
+                    <small class="field-hint admin-analytics-timezone">Timezone: <span data-admin-analytics-timezone>UTC</span></small>
                 </div>
             </div>
         </section>
@@ -269,7 +295,7 @@
     </section>
 
     <section class="dashboard-view" data-admin-view="customer-management">
-        <section class="admin-grid customer-management-layout">
+        <section class="admin-grid customer-management-layout admin-workspace-layout">
             <article class="panel admin-card customer-management-table-card">
                 <div class="panel-head">
                     <div>
@@ -293,22 +319,24 @@
                         <option value="10" selected>10 per page</option>
                         <option value="25">25 per page</option>
                     </select>
-                    <button class="button button-ghost" type="submit">Apply filters</button>
+                    <button class="button button-primary" type="submit">Apply filters</button>
                 </form>
                 <div class="customer-management-table-meta">
                     <span class="table-secondary" data-household-user-summary>-- household accounts</span>
                     <span class="field-hint">Use Manage to update access or meter assignment.</span>
                 </div>
-                <div class="table">
-                    <div class="table-head admin-table-head">
-                        <span>Name</span>
-                        <span>Contact</span>
-                        <span>Device</span>
-                        <span>Status</span>
-                        <span>Actions</span>
-                    </div>
-                    <div class="table-body" data-admin-household-users>
-                        <div class="empty-state">Loading household users...</div>
+                <div class="customer-management-table-shell">
+                    <div class="table customer-management-table">
+                        <div class="table-head admin-table-head">
+                            <span>Name</span>
+                            <span>Contact</span>
+                            <span>Device</span>
+                            <span>Status</span>
+                            <span>Actions</span>
+                        </div>
+                        <div class="table-body" data-admin-household-users>
+                            <div class="empty-state">Loading household users...</div>
+                        </div>
                     </div>
                 </div>
                 <div class="pager" data-admin-household-users-pager></div>
@@ -408,8 +436,8 @@
     </section>
 
     <section class="dashboard-view" data-admin-view="device-management">
-        <section class="admin-grid">
-            <article class="panel admin-card">
+        <section class="admin-grid admin-device-layout admin-workspace-layout">
+            <article class="panel admin-card admin-device-list-card">
                 <p class="eyebrow">Device Management</p>
                 <h2>Meters and Connection Health</h2>
                 <p class="field-hint">Online means the meter has reported telemetry within the configured health window.</p>
@@ -418,36 +446,36 @@
                 </div>
             </article>
 
-            <article class="panel admin-card">
+            <article class="panel admin-card admin-device-form-card">
                 <p class="eyebrow">Register M5Stack</p>
                 <h2>Assign a meter to a household</h2>
-                <form class="stack-form" data-device-register-form autocomplete="off">
+                <form class="stack-form admin-device-register-form" data-device-register-form autocomplete="off">
                     <label>
-                        Household <span class="required-mark" aria-hidden="true">*</span>
+                        <span class="admin-field-label">Household <span class="required-mark" aria-hidden="true">*</span></span>
                         <select name="household_id" required data-device-household-select aria-describedby="device-household-status">
                             <option value="">Choose household</option>
                         </select>
                     </label>
                     <small class="field-hint" id="device-household-status" data-device-household-status role="status" aria-live="polite"></small>
                     <label>
-                        Asset number <span class="required-mark" aria-hidden="true">*</span>
+                        <span class="admin-field-label">Asset number <span class="required-mark" aria-hidden="true">*</span></span>
                         <input type="text" name="asset_number" placeholder="Municipal asset no. (MWM-2026-0002)" maxlength="100" required>
                     </label>
                     <label>
-                        M5Stack serial number <span class="required-mark" aria-hidden="true">*</span>
+                        <span class="admin-field-label">M5Stack serial number <span class="required-mark" aria-hidden="true">*</span></span>
                         <input type="text" name="serial_number" placeholder="Manufacturer serial no." maxlength="150" required>
                     </label>
                     <label>
-                        Meter name <span class="required-mark" aria-hidden="true">*</span>
+                        <span class="admin-field-label">Meter name <span class="required-mark" aria-hidden="true">*</span></span>
                         <input type="text" name="name" placeholder="Meter name" value="M5Stack CoreS3 Household Meter" maxlength="150" required>
                     </label>
                     <label>
-                        Installation address <span class="field-hint">optional</span>
+                        <span class="admin-field-label">Installation address <span class="field-hint">optional</span></span>
                         <input type="text" name="installation_address" placeholder="Installation address" maxlength="255">
                     </label>
-                    <label>Installation date <input type="date" name="installed_at"></label>
+                    <label><span class="admin-field-label">Installation date</span><input type="date" name="installed_at"></label>
                     <label>
-                        Notes <span class="field-hint">optional</span>
+                        <span class="admin-field-label">Notes <span class="field-hint">optional</span></span>
                         <textarea name="notes" placeholder="Installation or maintenance notes" maxlength="2000"></textarea>
                     </label>
                     <button class="button button-primary" type="submit">Register and create activation code</button>
@@ -481,11 +509,14 @@
                 <p class="field-hint">These values are used for estimated household billing and billing statements.</p>
                 <div class="form-feedback" data-billing-rates-status role="status" aria-live="polite" hidden></div>
                 <form class="stack-form" data-billing-rates-form novalidate>
-                    <label>Water rate per m³ <span class="required-mark" aria-hidden="true">*</span><div class="input-with-suffix"><input type="number" step="0.01" min="0" name="water_rate" placeholder="40.00" required><span data-rate-currency>PHP</span></div></label>
-                    <label>Fixed monthly charge <span class="required-mark" aria-hidden="true">*</span><div class="input-with-suffix"><input type="number" step="0.01" min="0" name="fixed_monthly_charge" placeholder="0.00" required><span data-rate-currency>PHP</span></div></label>
-                    <label>Subsidy or discount <span class="required-mark" aria-hidden="true">*</span><div class="input-with-suffix"><input type="number" step="0.01" min="0" name="subsidy_deduction" placeholder="0.00" required><span data-rate-currency>PHP</span></div></label>
-                    <div class="form-grid-two"><label>Effective date <input type="date" name="effective_date"></label><label>Billing currency<select name="currency" data-billing-currency required><option value="PHP">PHP — Philippine peso</option><option value="USD">USD — US dollar</option><option value="EUR">EUR — Euro</option></select></label></div>
-                    <button class="button button-primary" type="submit">Save billing rates</button>
+                    <label>Water rate per m³ <span class="required-mark" aria-hidden="true">*</span><div class="input-with-currency"><span data-rate-currency>PHP</span><input type="number" step="0.01" min="0" name="water_rate" placeholder="40.00" required></div></label>
+                    <label>Fixed monthly charge <span class="required-mark" aria-hidden="true">*</span><div class="input-with-currency"><span data-rate-currency>PHP</span><input type="number" step="0.01" min="0" name="fixed_monthly_charge" placeholder="0.00" required></div></label>
+                    <label>Subsidy or discount <span class="required-mark" aria-hidden="true">*</span><div class="input-with-currency"><span data-rate-currency>PHP</span><input type="number" step="0.01" min="0" name="subsidy_deduction" placeholder="0.00" required></div></label>
+                    <div class="billing-rate-actions">
+                        <label>Effective date <input type="date" name="effective_date"></label>
+                        <input type="hidden" name="currency" value="PHP">
+                        <button class="button button-primary" type="submit">Save billing rates</button>
+                    </div>
                 </form>
             </article>
 
@@ -546,7 +577,7 @@
                 <label class="billing-date-field">From<input type="date" name="from"></label>
                 <label class="billing-date-field">To<input type="date" name="to"></label>
                 <select class="filter-input" name="per_page" aria-label="Billing records per page"><option value="10" selected>10 per page</option><option value="25">25 per page</option><option value="50">50 per page</option></select>
-                <button class="button button-ghost" type="submit">Apply filters</button>
+                <button class="button button-primary" type="submit">Apply filters</button>
                 <button class="button button-ghost" type="reset">Reset</button>
             </form>
         </section>
@@ -571,7 +602,7 @@
     </section>
 
     <section class="dashboard-view" data-admin-view="consumption-monitoring">
-        <section class="panel filter-panel">
+        <section class="panel filter-panel consumption-filter-panel">
             <div>
                 <p class="eyebrow">Water Consumption Monitoring</p>
                 <h2>Search households and filter consumption records</h2>
@@ -615,7 +646,7 @@
             <small class="field-hint" data-consumption-filter-status>Showing the current month. Search and filters are applied on the server.</small>
         </section>
 
-        <article class="panel admin-card">
+        <article class="panel admin-card admin-leak-monitoring-card">
             <div class="summary-list consumption-monitoring-summary" data-consumption-monitoring-summary>
                 <div><dt>Households</dt><dd>--</dd></div>
                 <div><dt>Usage</dt><dd>--</dd></div>
@@ -724,11 +755,11 @@
                     </select>
                 </label>
                 <div class="filter-actions">
-                    <button class="button" type="submit">Apply filters</button>
+                    <button class="button button-primary" type="submit">Apply filters</button>
                     <button class="button button-ghost" type="button" data-report-reset>Reset</button>
                 </div>
+                <p class="subtle reports-period-description" data-report-period-description>Current calendar month</p>
             </form>
-            <p class="subtle" data-report-period-description>Current calendar month</p>
         </section>
 
         <section class="stat-grid reports-summary" data-report-summary aria-live="polite">
@@ -744,8 +775,20 @@
                     <p class="eyebrow">Report preview</p>
                     <h2 data-report-preview-label>Operational report</h2>
                 </div>
-                <div class="token-controls report-export-actions">
-                    <button class="button button-ghost" type="button" data-report-export="/api/exports/reports" disabled hidden>Export selected report</button>
+                <div class="report-preview-actions">
+                    <label class="report-page-size">
+                        Rows
+                        <select data-report-page-size aria-label="Report preview rows per page">
+                            <option value="5" selected>5 rows</option>
+                            <option value="10">10 rows</option>
+                            <option value="15">15 rows</option>
+                            <option value="20">20 rows</option>
+                            <option value="25">25 rows</option>
+                        </select>
+                    </label>
+                    <div class="token-controls report-export-actions">
+                        <button class="button button-ghost" type="button" data-report-export="/api/exports/reports" disabled hidden>Export selected report</button>
+                    </div>
                 </div>
             </div>
             <div class="empty-state" data-report-error hidden>
@@ -860,7 +903,7 @@
                     <option value="partial">Partially delivered</option>
                     <option value="failed">Failed</option>
                 </select>
-                <button class="button button-ghost" type="submit">Apply filters</button>
+                <button class="button button-primary" type="submit">Apply filters</button>
             </form>
             <div class="notification-list" data-admin-notification-history>
                 <div class="empty-state">Loading sent-notification history...</div>

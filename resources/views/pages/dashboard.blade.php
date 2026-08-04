@@ -9,7 +9,7 @@
             <button class="header-action-button household-notification-button" type="button" data-notification-toggle aria-haspopup="dialog" aria-expanded="false" aria-controls="household-notification-dropdown" aria-label="Open notifications">
                 <i class="bi bi-bell" aria-hidden="true"></i>
                 <span>Notifications</span>
-                <span class="header-action-count" data-household-alert-count hidden>0</span>
+                <span class="header-action-count" data-household-alert-count aria-hidden="true" hidden></span>
             </button>
             <section class="household-notification-dropdown" id="household-notification-dropdown" data-notification-dropdown role="dialog" aria-label="Recent notifications" hidden>
                 <header class="notification-dropdown-header">
@@ -46,7 +46,7 @@
         <button type="button" data-household-nav="history" title="Consumption History"><span>@include('components.ui-icon', ['name' => 'history']) <span class="sidebar-nav-label">Consumption History</span></span></button>
         <button type="button" data-household-nav="billing" title="Estimated Billing"><span>@include('components.ui-icon', ['name' => 'billing']) <span class="sidebar-nav-label">Estimated Billing</span></span></button>
         <button type="button" data-household-nav="leak" title="Leak Detection"><span>@include('components.ui-icon', ['name' => 'leak']) <span class="sidebar-nav-label">Leak Detection</span></span></button>
-        <button type="button" data-household-nav="notifications" title="Notifications"><span>@include('components.ui-icon', ['name' => 'notifications']) <span class="sidebar-nav-label">Notifications</span></span><span class="sidebar-count" data-household-alert-count hidden>0</span></button>
+        <button type="button" data-household-nav="notifications" title="Notifications"><span>@include('components.ui-icon', ['name' => 'notifications']) <span class="sidebar-nav-label">Notifications</span></span><span class="sidebar-count" data-household-alert-count aria-hidden="true" hidden></span></button>
         <button type="button" data-household-nav="settings" title="Account Settings"><span>@include('components.ui-icon', ['name' => 'settings']) <span class="sidebar-nav-label">Account Settings</span></span></button>
     </nav>
     <div class="household-sidebar-account">

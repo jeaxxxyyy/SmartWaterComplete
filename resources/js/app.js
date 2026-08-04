@@ -72,6 +72,11 @@ const notificationToggle = $('[data-notification-toggle]');
 const notificationDropdown = $('[data-notification-dropdown]');
 const notificationDropdownList = $('[data-notification-dropdown-list]');
 const notificationDropdownSummary = $('[data-notification-dropdown-summary]');
+const adminNotificationControl = $('[data-admin-notification-control]');
+const adminNotificationToggle = $('[data-admin-notification-toggle]');
+const adminNotificationDropdown = $('[data-admin-notification-dropdown]');
+const adminNotificationDropdownList = $('[data-admin-notification-dropdown-list]');
+const adminNotificationDropdownSummary = $('[data-admin-notification-dropdown-summary]');
 const dashboardFilterForm = $('[data-reading-filters]');
 const consumptionFilterForm = $('[data-consumption-filters]');
 const householdUserFilterForm = $('[data-household-user-filters]');
@@ -81,6 +86,8 @@ const reportManagementFilterForm = $('[data-report-management-filters]');
 const billingDetailDialog = $('[data-billing-detail-dialog]');
 const adminSearch = $('[data-admin-search]');
 const adminPageTitle = $('[data-admin-page-title]');
+const adminSidebar = $('#admin-sidebar');
+const adminSidebarCollapse = $('[data-admin-sidebar-collapse]');
 const readingsPagers = $$('[data-readings-pager]');
 const accountForm = $('[data-account-form]');
 const passwordForm = $('[data-password-form]');
@@ -164,9 +171,13 @@ const setHouseholdAlertCount = (value) => {
     const count = Number(value ?? 0);
     const hasUnread = count > 0;
     $$('[data-household-alert-count]').forEach((node) => {
-        node.textContent = count;
+        node.dataset.unreadCount = String(count);
         node.hidden = !hasUnread;
     });
+    const sidebarNotificationButton = $('.household-sidebar-nav [data-household-nav="notifications"]');
+    sidebarNotificationButton?.setAttribute('aria-label', hasUnread
+        ? `Notifications, ${count} unread`
+        : 'Notifications');
     notificationToggle?.classList.toggle('has-unread', hasUnread);
     notificationToggle?.setAttribute('aria-label', hasUnread
         ? `Open notifications, ${count} unread`
@@ -183,6 +194,32 @@ const setNotificationDropdownOpen = (isOpen) => {
     notificationDropdown.hidden = !isOpen;
     notificationToggle.setAttribute('aria-expanded', String(isOpen));
     notificationControl?.classList.toggle('is-open', isOpen);
+};
+
+const setAdminNotificationCount = (value) => {
+    const count = Math.max(0, Number(value) || 0);
+    const hasUnread = count > 0;
+
+    $$('[data-admin-alert-count]').forEach((node) => {
+        node.dataset.unreadCount = String(count);
+        node.hidden = !hasUnread;
+    });
+    adminNotificationToggle?.classList.toggle('has-unread', hasUnread);
+    adminNotificationToggle?.setAttribute('aria-label', hasUnread
+        ? `Open administrator notifications, ${count} unread household message${count === 1 ? '' : 's'}`
+        : 'Open administrator notifications');
+    if (adminNotificationDropdownSummary) {
+        adminNotificationDropdownSummary.textContent = hasUnread
+            ? `${count} unread household message${count === 1 ? '' : 's'}`
+            : 'No unread household messages';
+    }
+};
+
+const setAdminNotificationDropdownOpen = (isOpen) => {
+    if (!adminNotificationDropdown || !adminNotificationToggle) return;
+    adminNotificationDropdown.hidden = !isOpen;
+    adminNotificationToggle.setAttribute('aria-expanded', String(isOpen));
+    adminNotificationControl?.classList.toggle('is-open', isOpen);
 };
 
 const dashboardState = {
@@ -262,7 +299,7 @@ const billingManagementState = {
 
 const reportManagementState = {
     page: 1,
-    per_page: 25,
+    per_page: 5,
     period: 'monthly',
     report_type: 'all',
     from: '',
@@ -809,11 +846,35 @@ const renderHouseholdAreaChart = (container, series, options = {}) => {
     if (!hasData || !actualIndexes.length) {
         container.classList.add('is-empty');
         container.dataset.chartSignature = JSON.stringify({ rows, state: 'empty' });
-        container.innerHTML = emptyMarkup;
+        if (options.showEmptyChart) {
+            const width = 760;
+            const height = 320;
+            const padding = { top: 22, right: 20, bottom: 42, left: 58 };
+            const plotBottom = height - padding.bottom;
+            const grid = [0, 1 / 3, 2 / 3, 1].map((ratio) => {
+                const y = padding.top + (1 - ratio) * (plotBottom - padding.top);
+                return `<line class="area-chart-grid-line" x1="${padding.left}" x2="${width - padding.right}" y1="${y}" y2="${y}"></line>`;
+            }).join('');
+
+            container.classList.add('has-empty-chart');
+            container.innerHTML = `
+                <div class="area-chart-shell area-chart-empty-shell">
+                    <svg class="area-line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Consumption trend chart with no readings in the selected period">
+                        <g class="area-chart-grid">${grid}</g>
+                        <text class="area-chart-y-label" x="${padding.left - 10}" y="${plotBottom + 4}" text-anchor="end">0</text>
+                        <text class="area-chart-axis-unit" x="${padding.left}" y="${padding.top - 7}">m³</text>
+                        <path class="area-chart-line area-chart-zero-line" d="M ${padding.left} ${plotBottom} L ${width - padding.right} ${plotBottom}"></path>
+                    </svg>
+                    <div class="area-chart-empty-overlay">${emptyMarkup}</div>
+                </div>`;
+        } else {
+            container.classList.remove('has-empty-chart');
+            container.innerHTML = emptyMarkup;
+        }
         return;
     }
 
-    container.classList.remove('is-empty');
+    container.classList.remove('is-empty', 'has-empty-chart');
     const chartRows = actualIndexes.map((index) => rows[index]);
     const signature = JSON.stringify({ chartRows, state: 'area' });
     if (container.dataset.chartSignature === signature) return;
@@ -1165,6 +1226,10 @@ const showAdminView = (target, shouldUpdateHash = true) => {
     updateAdminPageTitle(target);
     const activeView = $(`[data-admin-view="${target}"]`);
     if (activeView) animateVisibleCharts(activeView);
+
+    if (adminSidebar?.classList.contains('show')) {
+        window.bootstrap?.Offcanvas.getInstance(adminSidebar)?.hide();
+    }
 };
 
 const hasTokenOrReport = () => {
@@ -1367,6 +1432,7 @@ const renderHistoryChart = (chartData = []) => {
         reading_count: 1,
     })), {
         dataAvailable: Array.isArray(chartData) && chartData.length > 0,
+        showEmptyChart: true,
         emptyMessage: '<div class="chart-empty-state"><strong>No consumption trend data available</strong><span>Try applying a different date range.</span></div>',
     });
 };
@@ -1633,7 +1699,7 @@ const markNotificationRead = async (card) => {
         }
         card.classList.remove('is-unread');
         $('.notification-dropdown-unread-dot', card)?.remove();
-        const unreadCount = Math.max(0, Number($('[data-household-alert-count]')?.textContent ?? 0) - 1);
+        const unreadCount = Math.max(0, Number($('[data-household-alert-count]')?.dataset.unreadCount ?? 0) - 1);
         setHouseholdAlertCount(unreadCount);
     } catch (error) {
         if (!handleAuthFailure(error)) console.error(error);
@@ -2188,6 +2254,56 @@ const renderAdminNotificationHistory = (response) => {
         adminNotificationState.page = page;
         loadAdminNotificationHistory();
     });
+};
+
+const renderAdminNotificationDropdown = (response) => {
+    if (!adminNotificationDropdownList) return;
+
+    const records = responseItems(response).slice(0, 5);
+    if (!records.length) {
+        adminNotificationDropdownList.innerHTML = `
+            <div class="notification-dropdown-empty">
+                <i class="bi bi-bell-slash" aria-hidden="true"></i>
+                <strong>No notification activity yet</strong>
+                <span>Recent household notices will appear here.</span>
+            </div>`;
+        return;
+    }
+
+    adminNotificationDropdownList.innerHTML = records.map((item) => {
+        const recipients = Math.max(0, Number(item.recipient_count) || 0);
+        const readCount = Math.max(0, Number(item.read_count) || 0);
+        const unreadCount = Math.max(0, recipients - readCount);
+        const needsAttention = unreadCount > 0;
+        const status = item.delivery_status ?? 'delivered';
+        const icon = status === 'scheduled' ? 'bi-clock' : (status === 'partial' || status === 'failed' ? 'bi-exclamation-triangle' : 'bi-megaphone');
+        const activity = status === 'scheduled'
+            ? `Scheduled for ${formatCompactDateTime(item.scheduled_at)}`
+            : `${readCount} of ${recipients} recipient${recipients === 1 ? '' : 's'} read`;
+
+        return `<article class="notification-dropdown-item admin-notification-dropdown-item${needsAttention ? ' is-unread' : ''}">
+            <span class="notification-dropdown-icon" aria-hidden="true"><i class="bi ${icon}"></i></span>
+            <span class="notification-dropdown-copy">
+                <strong>${escapeHtml(item.title)}</strong>
+                <span>${escapeHtml(notificationTypeLabel(item.type))} · ${escapeHtml(activity)}</span>
+                <small>${escapeHtml(formatCompactDateTime(item.sent_at ?? item.scheduled_at ?? item.created_at))}</small>
+            </span>
+            <span class="notification-dropdown-unread-dot" aria-hidden="true"></span>
+        </article>`;
+    }).join('');
+};
+
+const loadAdminNotificationDropdown = async () => {
+    if (!adminNotificationDropdownList) return;
+
+    adminNotificationDropdownList.innerHTML = '<div class="notification-dropdown-empty">Loading notifications...</div>';
+    try {
+        const response = await requestJson('/api/notification-management?page=1&per_page=5');
+        renderAdminNotificationDropdown(response);
+    } catch (error) {
+        if (handleAuthFailure(error)) return;
+        adminNotificationDropdownList.innerHTML = '<div class="notification-dropdown-empty is-error">Unable to load recent notifications.</div>';
+    }
 };
 
 const loadAdminNotificationHistory = async () => {
@@ -3541,6 +3657,7 @@ const bindAdminReports = () => {
     reportManagementFilterForm.dataset.bound = '1';
     const period = $('select[name="period"]', reportManagementFilterForm);
     const type = $('select[name="report_type"]', reportManagementFilterForm);
+    const pageSize = $('[data-report-page-size]');
     updateReportPeriodFields();
     updateReportStatusOptions();
     period?.addEventListener('change', updateReportPeriodFields);
@@ -3552,14 +3669,20 @@ const bindAdminReports = () => {
             setReportManagementState('Choose both dates for a custom report period.', 'error');
             return;
         }
-        Object.assign(reportManagementState, fields, { page: 1, per_page: 25 });
+        Object.assign(reportManagementState, fields, { page: 1 });
         loadAdminReports();
     });
     $('[data-report-reset]')?.addEventListener('click', () => {
         reportManagementFilterForm.reset();
-        Object.assign(reportManagementState, { page: 1, per_page: 25, period: 'monthly', report_type: 'all', from: '', to: '', search: '', status: '' });
+        if (pageSize) pageSize.value = '5';
+        Object.assign(reportManagementState, { page: 1, per_page: 5, period: 'monthly', report_type: 'all', from: '', to: '', search: '', status: '' });
         updateReportPeriodFields();
         updateReportStatusOptions();
+        loadAdminReports();
+    });
+    pageSize?.addEventListener('change', () => {
+        reportManagementState.page = 1;
+        reportManagementState.per_page = Number(pageSize.value || 5);
         loadAdminReports();
     });
     $('[data-report-retry]')?.addEventListener('click', loadAdminReports);
@@ -3716,7 +3839,7 @@ const loadAdmin = async () => {
         setText('[data-admin-devices]', analytics.devices?.total ?? 0);
         setText('[data-admin-online-devices]', analytics.devices?.connected ?? 0);
         setText('[data-admin-offline-devices]', analytics.devices?.offline ?? 0);
-        setText('[data-admin-alert-count]', analytics.alerts?.unread_notifications ?? 0);
+        setAdminNotificationCount(analytics.alerts?.unread_notifications ?? 0);
         setText('[data-admin-unread-notifications]', analytics.alerts?.unread_notifications ?? 0);
         setText('[data-admin-unresolved-leaks]', analytics.alerts?.unresolved_leak_alerts ?? 0);
         setText('[data-admin-liters]', totalConsumption);
@@ -3883,6 +4006,25 @@ const bootCommon = () => {
         });
     }
 
+    const setAdminSidebarCollapsed = (isCollapsed, persist = false) => {
+        document.body.classList.toggle('admin-sidebar-collapsed', isCollapsed);
+        if (adminSidebarCollapse) {
+            adminSidebarCollapse.setAttribute('aria-expanded', String(!isCollapsed));
+            adminSidebarCollapse.setAttribute('aria-label', isCollapsed ? 'Expand administrator sidebar' : 'Collapse administrator sidebar');
+            adminSidebarCollapse.setAttribute('title', isCollapsed ? 'Expand sidebar' : 'Collapse sidebar');
+        }
+        if (persist) {
+            localStorage.setItem('smart-water-admin-sidebar-collapsed', isCollapsed ? '1' : '0');
+        }
+    };
+
+    if (page === 'admin' && adminSidebarCollapse) {
+        setAdminSidebarCollapsed(localStorage.getItem('smart-water-admin-sidebar-collapsed') === '1');
+        adminSidebarCollapse.addEventListener('click', () => {
+            setAdminSidebarCollapsed(!document.body.classList.contains('admin-sidebar-collapsed'), true);
+        });
+    }
+
     householdSidebarToggle?.addEventListener('click', () => {
         const isOpen = householdSidebar?.classList.toggle('is-open') === true;
         householdSidebarToggle.setAttribute('aria-expanded', String(isOpen));
@@ -3900,9 +4042,23 @@ const bootCommon = () => {
             setNotificationDropdownOpen(false);
         }
     });
+    adminNotificationToggle?.addEventListener('click', () => {
+        const shouldOpen = adminNotificationDropdown?.hidden !== false;
+        setAdminNotificationDropdownOpen(shouldOpen);
+        if (shouldOpen) void loadAdminNotificationDropdown();
+    });
+    adminNotificationDropdown?.addEventListener('click', (event) => {
+        if (event.target.closest('[data-admin-notification-view-all]')) {
+            setAdminNotificationDropdownOpen(false);
+            showAdminView('notifications');
+        }
+    });
     document.addEventListener('click', (event) => {
         if (notificationDropdown?.hidden === false && !notificationControl?.contains(event.target)) {
             setNotificationDropdownOpen(false);
+        }
+        if (adminNotificationDropdown?.hidden === false && !adminNotificationControl?.contains(event.target)) {
+            setAdminNotificationDropdownOpen(false);
         }
     });
     document.addEventListener('keydown', (event) => {
@@ -3913,6 +4069,10 @@ const bootCommon = () => {
         if (event.key === 'Escape' && notificationDropdown?.hidden === false) {
             setNotificationDropdownOpen(false);
             notificationToggle?.focus();
+        }
+        if (event.key === 'Escape' && adminNotificationDropdown?.hidden === false) {
+            setAdminNotificationDropdownOpen(false);
+            adminNotificationToggle?.focus();
         }
     });
 
@@ -4199,13 +4359,16 @@ const bootCommon = () => {
         if (page === 'admin') {
             if (refreshButton) {
                 refreshButton.disabled = true;
-                refreshButton.dataset.defaultText = refreshButton.dataset.defaultText || refreshButton.innerHTML;
-                refreshButton.innerHTML = '<i class="bi bi-arrow-repeat" aria-hidden="true"></i> Refreshing...';
+                refreshButton.classList.add('is-loading');
+                refreshButton.setAttribute('aria-busy', 'true');
+                refreshButton.setAttribute('aria-label', 'Refreshing administrator overview');
             }
             loadAdmin().finally(() => {
                 if (refreshButton) {
                     refreshButton.disabled = false;
-                    refreshButton.innerHTML = refreshButton.dataset.defaultText || 'Refresh';
+                    refreshButton.classList.remove('is-loading');
+                    refreshButton.removeAttribute('aria-busy');
+                    refreshButton.setAttribute('aria-label', 'Refresh administrator overview');
                 }
             });
         }
