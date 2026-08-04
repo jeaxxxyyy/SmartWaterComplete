@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\BillingStatement;
 use App\Models\Notification;
+use App\Models\User;
 use App\Models\WaterReading;
 use App\Services\BillingStatementService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -17,9 +18,22 @@ class ExportController extends Controller
 
     public function readings(Request $request)
     {
+        $validated = $request->validate([
+            'user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'],
+        ]);
+
+        if (isset($validated['user_id']) && ! User::query()->whereKey($validated['user_id'])->where('role', 'user')->exists()) {
+            abort(404);
+        }
+
         $items = WaterReading::query()
             ->join('users', 'users.id', '=', 'water_readings.user_id')
-            ->when($request->filled('user_id'), fn ($query) => $query->where('water_readings.user_id', $request->integer('user_id')))
+            ->where('users.role', 'user')
+            ->when(isset($validated['user_id']), fn ($query) => $query->where('water_readings.user_id', $validated['user_id']))
+            ->when(isset($validated['from']), fn ($query) => $query->where('water_readings.recorded_at', '>=', Carbon::parse($validated['from'])->startOfDay()))
+            ->when(isset($validated['to']), fn ($query) => $query->where('water_readings.recorded_at', '<=', Carbon::parse($validated['to'])->endOfDay()))
             ->selectRaw('users.account_number, users.name, date(water_readings.recorded_at) as period, sum(water_readings.liters_used) as total_liters, sum(water_readings.cubic_meter) as total_cubic_meter, sum(water_readings.estimated_bill) as estimated_bill, sum(case when water_readings.is_possible_leak = 1 then 1 else 0 end) as leak_count')
             ->groupBy('users.id', 'users.account_number', 'users.name', 'period')
             ->orderByDesc('period')
@@ -40,19 +54,21 @@ class ExportController extends Controller
     public function billingStatements(Request $request)
     {
         $items = BillingStatement::query()->with('user:id,name,account_number')
+            ->whereHas('user', fn ($query) => $query->where('role', 'user'))
             ->when($request->filled('user_id'), fn ($query) => $query->where('user_id', $request->integer('user_id')))
             ->latest('billing_month')->get();
 
         return $this->pdf($request, 'Billing Statements', 'billing-statements.pdf',
-            ['Account', 'Month', 'Consumption', 'Rate / m³', 'Charge', 'Paid', 'Balance', 'Status'],
+            ['Account', 'Month', 'Consumption', 'Rate / m³', 'Fixed charge', 'Charge', 'Paid', 'Balance', 'Status'],
             $items->map(fn ($item) => [
                 $item->user?->account_number ?? $item->user?->name ?? '—',
                 optional($item->billing_month)->format('F Y') ?? '—',
                 number_format((float) $item->total_cubic_meter, 4).' m³',
-                'PHP '.number_format((float) $item->water_rate, 2),
-                'PHP '.number_format((float) $item->current_charge, 2),
-                'PHP '.number_format((float) $item->amount_paid, 2),
-                'PHP '.number_format((float) $item->remaining_balance, 2),
+                ($item->currency ?? 'PHP').' '.number_format((float) $item->water_rate, 2),
+                ($item->currency ?? 'PHP').' '.number_format((float) ($item->fixed_monthly_charge ?? 0), 2),
+                ($item->currency ?? 'PHP').' '.number_format((float) $item->current_charge, 2),
+                ($item->currency ?? 'PHP').' '.number_format((float) $item->amount_paid, 2),
+                ($item->currency ?? 'PHP').' '.number_format((float) $item->remaining_balance, 2),
                 ucfirst($item->status),
             ])->all(), 'export_billing_statements');
     }
@@ -79,7 +95,7 @@ class ExportController extends Controller
     {
         $this->billingStatementService->recordAudit(
             $request->user(), $auditAction, "Exported {$title} to PDF.",
-            ['user_id' => $request->integer('user_id')],
+            ['user_id' => $request->integer('user_id') ?: null, 'from' => $request->input('from'), 'to' => $request->input('to')],
         );
 
         return Pdf::loadView('reports.pdf', [

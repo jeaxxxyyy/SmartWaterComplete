@@ -24,6 +24,9 @@ use Laravel\Sanctum\HasApiTokens;
     'phone',
     'is_active',
     'created_by_admin',
+    'created_by',
+    'approved_at',
+    'account_status',
 ])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements MustVerifyEmail
@@ -34,6 +37,12 @@ class User extends Authenticatable implements MustVerifyEmail
     public const ADMIN_EMAIL = 'admin@gmail.com';
 
     public const ADMIN_PASSWORD = 'admin123';
+
+    public const ACCOUNT_STATUS_ACTIVE = 'active';
+
+    public const ACCOUNT_STATUS_SUSPENDED = 'suspended';
+
+    public const ACCOUNT_STATUS_ARCHIVED = 'archived';
 
     public static function generateAccountNumber(): string
     {
@@ -70,12 +79,13 @@ class User extends Authenticatable implements MustVerifyEmail
             'password' => 'hashed',
             'is_active' => 'boolean',
             'created_by_admin' => 'boolean',
+            'approved_at' => 'datetime',
         ];
     }
 
     public function isAdmin(): bool
     {
-        return $this->role === 'admin' && $this->email === self::ADMIN_EMAIL;
+        return $this->role === 'admin';
     }
 
     public function isDevice(): bool
@@ -83,14 +93,44 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->role === 'device';
     }
 
+    public function isHousehold(): bool
+    {
+        return $this->role === 'user';
+    }
+
+    public function isAccountActive(): bool
+    {
+        return $this->is_active === true
+            && ($this->account_status ?? self::ACCOUNT_STATUS_ACTIVE) === self::ACCOUNT_STATUS_ACTIVE;
+    }
+
+    public function canHouseholdLogin(): bool
+    {
+        return $this->isHousehold()
+            && $this->isAccountActive()
+            && $this->created_by_admin === true
+            && $this->created_by !== null
+            && $this->approved_at !== null;
+    }
+
     public function assignedHousehold(): BelongsTo
     {
         return $this->belongsTo(self::class, 'assigned_user_id');
     }
 
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'created_by');
+    }
+
     public function assignedDevices(): HasMany
     {
         return $this->hasMany(self::class, 'assigned_user_id');
+    }
+
+    public function devices(): HasMany
+    {
+        return $this->hasMany(Device::class, 'household_id');
     }
 
     public function waterReadings(): HasMany
@@ -101,6 +141,11 @@ class User extends Authenticatable implements MustVerifyEmail
     public function notifications(): HasMany
     {
         return $this->hasMany(Notification::class);
+    }
+
+    public function leakAlerts(): HasMany
+    {
+        return $this->hasMany(LeakAlert::class);
     }
 
     public function billings(): HasMany

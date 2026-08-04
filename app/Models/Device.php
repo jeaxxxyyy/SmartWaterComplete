@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Device extends Model
 {
@@ -39,6 +40,11 @@ class Device extends Model
     public function authUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'auth_user_id');
+    }
+
+    public function readings(): HasMany
+    {
+        return $this->hasMany(WaterReading::class);
     }
 
     public function getIsOnlineAttribute(): bool

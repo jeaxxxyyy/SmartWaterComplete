@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Device;
 use App\Models\User;
 use App\Services\BillingStatementService;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -44,7 +45,7 @@ class DeviceController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'household_id' => ['required', 'integer', 'exists:users,id'],
+            'household_id' => ['required', 'integer', $this->eligibleHouseholdRule()],
             'asset_number' => ['required', 'string', 'max:100', 'unique:devices,asset_number'],
             'serial_number' => ['required', 'string', 'max:150', 'unique:devices,serial_number'],
             'name' => ['required', 'string', 'max:150'],
@@ -54,7 +55,9 @@ class DeviceController extends Controller
             'calibration_due_at' => ['nullable', 'date', 'after_or_equal:calibrated_at'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
-        $household = User::query()->whereKey($validated['household_id'])->where('role', 'user')->firstOrFail();
+        $household = $this->eligibleHouseholdQuery()
+            ->whereKey($validated['household_id'])
+            ->firstOrFail();
 
         [$device, $code] = DB::transaction(function () use ($validated, $household): array {
             $uuid = (string) Str::uuid();
@@ -93,7 +96,7 @@ class DeviceController extends Controller
     public function update(Request $request, Device $device)
     {
         $validated = $request->validate([
-            'household_id' => ['sometimes', 'integer', 'exists:users,id'],
+            'household_id' => ['sometimes', 'nullable', 'integer', $this->eligibleHouseholdRule()],
             'name' => ['sometimes', 'string', 'max:150'],
             'installation_address' => ['sometimes', 'nullable', 'string', 'max:255'],
             'status' => ['sometimes', Rule::in(['active', 'suspended', 'maintenance'])],
@@ -102,9 +105,26 @@ class DeviceController extends Controller
             'calibration_due_at' => ['sometimes', 'nullable', 'date'],
             'notes' => ['sometimes', 'nullable', 'string', 'max:2000'],
         ]);
-        if (isset($validated['household_id'])) {
-            User::query()->whereKey($validated['household_id'])->where('role', 'user')->firstOrFail();
+        $activationCode = null;
+        $householdChanged = array_key_exists('household_id', $validated)
+            && (int) $validated['household_id'] !== (int) $device->household_id;
+
+        if (array_key_exists('household_id', $validated)) {
+            if ($validated['household_id'] !== null) {
+                $this->eligibleHouseholdQuery()->whereKey($validated['household_id'])->firstOrFail();
+            }
             $device->authUser->update(['assigned_user_id' => $validated['household_id']]);
+        }
+        if ($householdChanged) {
+            $device->authUser->tokens()->delete();
+            $validated['status'] = 'pending';
+        }
+        if (($validated['status'] ?? null) === 'active'
+            && $device->status === 'suspended'
+            && ! $device->authUser->tokens()->exists()) {
+            return response()->json([
+                'message' => 'A suspended meter needs a new activation code before it can return to service.',
+            ], 422);
         }
         if (($validated['status'] ?? null) === 'suspended') {
             $device->authUser->tokens()->delete();
@@ -112,11 +132,23 @@ class DeviceController extends Controller
         }
         $before = $device->only(array_keys($validated));
         $device->update($validated);
+        if ($householdChanged) {
+            $activationCode = $this->setActivationCode($device, true);
+            $this->audit->recordAudit($request->user(), 'device_assigned', 'Assigned a municipal water meter to a household.', [
+                'device_id' => $device->id,
+                'household_id' => $validated['household_id'],
+            ], $device);
+        }
         $this->audit->recordAudit($request->user(), 'device_updated', 'Updated a municipal water meter.', [
             'before' => $before, 'after' => $device->only(array_keys($validated)),
         ], $device);
 
-        return response()->json(['message' => 'Device updated successfully.', 'data' => $device->fresh()->load('household')]);
+        $updatedDevice = $device->fresh()->load('household');
+        if ($activationCode !== null) {
+            $updatedDevice->setAttribute('activation_code', $activationCode);
+        }
+
+        return response()->json(['message' => 'Device updated successfully.', 'data' => $updatedDevice]);
     }
 
     public function activationCode(Request $request, Device $device)
@@ -142,32 +174,88 @@ class DeviceController extends Controller
             'firmware_version' => ['required', 'string', 'max:50'],
         ]);
         $device = Device::query()->where('uuid', $validated['device_uuid'])->first();
-        if (! $device || ! $device->activation_code_hash || ! $device->activation_expires_at?->isFuture()
+        if (! $device) {
+            return response()->json(['message' => 'The activation details are invalid or expired.'], 422);
+        }
+
+        if (! $device->household_id
+            || ! $device->authUser->isDevice()
+            || (int) $device->authUser->assigned_user_id !== (int) $device->household_id
+            || in_array($device->status, ['suspended', 'maintenance', 'decommissioned'], true)
+            || ! $device->authUser->isAccountActive()) {
+            return response()->json(['message' => 'This municipal meter is not active.'], 403);
+        }
+
+        if (! $device->activation_code_hash || ! $device->activation_expires_at?->isFuture()
             || ! Hash::check(strtoupper($validated['activation_code']), $device->activation_code_hash)) {
             return response()->json(['message' => 'The activation details are invalid or expired.'], 422);
         }
+
         if ($device->hardware_id && $device->hardware_id !== $validated['hardware_id']) {
             return response()->json(['message' => 'This meter is already bound to different hardware.'], 409);
         }
+        if (Device::query()
+            ->where('hardware_id', $validated['hardware_id'])
+            ->where('id', '!=', $device->id)
+            ->exists()) {
+            return response()->json(['message' => 'This hardware is already bound to another meter.'], 409);
+        }
 
-        $device->authUser->tokens()->delete();
-        $expiresAt = now()->addDays(config('devices.token_days'));
-        $token = $device->authUser->createToken('meter-'.$device->asset_number, ['device-upload'], $expiresAt)->plainTextToken;
-        $device->update([
-            'hardware_id' => $validated['hardware_id'], 'firmware_version' => $validated['firmware_version'],
-            'status' => 'active', 'activated_at' => now(), 'last_seen_at' => now(),
-            'token_rotated_at' => now(), 'revoked_at' => null, 'activation_code_hash' => null,
-            'activation_expires_at' => null,
-        ]);
+        [$token, $expiresAt, $device] = DB::transaction(function () use ($device, $validated): array {
+            // Lock the commissioning record so two simultaneous requests
+            // cannot redeem the same one-time activation code.
+            $device = Device::query()
+                ->with(['authUser', 'household'])
+                ->whereKey($device->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (! $device->activation_code_hash || ! $device->activation_expires_at?->isFuture()
+                || ! Hash::check(strtoupper($validated['activation_code']), $device->activation_code_hash)) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'The activation details are invalid or expired.',
+                ], 422));
+            }
+
+            if ($device->hardware_id && $device->hardware_id !== $validated['hardware_id']) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'This meter is already bound to different hardware.',
+                ], 409));
+            }
+            if (Device::query()
+                ->where('hardware_id', $validated['hardware_id'])
+                ->where('id', '!=', $device->id)
+                ->exists()) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'This hardware is already bound to another meter.',
+                ], 409));
+            }
+
+            $device->authUser->tokens()->delete();
+            $expiresAt = now()->addDays(config('devices.token_days'));
+            $token = $device->authUser->createToken('meter-'.$device->asset_number, ['device-upload'], $expiresAt)->plainTextToken;
+            $device->update([
+                'hardware_id' => $validated['hardware_id'], 'firmware_version' => $validated['firmware_version'],
+                'status' => 'active', 'activated_at' => now(), 'last_seen_at' => now(),
+                'token_rotated_at' => now(), 'revoked_at' => null, 'activation_code_hash' => null,
+                'activation_expires_at' => null,
+            ]);
+
+            return [$token, $expiresAt, $device];
+        });
         $this->audit->recordAudit(null, 'device_activated', 'A municipal water meter completed secure activation.', [
             'hardware_id' => $validated['hardware_id'],
             'firmware_version' => $validated['firmware_version'],
         ], $device);
 
-        return response()->json(['message' => 'Device activated successfully.', 'data' => [
-            'token' => $token, 'token_expires_at' => $expiresAt, 'upload_interval_seconds' => 3,
-            'household_account' => $device->household->account_number,
-        ]]);
+        return response()->json([
+            'message' => 'Device activated successfully.',
+            'token' => $token,
+            'data' => [
+                'token' => $token, 'token_expires_at' => $expiresAt, 'upload_interval_seconds' => 3,
+                'household_account' => $device->household->account_number,
+            ],
+        ]);
     }
 
     public function decommission(Request $request, Device $device)
@@ -191,5 +279,28 @@ class DeviceController extends Controller
         ]);
 
         return $code;
+    }
+
+    private function eligibleHouseholdQuery()
+    {
+        return User::query()
+            ->where('role', 'user')
+            ->where('is_active', true)
+            ->where(function ($query): void {
+                $query->whereNull('account_status')
+                    ->orWhere('account_status', User::ACCOUNT_STATUS_ACTIVE);
+            });
+    }
+
+    private function eligibleHouseholdRule()
+    {
+        return Rule::exists('users', 'id')->where(function ($query): void {
+            $query->where('role', 'user')
+                ->where('is_active', true)
+                ->where(function ($builder): void {
+                    $builder->whereNull('account_status')
+                        ->orWhere('account_status', User::ACCOUNT_STATUS_ACTIVE);
+                });
+        });
     }
 }

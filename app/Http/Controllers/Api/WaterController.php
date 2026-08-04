@@ -6,14 +6,19 @@ use App\Http\Controllers\Controller;
 use App\Models\WaterReading;
 use App\Models\Device;
 use App\Services\WaterConsumptionService;
+use App\Services\BillingStatementService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class WaterController extends Controller
 {
     public function __construct(
-        protected WaterConsumptionService $waterConsumptionService
+        protected WaterConsumptionService $waterConsumptionService,
+        protected BillingStatementService $audit
     ) {}
 
     public function index(Request $request)
@@ -26,7 +31,7 @@ class WaterController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $query = WaterReading::with(['notifications', 'user'])
+        $query = WaterReading::with(['notifications', 'user', 'device'])
             ->latest('recorded_at')
             ->latest('id');
 
@@ -51,41 +56,179 @@ class WaterController extends Controller
 
     public function history(Request $request)
     {
+        $validated = $request->validate([
+            'period' => ['nullable', Rule::in(['daily', 'weekly', 'monthly'])],
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:50'],
+            'search' => ['nullable', 'string', 'max:255'],
+        ]);
+
         $user = $request->user();
         $userId = $user?->isAdmin() === true && $request->filled('user_id')
             ? $request->integer('user_id')
             : ($user?->isAdmin() === true ? null : $user?->id);
 
-        $daily = WaterReading::query()
-            ->when($userId !== null, fn ($query) => $query->where('user_id', $userId))
-            ->where('recorded_at', '>=', now()->subMonths(12)->startOfDay())
-            ->selectRaw('date(recorded_at) as period, sum(liters_used) as total_liters, sum(cubic_meter) as total_cubic_meter, sum(estimated_bill) as estimated_bill, sum(case when is_possible_leak = 1 then 1 else 0 end) as leak_count, sum(case when is_threshold_exceeded = 1 then 1 else 0 end) as limit_count')
-            ->groupBy(DB::raw('date(recorded_at)'))
-            ->orderByDesc('period')
-            ->get();
+        $period = $validated['period'] ?? 'daily';
+        $from = isset($validated['from']) ? Carbon::parse($validated['from'])->startOfDay() : now()->subDays(30)->startOfDay();
+        $to = isset($validated['to']) ? Carbon::parse($validated['to'])->endOfDay() : now()->endOfDay();
 
-        $aggregate = function (string $period) use ($daily) {
-            return $daily
-                ->groupBy(fn ($row) => match ($period) {
-                    'week' => Carbon::parse($row->period)->startOfWeek()->format('Y-m-d'),
-                    'month' => Carbon::parse($row->period)->startOfMonth()->format('Y-m'),
-                    default => $row->period,
-                })
-                ->map(fn ($rows, $label) => [
-                    'period' => $label,
-                    'total_liters' => round((float) $rows->sum('total_liters'), 4),
-                    'total_cubic_meter' => round((float) $rows->sum('total_cubic_meter'), 6),
-                    'estimated_bill' => round((float) $rows->sum('estimated_bill'), 2),
-                    'leak_count' => (int) $rows->sum('leak_count'),
-                    'limit_count' => (int) $rows->sum('limit_count'),
-                ])
-                ->values();
+        $baseQuery = WaterReading::query()
+            ->when($userId !== null, fn ($query) => $query->where('user_id', $userId))
+            ->when(isset($validated['search']) && $validated['search'] !== '', function ($query) use ($validated): void {
+                $search = '%'.trim($validated['search']).'%';
+                $query->where(function ($subQuery) use ($search) {
+                    $subQuery->where('reading_id', 'like', $search)
+                        ->orWhere('device_name', 'like', $search)
+                        ->orWhere('leak_detection_status', 'like', $search);
+                });
+            })
+            ->whereBetween('recorded_at', [$from, $to]);
+
+        $settings = $this->waterConsumptionService->resolveSettingsForUser($userId);
+        $totalLiters = (float) $baseQuery->sum('liters_used');
+        $totalCubicMeter = (float) $baseQuery->sum('cubic_meter');
+        $readingCount = (int) $baseQuery->count();
+        $estimatedBill = max((float) $totalCubicMeter * (float) $settings->water_rate + (float) $settings->fixed_monthly_charge - (float) $settings->subsidy_deduction, 0);
+
+        $dailyPaginator = (clone $baseQuery)
+            ->with('device')
+            ->orderByDesc('recorded_at')
+            ->orderByDesc('id')
+            ->paginate($validated['per_page'] ?? 10)
+            ->withQueryString();
+
+        $dailyItems = $dailyPaginator->getCollection()->map(function (WaterReading $reading) use ($settings) {
+            $condition = 'normal';
+            if ($reading->is_possible_leak) {
+                $condition = 'leak';
+            } elseif ($reading->is_threshold_exceeded) {
+                $condition = 'threshold';
+            } else {
+                $hour = (int) $reading->recorded_at?->format('G');
+                $start = (int) $settings->quiet_hours_start;
+                $end = (int) $settings->quiet_hours_end;
+                $isNight = $start < $end
+                    ? $hour >= $start && $hour < $end
+                    : $hour >= $start || $hour < $end;
+                if ($isNight) {
+                    $condition = 'night';
+                }
+            }
+
+            return [
+                'id' => $reading->id,
+                'reading_id' => $reading->reading_id,
+                'device_name' => $reading->device_name,
+                'recorded_at' => $reading->recorded_at?->toISOString(),
+                'liters_used' => (float) $reading->liters_used,
+                'cubic_meter' => (float) $reading->cubic_meter,
+                'estimated_bill' => (float) $reading->estimated_bill,
+                'condition' => $condition,
+                'status' => $reading->is_possible_leak ? 'Leak Detected' : ($reading->is_threshold_exceeded ? 'Monthly Threshold Exceeded' : ($condition === 'night' ? 'Night-time Usage' : 'Normal')),
+            ];
+        })->all();
+
+        $nightCondition = $settings->quiet_hours_start < $settings->quiet_hours_end
+            ? "hour(recorded_at) >= {$settings->quiet_hours_start} and hour(recorded_at) < {$settings->quiet_hours_end}"
+            : "hour(recorded_at) >= {$settings->quiet_hours_start} or hour(recorded_at) < {$settings->quiet_hours_end}";
+
+        $weeklyItems = (clone $baseQuery)
+            ->selectRaw("date_sub(date(recorded_at), interval weekday(recorded_at) day) as period, sum(liters_used) as total_liters, sum(cubic_meter) as total_cubic_meter, sum(estimated_bill) as estimated_bill, sum(case when is_possible_leak = 1 then 1 else 0 end) as leak_count, sum(case when is_threshold_exceeded = 1 then 1 else 0 end) as limit_count, sum(case when ({$nightCondition}) then 1 else 0 end) as night_count")
+            ->groupBy(DB::raw('period'))
+            ->orderByDesc('period')
+            ->get()
+            ->map(function ($row) {
+                $condition = $row->leak_count > 0 ? 'leak' : ($row->limit_count > 0 ? 'threshold' : ($row->night_count > 0 ? 'night' : 'normal'));
+
+                return [
+                    'period' => $row->period,
+                    'total_liters' => (float) $row->total_liters,
+                    'total_cubic_meter' => (float) $row->total_cubic_meter,
+                    'estimated_bill' => max((float) $row->total_cubic_meter * (float) $settings->water_rate + (float) $settings->fixed_monthly_charge - (float) $settings->subsidy_deduction, 0),
+                    'leak_count' => (int) $row->leak_count,
+                    'limit_count' => (int) $row->limit_count,
+                    'night_count' => (int) $row->night_count,
+                    'condition' => $condition,
+                    'status' => $condition === 'leak' ? 'Leak Detected' : ($condition === 'threshold' ? 'Monthly Threshold Exceeded' : ($condition === 'night' ? 'Night-time Usage' : 'Normal')),
+                ];
+            })
+            ->values();
+
+        $monthlyItems = (clone $baseQuery)
+            ->selectRaw("date_format(recorded_at, '%Y-%m-01') as period, sum(liters_used) as total_liters, sum(cubic_meter) as total_cubic_meter, sum(estimated_bill) as estimated_bill, sum(case when is_possible_leak = 1 then 1 else 0 end) as leak_count, sum(case when is_threshold_exceeded = 1 then 1 else 0 end) as limit_count, sum(case when ({$nightCondition}) then 1 else 0 end) as night_count")
+            ->groupBy(DB::raw('period'))
+            ->orderByDesc('period')
+            ->get()
+            ->map(function ($row) {
+                $condition = $row->leak_count > 0 ? 'leak' : ($row->limit_count > 0 ? 'threshold' : ($row->night_count > 0 ? 'night' : 'normal'));
+
+                return [
+                    'period' => $row->period,
+                    'total_liters' => (float) $row->total_liters,
+                    'total_cubic_meter' => (float) $row->total_cubic_meter,
+                    'estimated_bill' => max((float) $row->total_cubic_meter * (float) $settings->water_rate + (float) $settings->fixed_monthly_charge - (float) $settings->subsidy_deduction, 0),
+                    'leak_count' => (int) $row->leak_count,
+                    'limit_count' => (int) $row->limit_count,
+                    'night_count' => (int) $row->night_count,
+                    'condition' => $condition,
+                    'status' => $condition === 'leak' ? 'Leak Detected' : ($condition === 'threshold' ? 'Monthly Threshold Exceeded' : ($condition === 'night' ? 'Night-time Usage' : 'Normal')),
+                ];
+            })
+            ->values();
+
+        $chartItems = match ($period) {
+            'weekly' => $weeklyItems,
+            'monthly' => $monthlyItems,
+            default => $dailyItems,
         };
 
+        $chart = collect($chartItems)
+            ->reverse()
+            ->map(function ($item) use ($period) {
+                $label = $period === 'weekly'
+                    ? Carbon::parse($item['period'])->startOfWeek()->format('M j')
+                    : ($period === 'monthly'
+                        ? Carbon::parse($item['period'])->format('M Y')
+                        : Carbon::parse($item['recorded_at'])->format('M j, H:mm'));
+
+                return [
+                    'label' => $label,
+                    'value' => (float) ($item['total_cubic_meter'] ?? $item['cubic_meter'] ?? 0),
+                ];
+            })
+            ->values()
+            ->all();
+
+        $summary = [
+            'from' => $from->toDateString(),
+            'to' => $to->toDateString(),
+            'reading_count' => $readingCount,
+            'today_usage' => (float) $baseQuery->whereDate('recorded_at', now()->toDateString())->sum('liters_used'),
+            'week_usage' => (float) $baseQuery->where('recorded_at', '>=', now()->startOfWeek())->sum('liters_used'),
+            'month_usage' => (float) $baseQuery->where('recorded_at', '>=', now()->startOfMonth())->sum('liters_used'),
+            'average_daily_usage' => $readingCount > 0 ? round($totalLiters / max(1, $from->diffInDays($to) + 1), 4) : 0,
+            'estimated_bill' => round($estimatedBill, 2),
+            'water_rate' => (float) $settings->water_rate,
+            'fixed_monthly_charge' => (float) $settings->fixed_monthly_charge,
+            'subsidy_deduction' => (float) $settings->subsidy_deduction,
+            'currency' => $settings->currency ?? 'PHP',
+        ];
+
         return response()->json(['data' => [
-            'daily' => $aggregate('day')->take(31)->values(),
-            'weekly' => $aggregate('week')->take(12)->values(),
-            'monthly' => $aggregate('month')->take(12)->values(),
+            'daily' => $dailyItems,
+            'weekly' => $weeklyItems,
+            'monthly' => $monthlyItems,
+            'chart' => $chart,
+            'summary' => $summary,
+            'meta' => [
+                'current_page' => $dailyPaginator->currentPage(),
+                'last_page' => $dailyPaginator->lastPage(),
+                'from' => $dailyPaginator->firstItem(),
+                'to' => $dailyPaginator->lastItem(),
+                'total' => $dailyPaginator->total(),
+            ],
         ]]);
     }
 
@@ -101,57 +244,72 @@ class WaterController extends Controller
 
         $validated = $request->validate([
             'user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'reading_id' => ['required', 'string', 'max:150', 'regex:/\S/'],
             'device_name' => ['nullable', 'string', 'max:255'],
             'flow_rate' => ['required', 'numeric', 'min:0'],
-            'liters_used' => ['nullable', 'numeric', 'min:0'],
+            'liters_used' => ['required', 'numeric', 'min:0'],
             'total_water_liters' => ['nullable', 'numeric', 'min:0'],
             'cubic_meter' => ['nullable', 'numeric', 'min:0'],
             'water_limit_liters' => ['nullable', 'numeric', 'min:0'],
             'leak_detection_status' => ['nullable', 'string', 'max:50'],
-            'monitoring_status' => ['nullable', 'string', 'max:50'],
+            'monitoring_status' => ['nullable', Rule::in(['online', 'paused'])],
             'wifi_signal_strength' => ['nullable', 'integer', 'min:0', 'max:100'],
-            'device_connection_status' => ['nullable', 'string', 'max:50'],
-            'server_connection_status' => ['nullable', 'string', 'max:50'],
+            'device_connection_status' => ['nullable', Rule::in(['connected', 'disconnected'])],
+            'server_connection_status' => ['nullable', Rule::in(['connected', 'disconnected'])],
+            'firmware_version' => ['nullable', 'string', 'max:50'],
             'recorded_at' => ['nullable', 'date'],
         ]);
 
-        $device = $request->user();
-        $registeredDevice = Device::query()->where('auth_user_id', $device->id)->first();
-        if ($registeredDevice && $registeredDevice->status !== 'active') {
+        $deviceUser = $request->user();
+        $registeredDevice = Device::query()->where('auth_user_id', $deviceUser->id)->first();
+        if (! $registeredDevice || ! $deviceUser->isDevice() || ! $registeredDevice->household?->isHousehold()) {
+            Log::warning('Rejected water telemetry from an unregistered device identity.', ['device_user_id' => $deviceUser->id]);
+            return response()->json(['message' => 'This device is not registered with Smart Water.'], 403);
+        }
+
+        if ($registeredDevice->status !== 'active' || ! $deviceUser->isAccountActive()) {
+            $this->recordTelemetryFailure($deviceUser, $registeredDevice, 'inactive_device');
             return response()->json(['message' => 'This municipal meter is not active.'], 403);
         }
-        $targetUserId = $registeredDevice?->household_id ?? $device->assigned_user_id ?? $device->id;
+        $targetUserId = $registeredDevice->household_id;
 
         if (isset($validated['user_id']) && (int) $validated['user_id'] !== (int) $targetUserId) {
+            $this->recordTelemetryFailure($deviceUser, $registeredDevice, 'household_mismatch', $validated['reading_id']);
             return response()->json([
                 'message' => 'This device may only submit readings for its assigned household.',
             ], 403);
         }
 
         $validated['user_id'] = $targetUserId;
-
-        $validated['liters_used'] = (float) ($validated['liters_used'] ?? $validated['total_water_liters'] ?? 0);
-        $validated['cubic_meter'] = $validated['cubic_meter'] ?? ($validated['liters_used'] / 1000);
-        $validated['water_limit_liters'] = $validated['water_limit_liters'] ?? null;
         $validated['monitoring_status'] = $validated['monitoring_status'] ?? 'online';
         $validated['device_connection_status'] = $validated['device_connection_status'] ?? 'connected';
-        $validated['server_connection_status'] = $validated['server_connection_status'] ?? 'connected';
-        $validated['leak_detection_status'] = $validated['leak_detection_status'] ?? 'Normal';
+        $validated['device_id'] = $registeredDevice->id;
 
-        $result = $this->waterConsumptionService->storeReading($validated);
-
-        $registeredDevice?->update([
-            'last_seen_at' => now(),
-            'last_telemetry_at' => now(),
-        ]);
+        try {
+            $result = $this->waterConsumptionService->storeReading($validated);
+        } catch (Throwable $exception) {
+            $this->recordTelemetryFailure($deviceUser, $registeredDevice, 'processing_error', $validated['reading_id']);
+            Log::error('Water telemetry processing failed.', [
+                'device_id' => $registeredDevice->id,
+                'reading_id_hash' => hash('sha256', $validated['reading_id']),
+                'exception' => $exception::class,
+            ]);
+            throw $exception;
+        }
 
         return response()->json([
-            'message' => 'Water data saved successfully',
+            'message' => $result['duplicate'] ? 'Reading was already received.' : 'Water reading stored successfully.',
+            'reading_id' => $result['reading']->reading_id,
+            'duplicate' => $result['duplicate'],
+            'is_possible_leak' => (bool) $result['reading']->is_possible_leak,
+            'server_total_liters' => $result['server_total_liters'],
+            'water_limit_liters' => $result['water_limit_liters'],
+            'limit_reached' => $result['limit_reached'],
             'data' => [
                 'reading' => $result['reading'],
                 'notifications' => $result['notifications'],
             ],
-        ], 201);
+        ], $result['duplicate'] ? 200 : 201);
     }
 
     public function liveState(Request $request)
@@ -164,5 +322,14 @@ class WaterController extends Controller
         return response()->json([
             'data' => $this->waterConsumptionService->liveStateForUser($userId),
         ]);
+    }
+
+    private function recordTelemetryFailure($deviceUser, Device $device, string $reason, ?string $readingId = null): void
+    {
+        $this->audit->recordAudit($deviceUser, 'device_sync_failed', 'A device synchronization attempt was rejected.', [
+            'device_id' => $device->id,
+            'reason' => $reason,
+            'reading_id_hash' => $readingId ? hash('sha256', $readingId) : null,
+        ], $device, 'failure');
     }
 }

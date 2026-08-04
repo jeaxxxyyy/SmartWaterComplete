@@ -11,8 +11,9 @@ class EnsureUserIsAdmin
     {
         $user = $request->user();
 
-        if ($user === null || ! $user->isAdmin()) {
+        if ($user === null || ! $user->isAdmin() || ! $user->isAccountActive()) {
             return response()->json([
+                'success' => false,
                 'message' => 'Admin access is required.',
             ], 403);
         }

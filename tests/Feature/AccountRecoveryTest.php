@@ -14,8 +14,12 @@ class AccountRecoveryTest extends TestCase
 
     public function test_forgot_and_reset_password_routes_work(): void
     {
+        $admin = User::factory()->admin()->create();
         $user = User::factory()->create([
             'password' => Hash::make('old-password'),
+            'created_by' => $admin->id,
+            'approved_at' => now(),
+            'account_status' => User::ACCOUNT_STATUS_ACTIVE,
         ]);
 
         Password::shouldReceive('sendResetLink')
@@ -42,5 +46,32 @@ class AccountRecoveryTest extends TestCase
         ])->assertOk();
 
         $this->assertTrue(Hash::check('new-password', $user->fresh()->password));
+    }
+
+    public function test_unapproved_household_accounts_do_not_receive_password_reset_access(): void
+    {
+        $user = User::factory()->create([
+            'created_by_admin' => false,
+            'created_by' => null,
+            'approved_at' => null,
+        ]);
+
+        $this->postJson('/api/forgot-password', [
+            'email' => $user->email,
+        ])->assertOk()
+            ->assertJsonPath('message', 'If the account is eligible, password reset instructions will be sent.');
+
+        $this->postJson('/api/forgot-password', [
+            'email' => 'missing-account@example.com',
+        ])->assertOk()
+            ->assertJsonPath('message', 'If the account is eligible, password reset instructions will be sent.');
+
+        $this->postJson('/api/reset-password', [
+            'token' => 'reset-token',
+            'email' => $user->email,
+            'password' => 'new-password',
+            'password_confirmation' => 'new-password',
+        ])->assertStatus(422)
+            ->assertJsonPath('message', 'Unable to reset the password for this account.');
     }
 }

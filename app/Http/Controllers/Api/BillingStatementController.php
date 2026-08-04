@@ -51,7 +51,7 @@ class BillingStatementController extends Controller
             'month' => ['nullable', 'date_format:Y-m'],
         ]);
 
-        $user = User::findOrFail($validated['user_id']);
+        $user = User::query()->where('role', 'user')->findOrFail($validated['user_id']);
         $month = isset($validated['month']) ? Carbon::createFromFormat('Y-m', $validated['month']) : now();
         $statement = $this->billingStatementService->generateForUser($user, $month);
 

@@ -18,6 +18,8 @@ constexpr char DEVICE_NAME[] = "M5Stack CoreS3";
 constexpr char FIRMWARE_VERSION[] = "1.1.0";
 constexpr unsigned long SAMPLE_INTERVAL_MS = 1000;
 constexpr unsigned long SEND_INTERVAL_MS = 3000;
+constexpr unsigned long ACTIVATION_RETRY_MS = 30000;
+constexpr unsigned long HTTP_TIMEOUT_MS = 5000;
 constexpr float WATER_LIMIT_LITERS = 500.0F;
 
 float flowRate = 0.0F;
@@ -26,10 +28,15 @@ float totalLiters = 0.0F;
 bool serverConnected = false;
 bool monitoring = true;
 bool leakDetected = false;
+float serverTotalLiters = 0.0F;
+float serverWaterLimitLiters = WATER_LIMIT_LITERS;
 unsigned long lastSample = 0;
 unsigned long lastSend = 0;
+unsigned long lastActivationAttempt = 0;
+unsigned long readingSequence = 0;
 Preferences preferences;
 String deviceToken;
+String pendingReadingId;
 
 String jsonStringValue(const String &json, const String &key) {
   const String marker = "\"" + key + "\":\"";
@@ -44,18 +51,45 @@ int wifiPercent() {
   return constrain(2 * (WiFi.RSSI() + 100), 0, 100);
 }
 
+float jsonNumberValue(const String &json, const String &key, float fallback) {
+  const String marker = "\"" + key + "\":";
+  const int start = json.indexOf(marker);
+  if (start < 0) return fallback;
+  const int valueStart = start + marker.length();
+  return json.substring(valueStart).toFloat();
+}
+
+void persistReadingState() {
+  preferences.putFloat("pending_liters", intervalLiters);
+  preferences.putFloat("total_liters", totalLiters);
+  if (pendingReadingId.isEmpty()) preferences.remove("pending_id");
+  else preferences.putString("pending_id", pendingReadingId);
+  preferences.putULong("reading_seq", readingSequence);
+}
+
+void ensurePendingReadingId() {
+  if (!pendingReadingId.isEmpty()) return;
+  pendingReadingId = String(SMARTWATER_DEVICE_UUID) + "-" + String(readingSequence + 1);
+  persistReadingState();
+}
+
 void connectWifi() {
+  if (WiFi.status() == WL_CONNECTED) return;
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  for (int attempt = 0; WiFi.status() != WL_CONNECTED && attempt < 30; ++attempt) {
+  for (int attempt = 0; WiFi.status() != WL_CONNECTED && attempt < 20; ++attempt) {
     delay(500);
   }
 }
 
 bool activateDevice() {
   if (WiFi.status() != WL_CONNECTED || strlen(SMARTWATER_DEVICE_UUID) == 0 || strlen(SMARTWATER_ACTIVATION_CODE) == 0) return false;
+  const unsigned long nowMs = millis();
+  if (lastActivationAttempt != 0 && nowMs - lastActivationAttempt < ACTIVATION_RETRY_MS) return false;
+  lastActivationAttempt = nowMs;
 
   HTTPClient http;
+  http.setTimeout(HTTP_TIMEOUT_MS);
   http.begin(String(SMARTWATER_SERVER_URL) + "/api/device-activate");
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Accept", "application/json");
@@ -64,13 +98,13 @@ bool activateDevice() {
   const String response = http.getString();
   http.end();
   if (status != 200) {
-    Serial.printf("Activation failed (%d): %s\n", status, response.c_str());
+    Serial.printf("Activation failed (%d)\n", status);
     return false;
   }
   deviceToken = jsonStringValue(response, "token");
   if (deviceToken.isEmpty()) return false;
   preferences.putString("api_token", deviceToken);
-  Serial.println("Device securely activated. Token stored in ESP32 nonvolatile storage.");
+  Serial.println("Device activated. Token stored securely.");
   return true;
 }
 
@@ -84,6 +118,7 @@ void updateDummySensor(unsigned long elapsedMs) {
   const float sampleLiters = flowRate * (elapsedMs / 60000.0F);
   intervalLiters += sampleLiters;
   totalLiters += sampleLiters;
+  persistReadingState();
 }
 
 void sendReading() {
@@ -99,13 +134,17 @@ void sendReading() {
     return;
   }
 
+  ensurePendingReadingId();
+
   HTTPClient http;
+  http.setTimeout(HTTP_TIMEOUT_MS);
   http.begin(String(SMARTWATER_SERVER_URL) + "/api/water-data");
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Accept", "application/json");
   http.addHeader("Authorization", String("Bearer ") + deviceToken);
 
   String body = "{";
+  body += "\"reading_id\":\"" + pendingReadingId + "\",";
   body += "\"device_name\":\"" + String(DEVICE_NAME) + "\",";
   body += "\"flow_rate\":" + String(flowRate, 2) + ",";
   body += "\"liters_used\":" + String(intervalLiters, 4) + ",";
@@ -116,18 +155,34 @@ void sendReading() {
   body += "\"wifi_signal_strength\":" + String(wifiPercent()) + ",";
   body += "\"device_connection_status\":\"connected\",";
   body += "\"server_connection_status\":\"connected\"";
+  body += ",\"firmware_version\":\"" + String(FIRMWARE_VERSION) + "\"";
   body += "}";
 
   const int status = http.POST(body);
   const String response = http.getString();
   serverConnected = status == 200 || status == 201;
-  if (serverConnected) leakDetected = response.indexOf("\"is_possible_leak\":true") >= 0;
-  Serial.printf("POST %d: %s\n", status, response.c_str());
-  http.end();
-
   if (serverConnected) {
-    intervalLiters = 0;
+    leakDetected = response.indexOf("\"is_possible_leak\":true") >= 0;
+    serverTotalLiters = jsonNumberValue(response, "server_total_liters", serverTotalLiters);
+    serverWaterLimitLiters = jsonNumberValue(response, "water_limit_liters", serverWaterLimitLiters);
+    ++readingSequence;
+    intervalLiters = 0.0F;
+    pendingReadingId = "";
+    persistReadingState();
+  } else if (status == 401) {
+    deviceToken = "";
+    preferences.remove("api_token");
+    Serial.println("Device token rejected; activation will be retried with backoff.");
+  } else if (status == 403) {
+    Serial.println("Device upload forbidden; check meter status and assignment.");
+  } else if (status == 409) {
+    Serial.println("Device conflict; check hardware binding.");
+  } else if (status == 422) {
+    Serial.println("Reading rejected by server validation; pending reading retained.");
+  } else {
+    Serial.printf("Reading upload failed (%d); pending reading retained.\n", status);
   }
+  http.end();
 }
 
 void drawScreen() {
@@ -143,11 +198,11 @@ void drawScreen() {
   M5.Display.setCursor(15, 90);
   M5.Display.printf("Flow  : %.2f L/min", flowRate);
   M5.Display.setCursor(15, 125);
-  M5.Display.printf("Total : %.3f L", totalLiters);
+  M5.Display.printf("Total : %.3f L", serverTotalLiters > 0 ? serverTotalLiters : totalLiters);
   M5.Display.setCursor(15, 160);
   M5.Display.printf("Usage : %.6f m3", totalLiters / 1000.0F);
   M5.Display.setCursor(15, 195);
-  M5.Display.printf("Limit : %.0f L", WATER_LIMIT_LITERS);
+  M5.Display.printf("Limit : %.0f L", serverWaterLimitLiters);
   M5.Display.setTextColor(leakDetected ? TFT_RED : TFT_GREEN);
   M5.Display.setCursor(15, 240);
   M5.Display.println(leakDetected ? "Leak: DETECTED" : "Leak: NORMAL");
@@ -164,6 +219,10 @@ void setup() {
   randomSeed(esp_random());
   preferences.begin("smartwater", false);
   deviceToken = preferences.getString("api_token", "");
+  readingSequence = preferences.getULong("reading_seq", 0);
+  intervalLiters = preferences.getFloat("pending_liters", 0.0F);
+  totalLiters = preferences.getFloat("total_liters", 0.0F);
+  pendingReadingId = preferences.getString("pending_id", "");
   // Compatibility for an already commissioned unit. New deployments use the one-time activation code.
   if (deviceToken.isEmpty() && strlen(SMARTWATER_DEVICE_TOKEN) > 0) {
     deviceToken = SMARTWATER_DEVICE_TOKEN;

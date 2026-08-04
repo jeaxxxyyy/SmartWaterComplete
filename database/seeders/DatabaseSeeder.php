@@ -18,7 +18,7 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        User::updateOrCreate(['email' => User::ADMIN_EMAIL], [
+        $admin = User::updateOrCreate(['email' => User::ADMIN_EMAIL], [
             'name' => 'Admin User',
             'password' => Hash::make(User::ADMIN_PASSWORD),
             'role' => 'admin',
@@ -26,6 +26,7 @@ class DatabaseSeeder extends Seeder
             'email_verified_at' => now(),
             'is_active' => true,
             'created_by_admin' => true,
+            'account_status' => User::ACCOUNT_STATUS_ACTIVE,
         ]);
 
         $household = User::updateOrCreate(['email' => 'test@example.com'], [
@@ -36,6 +37,9 @@ class DatabaseSeeder extends Seeder
             'email_verified_at' => now(),
             'is_active' => true,
             'created_by_admin' => true,
+            'created_by' => $admin->id,
+            'approved_at' => now(),
+            'account_status' => User::ACCOUNT_STATUS_ACTIVE,
         ]);
 
         $deviceUser = User::updateOrCreate(['email' => 'device@example.com'], [
@@ -47,6 +51,9 @@ class DatabaseSeeder extends Seeder
             'email_verified_at' => now(),
             'is_active' => true,
             'created_by_admin' => true,
+            'created_by' => $admin->id,
+            'approved_at' => now(),
+            'account_status' => User::ACCOUNT_STATUS_ACTIVE,
         ]);
 
         Device::updateOrCreate(['serial_number' => 'CORES3-DEMO-0001'], [

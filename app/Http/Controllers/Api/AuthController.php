@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\BillingStatementService;
 use App\Models\User;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
@@ -13,9 +14,16 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
+    private const GENERIC_LOGIN_ERROR = 'Unable to log in. Please check your credentials or contact the administrator.';
+
+    private const INACTIVE_ACCOUNT_ERROR = 'This account is currently inactive. Please contact the administrator.';
+
+    public function __construct(protected BillingStatementService $audit) {}
+
     public function register(Request $request)
     {
         return response()->json([
+            'success' => false,
             'message' => 'Public registration is disabled. Please contact an administrator to create an account.',
         ], 403);
     }
@@ -26,6 +34,7 @@ class AuthController extends Controller
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
         ]);
+        $credentials['email'] = strtolower(trim($credentials['email']));
 
         if ($credentials['email'] === User::ADMIN_EMAIL && $credentials['password'] === User::ADMIN_PASSWORD) {
             User::updateOrCreate(
@@ -43,26 +52,32 @@ class AuthController extends Controller
         $user = User::where('email', $credentials['email'])->first();
 
         if ($user === null || ! Hash::check($credentials['password'], $user->password)) {
+            $this->recordLoginFailure($credentials['email'], 'invalid_credentials');
             throw ValidationException::withMessages([
-                'email' => ['The provided credentials are invalid.'],
+                'email' => [self::GENERIC_LOGIN_ERROR],
             ]);
         }
 
-        if (! $user->is_active) {
+        if (! $user->isAccountActive()) {
+            $this->audit->recordAudit($user, 'login_failed', 'Login was denied for an inactive account.', [], $user, 'failure');
             return response()->json([
-                'message' => 'This account is inactive.',
+                'success' => false,
+                'message' => self::INACTIVE_ACCOUNT_ERROR,
             ], 403);
         }
 
-        if (! $user->created_by_admin) {
-            return response()->json([
-                'message' => 'This account must be created by an administrator before it can log in.',
-            ], 403);
+        if ($user->isHousehold() && ! $user->canHouseholdLogin()) {
+            $this->audit->recordAudit($user, 'login_failed', 'Login was denied because the household account is not approved.', [], $user, 'failure');
+            throw ValidationException::withMessages([
+                'email' => [self::GENERIC_LOGIN_ERROR],
+            ]);
         }
 
         $token = $user->createToken('api-token')->plainTextToken;
+        $this->audit->recordAudit($user, 'login_success', 'User authenticated successfully.', [], $user);
 
         return response()->json([
+            'success' => true,
             'message' => 'Login successful.',
             'data' => [
                 'user' => $user,
@@ -175,6 +190,7 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
+        $this->audit->recordAudit($request->user(), 'logout', 'User signed out.', [], $request->user());
         $request->user()?->currentAccessToken()?->delete();
 
         return response()->json([
@@ -185,8 +201,15 @@ class AuthController extends Controller
     public function forgotPassword(Request $request)
     {
         $validated = $request->validate([
-            'email' => ['required', 'email', 'exists:users,email'],
+            'email' => ['required', 'email'],
         ]);
+
+        $user = User::query()->where('email', $validated['email'])->first();
+        if ($user === null || ($user->isHousehold() && ! $user->canHouseholdLogin())) {
+            return response()->json([
+                'message' => 'If the account is eligible, password reset instructions will be sent.',
+            ]);
+        }
 
         $status = Password::sendResetLink($validated);
 
@@ -203,6 +226,13 @@ class AuthController extends Controller
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
+        $user = User::query()->where('email', $validated['email'])->first();
+        if ($user === null || ($user->isHousehold() && ! $user->canHouseholdLogin())) {
+            return response()->json([
+                'message' => 'Unable to reset the password for this account.',
+            ], 422);
+        }
+
         $status = Password::reset(
             $validated,
             function (User $user, string $password): void {
@@ -217,6 +247,8 @@ class AuthController extends Controller
                 'message' => __($status),
             ], 422);
         }
+
+        $this->audit->recordAudit($user, 'password_reset', 'Password was reset successfully.', [], $user);
 
         return response()->json([
             'message' => 'Password reset successfully.',
@@ -253,5 +285,13 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Email verified successfully.',
         ]);
+    }
+
+    private function recordLoginFailure(string $email, string $reason): void
+    {
+        $this->audit->recordAudit(null, 'login_failed', 'A login attempt was rejected.', [
+            'email_hash' => hash('sha256', strtolower(trim($email))),
+            'reason' => $reason,
+        ], null, 'failure');
     }
 }

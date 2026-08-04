@@ -3,17 +3,38 @@
 namespace Tests\Feature;
 
 use App\Models\Billing;
+use App\Models\Device;
 use App\Models\Notification;
 use App\Models\User;
 use App\Models\WaterReading;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class WaterApiTest extends TestCase
 {
     use RefreshDatabase;
+
+    private function createDeviceFor(User $household): User
+    {
+        $device = User::factory()->create([
+            'role' => 'device',
+            'assigned_user_id' => $household->id,
+        ]);
+        Device::create([
+            'uuid' => (string) Str::uuid(),
+            'asset_number' => 'TEST-'.Str::upper(Str::random(10)),
+            'serial_number' => 'CORE-'.Str::upper(Str::random(10)),
+            'name' => 'Test Meter',
+            'household_id' => $household->id,
+            'auth_user_id' => $device->id,
+            'status' => 'active',
+        ]);
+
+        return $device;
+    }
 
     protected function tearDown(): void
     {
@@ -27,7 +48,8 @@ class WaterApiTest extends TestCase
         Carbon::setTestNow(Carbon::parse('2026-06-18 23:00:00'));
 
         $user = User::factory()->create();
-        Sanctum::actingAs($user, ['device-upload']);
+        $device = $this->createDeviceFor($user);
+        Sanctum::actingAs($device, ['device-upload']);
 
         Billing::create([
             'water_rate' => 25,
@@ -40,7 +62,7 @@ class WaterApiTest extends TestCase
         ]);
 
         $response = $this->postJson('/api/water-data', [
-            'user_id' => $user->id,
+            'reading_id' => 'billing-alert-1',
             'flow_rate' => 3.5,
             'liters_used' => 150,
             'cubic_meter' => 0.15,
@@ -103,7 +125,8 @@ class WaterApiTest extends TestCase
     public function test_leak_status_uses_configured_flow_rate_and_notifies_once_per_event(): void
     {
         $user = User::factory()->create();
-        Sanctum::actingAs($user, ['device-upload']);
+        $device = $this->createDeviceFor($user);
+        Sanctum::actingAs($device, ['device-upload']);
         Billing::create([
             'water_rate' => 25,
             'subsidy_deduction' => 0,
@@ -114,12 +137,18 @@ class WaterApiTest extends TestCase
             'is_active' => true,
         ]);
 
-        $reading = fn (float $flow, string $deviceStatus = 'Normal') => [
+        $sequence = 0;
+        $reading = function (float $flow, string $deviceStatus = 'Normal') use (&$sequence): array {
+            ++$sequence;
+
+            return [
+            'reading_id' => 'leak-test-'.$sequence,
             'flow_rate' => $flow,
             'liters_used' => 1,
             'cubic_meter' => 0.001,
             'leak_detection_status' => $deviceStatus,
-        ];
+            ];
+        };
 
         $this->postJson('/api/water-data', $reading(3, 'Leak Detected'))
             ->assertCreated()
@@ -278,6 +307,7 @@ class WaterApiTest extends TestCase
         $this->getJson('/api/summary')
             ->assertOk()
             ->assertJsonPath('data.current_month.reading_count', 1)
+            ->assertJsonPath('data.monthly_usage.11.reading_count', 1)
             ->assertJsonPath('data.notifications.total', 1)
             ->assertJsonPath('data.notifications.unread', 1);
     }

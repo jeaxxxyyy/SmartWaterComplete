@@ -13,6 +13,10 @@ class AuditLog extends Model
         'auditable_type',
         'auditable_id',
         'description',
+        'outcome',
+        'ip_address',
+        'user_agent',
+        'request_id',
         'metadata',
     ];
 

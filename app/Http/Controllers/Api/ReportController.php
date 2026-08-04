@@ -11,6 +11,7 @@ use App\Models\WaterReading;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class ReportController extends Controller
 {
@@ -28,8 +29,10 @@ class ReportController extends Controller
         $readingQuery = WaterReading::query()
             ->when($userId !== null, fn ($query) => $query->where('user_id', $userId))
             ->whereBetween('recorded_at', [$currentMonthStart, $currentMonthEnd]);
+        $currentMonthHasReadings = (clone $readingQuery)->exists();
 
         $notificationQuery = Notification::query()
+            ->delivered()
             ->when($userId !== null, fn ($query) => $query->where('user_id', $userId))
             ->when(! $isAdmin, fn ($query) => $query->whereNull('user_deleted_at'));
 
@@ -40,9 +43,16 @@ class ReportController extends Controller
 
         $activeBilling = Billing::query()
             ->where('is_active', true)
+            ->where(function ($query): void {
+                $query->whereNull('effective_date')
+                    ->orWhereDate('effective_date', '<=', now()->toDateString());
+            })
             ->when($userId !== null, fn ($query) => $query->where(function ($builder) use ($userId): void {
                 $builder->whereNull('user_id')->orWhere('user_id', $userId);
             }))
+            ->when($userId !== null, fn ($query) => $query->orderByRaw('CASE WHEN user_id IS NULL THEN 1 ELSE 0 END'))
+            ->orderByRaw('CASE WHEN effective_date IS NULL THEN 0 ELSE 1 END DESC')
+            ->orderByDesc('effective_date')
             ->latest('id')
             ->first();
 
@@ -55,7 +65,7 @@ class ReportController extends Controller
         $monthlyUsage = WaterReading::query()
             ->when($userId !== null, fn ($query) => $query->where('user_id', $userId))
             ->where('recorded_at', '>=', now()->subMonths(11)->startOfMonth())
-            ->selectRaw("{$monthExpression} as month, sum(liters_used) as total_liters, sum(cubic_meter) as total_cubic_meter, sum(estimated_bill) as estimated_bill")
+            ->selectRaw("{$monthExpression} as month, count(*) as reading_count, sum(liters_used) as total_liters, sum(cubic_meter) as total_cubic_meter, sum(estimated_bill) as estimated_bill")
             ->groupByRaw($monthExpression)
             ->orderBy('month')
             ->get()
@@ -70,9 +80,11 @@ class ReportController extends Controller
                 return [
                     'month' => $monthKey,
                     'label' => $date->format('M Y'),
-                    'total_liters' => (float) ($row->total_liters ?? 0),
-                    'total_cubic_meter' => (float) ($row->total_cubic_meter ?? 0),
-                    'estimated_bill' => (float) ($row->estimated_bill ?? 0),
+                    'has_data' => $row !== null,
+                    'reading_count' => (int) ($row->reading_count ?? 0),
+                    'total_liters' => $row === null ? null : (float) $row->total_liters,
+                    'total_cubic_meter' => $row === null ? null : (float) $row->total_cubic_meter,
+                    'estimated_bill' => $row === null ? null : (float) $row->estimated_bill,
                 ];
             })
             ->values();
@@ -80,10 +92,11 @@ class ReportController extends Controller
         return response()->json([
             'data' => [
                 'current_month' => [
-                    'reading_count' => $readingQuery->count(),
-                    'total_liters' => (float) $readingQuery->sum('liters_used'),
-                    'total_cubic_meter' => (float) $readingQuery->sum('cubic_meter'),
-                    'estimated_bill' => (float) $readingQuery->sum('estimated_bill'),
+                    'has_data' => $currentMonthHasReadings,
+                    'reading_count' => $currentMonthHasReadings ? $readingQuery->count() : null,
+                    'total_liters' => $currentMonthHasReadings ? (float) $readingQuery->sum('liters_used') : null,
+                    'total_cubic_meter' => $currentMonthHasReadings ? (float) $readingQuery->sum('cubic_meter') : null,
+                    'estimated_bill' => $currentMonthHasReadings ? (float) $readingQuery->sum('estimated_bill') : null,
                     'latest_reading' => WaterReading::query()
                         ->when($userId !== null, fn ($query) => $query->where('user_id', $userId))
                         ->latest('recorded_at')
@@ -110,8 +123,7 @@ class ReportController extends Controller
             'user_id' => ['nullable', 'integer', 'exists:users,id'],
         ]);
 
-        $from = isset($validated['from']) ? Carbon::parse($validated['from'])->startOfDay() : now()->startOfMonth();
-        $to = isset($validated['to']) ? Carbon::parse($validated['to'])->endOfDay() : now()->endOfDay();
+        [$from, $to] = $this->resolveDateRange($validated);
 
         $query = WaterReading::query()
             ->whereBetween('recorded_at', [$from, $to])
@@ -148,8 +160,7 @@ class ReportController extends Controller
             'user_id' => ['nullable', 'integer', 'exists:users,id'],
         ]);
 
-        $from = isset($validated['from']) ? Carbon::parse($validated['from'])->startOfDay() : now()->startOfMonth();
-        $to = isset($validated['to']) ? Carbon::parse($validated['to'])->endOfDay() : now()->endOfDay();
+        [$from, $to] = $this->resolveDateRange($validated);
 
         $query = Notification::query()
             ->whereBetween('created_at', [$from, $to])
@@ -162,6 +173,20 @@ class ReportController extends Controller
                 'items' => $query->latest()->get(),
             ],
         ]);
+    }
+
+    private function resolveDateRange(array $validated): array
+    {
+        $from = isset($validated['from']) ? Carbon::parse($validated['from'])->startOfDay() : now()->startOfMonth();
+        $to = isset($validated['to']) ? Carbon::parse($validated['to'])->endOfDay() : now()->endOfDay();
+
+        if ($from->greaterThan($to) || $from->diffInDays($to) > 366) {
+            throw ValidationException::withMessages([
+                'to' => 'The selected report period must be valid and cannot exceed 366 days.',
+            ]);
+        }
+
+        return [$from, $to];
     }
 
     public function leaks()

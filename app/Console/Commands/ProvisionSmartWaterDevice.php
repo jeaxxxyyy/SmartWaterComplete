@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Device;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
@@ -23,6 +24,12 @@ class ProvisionSmartWaterDevice extends Command
 
             return self::FAILURE;
         }
+        $registeredDevice = Device::query()->where('auth_user_id', $device->id)->first();
+        if (! $registeredDevice || $registeredDevice->status !== 'active' || ! $device->isAccountActive()) {
+            $this->error('The device must be registered and active before an upload token can be provisioned.');
+
+            return self::FAILURE;
+        }
 
         $sourcePath = (string) $this->option('wifi-sketch');
         $source = $sourcePath !== '' && File::exists($sourcePath) ? File::get($sourcePath) : '';
@@ -31,12 +38,19 @@ class ProvisionSmartWaterDevice extends Command
         $ssid = $ssidMatch[1] ?? 'YOUR_WIFI_NAME';
         $password = $passwordMatch[1] ?? 'YOUR_WIFI_PASSWORD';
         $server = rtrim((string) ($this->option('server') ?: config('app.url')), '/');
+        if (preg_match('/(^|\/\/)(localhost|127\.0\.0\.1|::1)(:|\/|$)/i', $server)) {
+            $this->error('The firmware server URL must be reachable from the M5Stack LAN. Pass --server with the computer LAN IPv4 address.');
+
+            return self::FAILURE;
+        }
         $token = $device->createToken('M5Stack CoreS3', ['device-upload'])->plainTextToken;
         $escape = static fn (string $value): string => addcslashes($value, '\\"');
         $contents = "#pragma once\n\n"
             .'#define WIFI_SSID "'.$escape($ssid)."\"\n"
             .'#define WIFI_PASSWORD "'.$escape($password)."\"\n"
             .'#define SMARTWATER_SERVER_URL "'.$escape($server)."\"\n"
+            .'#define SMARTWATER_DEVICE_UUID "'.$escape($registeredDevice->uuid)."\"\n"
+            .'#define SMARTWATER_ACTIVATION_CODE ""\n'
             .'#define SMARTWATER_DEVICE_TOKEN "'.$escape($token)."\"\n";
         $target = base_path('arduino/smartwater/secrets.h');
         File::ensureDirectoryExists(dirname($target));

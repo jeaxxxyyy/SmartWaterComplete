@@ -10,6 +10,8 @@ class WaterReading extends Model
 {
     protected $fillable = [
         'user_id',
+        'device_id',
+        'reading_id',
         'device_name',
         'device_payload',
         'leak_detection_status',
@@ -49,6 +51,11 @@ class WaterReading extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function device(): BelongsTo
+    {
+        return $this->belongsTo(Device::class);
     }
 
     public function notifications(): HasMany

@@ -29,6 +29,9 @@ class ConsumptionHistoryTest extends TestCase
         $this->getJson('/api/consumption-history')->assertOk()
             ->assertJsonPath('data.daily.0.total_liters', 4)
             ->assertJsonPath('data.daily.0.estimated_bill', 4)
+            ->assertJsonPath('data.summary.estimated_bill', 4)
+            ->assertJsonPath('data.meta.current_page', 1)
+            ->assertJsonPath('data.meta.total', 1)
             ->assertJsonMissingPath('data.daily.0.flow_rate');
     }
 }

@@ -5,11 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ config('app.name', 'Smart Water Monitoring') }}</title>
+    @include('components.theme-init')
     @if (file_exists(public_path('build/manifest.json')) || file_exists(public_path('hot')))
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     @endif
 </head>
-<body class="page">
+<body class="page antialiased bg-app-bg text-app-text dark:bg-app-bg dark:text-app-text">
     <div class="backdrop backdrop-a"></div>
     <div class="backdrop backdrop-b"></div>
     <div class="backdrop backdrop-c"></div>

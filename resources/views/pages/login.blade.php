@@ -1,37 +1,142 @@
-@extends('layouts.app')
+@extends('layouts.guest')
 
-@section('title', 'Login | Smart Water Monitoring')
+@push('head')
+    {{-- Login-only vendor styles: Bootstrap utilities/components and icons. --}}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+@endpush
+
+@section('title', 'Sign in | Smart Water Monitoring')
 @section('page', 'login')
-@section('nav')
-    <a href="/">Home</a>
-@endsection
 
 @section('content')
-    <section class="auth-grid">
-        <article class="panel auth-panel">
-            <p class="eyebrow">Welcome back</p>
-            <h1>Sign in to your water monitoring account</h1>
-            <p class="subtle">Use your household or municipal administrator account. Devices are commissioned securely by the administrator.</p>
+    <section class="login-page container-fluid px-0" aria-label="Smart Water account sign in">
+        <div class="login-layout row g-0">
+            {{-- Product message and feature summary. --}}
+            <section class="login-brand-panel col-lg-5" aria-labelledby="login-brand-title">
+                <div class="login-brand-content">
+                    <div class="login-brand-lockup">
+                        <span class="brand-mark" aria-hidden="true"></span>
+                        <span>
+                            <strong>Smart Water</strong>
+                            <small>Monitoring System</small>
+                        </span>
+                    </div>
 
-            <div class="auth-status" data-auth-status>Ready</div>
+                    <div class="login-brand-copy">
+                        <span class="login-overline">Connected water intelligence</span>
+                        <h1 id="login-brand-title">Smart Water<br>Monitoring System</h1>
+                        <p>Real-time monitoring and analytics for household and municipal water consumption.</p>
+                    </div>
 
-            <form class="auth-form is-active" data-auth-form="login">
-                <label>Email <input type="email" name="email" autocomplete="email" required></label>
-                <label>Password <input type="password" name="password" autocomplete="current-password" required></label>
-                <button class="button button-primary" type="submit">Sign in</button>
-            </form>
+                    <ul class="login-feature-list">
+                        <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Live Water Usage Monitoring</span></li>
+                        <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Leak Detection Alerts</span></li>
+                        <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Billing Analytics</span></li>
+                        <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Device Management</span></li>
+                        <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Secure Administrator Access</span></li>
+                    </ul>
 
-        </article>
+                    {{-- Lightweight inline illustration keeps the page self-contained. --}}
+                    <svg class="login-illustration" viewBox="0 0 460 220" role="img" aria-label="Water monitoring analytics illustration" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="water-fill" x1="0" x2="1" y1="0" y2="1">
+                                <stop offset="0" stop-color="#7DD3FC" stop-opacity=".8" />
+                                <stop offset="1" stop-color="#38BDF8" stop-opacity=".12" />
+                            </linearGradient>
+                        </defs>
+                        <path class="illustration-wave" d="M12 177C63 134 103 200 151 160S241 135 286 167s80 24 162-32" />
+                        <path class="illustration-wave illustration-wave-soft" d="M12 201c52-43 89 19 138-14s90-35 136-2 87 19 164-31" />
+                        <path class="illustration-line" d="M72 132 137 96l55 22 70-58 56 32 55-45" />
+                        <circle class="illustration-node" cx="72" cy="132" r="6" />
+                        <circle class="illustration-node" cx="137" cy="96" r="6" />
+                        <circle class="illustration-node" cx="192" cy="118" r="6" />
+                        <circle class="illustration-node" cx="262" cy="60" r="6" />
+                        <circle class="illustration-node" cx="318" cy="92" r="6" />
+                        <circle class="illustration-node" cx="373" cy="47" r="6" />
+                        <path class="illustration-drop" d="M397 135c0-20 26-42 26-42s26 22 26 42a26 26 0 1 1-52 0Z" />
+                        <path class="illustration-drop-shine" d="M410 126c3-8 7-13 12-18" />
+                    </svg>
+                </div>
+            </section>
 
-        <aside class="panel auth-side">
-            <p class="eyebrow">Need access</p>
-            <h2>What this app does</h2>
-            <ul class="focus-list">
-                <li>Household water tracking</li>
-                <li>Estimated billing and history</li>
-                <li>Leak and threshold alerts</li>
-                <li>Admin monitoring and device auth</li>
-            </ul>
-        </aside>
+            {{-- Authentication form: existing data hooks and field names are unchanged. --}}
+            <section class="login-form-area col-lg-7" aria-labelledby="login-title">
+                <div class="login-card">
+                    <div class="login-card-header">
+                        <a class="login-home-link" href="{{ route('home') }}" data-home-navigation>
+                            <i class="bi bi-arrow-left" aria-hidden="true"></i> Home
+                        </a>
+                        <span class="login-card-kicker">Secure account access</span>
+                        <h2 id="login-title">Welcome Back</h2>
+                        <p>Sign in to your account</p>
+                    </div>
+
+                    @if (session('status'))
+                        <div class="alert alert-success login-alert" role="status">
+                            <i class="bi bi-check-circle me-2" aria-hidden="true"></i>{{ session('status') }}
+                        </div>
+                    @endif
+
+                    @if ($errors->any())
+                        <div class="alert alert-danger login-alert" role="alert">
+                            <i class="bi bi-exclamation-circle me-2" aria-hidden="true"></i>
+                            <span>Please review the highlighted information.</span>
+                            <ul class="mb-0 mt-2 ps-3">
+                                @foreach ($errors->all() as $error)
+                                    <li>{{ $error }}</li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
+
+                    {{-- Keeps JavaScript login feedback accessible without showing a redundant status card. --}}
+                    <div class="visually-hidden" data-auth-status role="status" aria-live="polite"></div>
+
+                    <form class="login-form" data-auth-form="login" novalidate>
+                        @csrf
+
+                        <div class="form-floating login-field">
+                            <i class="bi bi-envelope login-field-icon" aria-hidden="true"></i>
+                            <input id="email" class="form-control" type="email" name="email" value="{{ old('email') }}" autocomplete="email" placeholder="Email Address" required>
+                            <label for="email">Email Address</label>
+                        </div>
+
+                        <div class="form-floating login-field">
+                            <i class="bi bi-lock login-field-icon" aria-hidden="true"></i>
+                            <input id="password" class="form-control" type="password" name="password" autocomplete="current-password" placeholder="Password" required>
+                            <label for="password">Password</label>
+                        </div>
+
+                        <div class="login-options">
+                            <div class="form-check">
+                                <input id="remember" class="form-check-input" type="checkbox" name="remember" value="1" @checked(old('remember'))>
+                                <label class="form-check-label" for="remember">Remember me</label>
+                            </div>
+
+                            @if (Route::has('password.request'))
+                                <a class="login-forgot" href="{{ route('password.request') }}">Forgot password?</a>
+                            @endif
+                        </div>
+
+                        <button class="button button-primary login-submit w-100" type="submit">
+                            <span>Sign In</span><i class="bi bi-arrow-right" aria-hidden="true"></i>
+                        </button>
+                    </form>
+
+                    <div class="login-help">
+                        <i class="bi bi-info-circle" aria-hidden="true"></i>
+                        <p><strong>Need access?</strong><br>Contact your system administrator.</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <footer class="login-footer text-center" aria-label="Application information">
+            <span>&copy; {{ now()->year }} Smart Water Monitoring System <b aria-hidden="true">&bull;</b> Version 1.0</span>
+        </footer>
     </section>
 @endsection

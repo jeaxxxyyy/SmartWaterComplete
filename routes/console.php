@@ -49,3 +49,4 @@ Artisan::command('user:make-admin {email : Email address of the existing user}',
 
 Schedule::command('auth:clear-resets')->daily();
 Schedule::command('sanctum:prune-expired', ['--hours' => 24])->daily();
+Schedule::command('notifications:deliver-scheduled')->everyMinute();
