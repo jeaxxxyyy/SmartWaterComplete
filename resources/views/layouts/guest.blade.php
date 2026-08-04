@@ -19,7 +19,7 @@
 
     <header class="topbar">
         <a href="{{ route('home') }}" class="brand" aria-label="Smart Water Monitoring home">
-            <span class="brand-mark" aria-hidden="true"></span>
+                    @include('components.brand-mark')
             <span>
                 <strong>Smart Water</strong>
                 <small>Monitoring System</small>

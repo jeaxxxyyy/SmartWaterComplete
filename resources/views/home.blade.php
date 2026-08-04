@@ -8,11 +8,14 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" defer></script>
 @endpush
 @section('home-nav')
-    <a class="is-active" href="#home">Home</a>
+    <a href="#home">Home</a>
     <a href="#features">Features</a>
     <a href="#about">About</a>
     <a href="#contact">Contact</a>
-    <a class="nav-cta" href="{{ route('login') }}">Sign In</a>
+    <a class="nav-cta" href="{{ route('login') }}" data-home-session-action data-authenticated-label="Dashboard">
+        <span data-home-session-label>Sign In</span>
+        <span class="nav-cta-icon" aria-hidden="true"><i class="bi bi-arrow-right-short"></i></span>
+    </a>
 @endsection
 
 @section('content')
@@ -23,7 +26,9 @@
             <p class="landing-lede">Smart Water brings live household readings, reliable billing analytics, and municipal oversight into one clear, connected platform.</p>
 
             <div class="hero-actions">
-                <a class="button button-primary" href="{{ route('login') }}">Sign In <span aria-hidden="true">→</span></a>
+                <a class="button button-primary" href="{{ route('login') }}" data-home-session-action data-authenticated-label="Open Dashboard">
+                    <span data-home-session-label>Sign In</span> <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                </a>
                 <a class="button button-quiet" href="#about">Learn More</a>
             </div>
 
@@ -86,25 +91,25 @@
 
         <div class="feature-grid">
             <article class="feature-card">
-                <span class="feature-icon feature-icon-blue" aria-hidden="true">⌁</span>
+                <span class="feature-icon feature-icon-blue" aria-hidden="true"><i class="bi bi-house-heart"></i></span>
                 <p class="eyebrow">Households</p>
                 <h3>Your daily water, at a glance.</h3>
                 <p>Track consumption, understand your estimated bill, and receive useful alerts before small issues become expensive ones.</p>
-                <a href="{{ route('login') }}">View household workspace <span aria-hidden="true">↗</span></a>
+                <a href="{{ route('login') }}">View household workspace <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
             </article>
             <article class="feature-card feature-card-accent">
-                <span class="feature-icon feature-icon-mint" aria-hidden="true">◌</span>
+                <span class="feature-icon feature-icon-mint" aria-hidden="true"><i class="bi bi-buildings"></i></span>
                 <p class="eyebrow">Municipal teams</p>
                 <h3>A clearer view of every meter.</h3>
                 <p>Manage devices, users, billing settings, reports, and potential leaks from one organized administrative workspace.</p>
-                <a href="{{ route('login') }}">Explore admin tools <span aria-hidden="true">↗</span></a>
+                <a href="{{ route('login') }}">Explore admin tools <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
             </article>
             <article class="feature-card">
-                <span class="feature-icon feature-icon-amber" aria-hidden="true">✓</span>
+                <span class="feature-icon feature-icon-amber" aria-hidden="true"><i class="bi bi-shield-check"></i></span>
                 <p class="eyebrow">Built-in confidence</p>
                 <h3>Useful data, securely delivered.</h3>
                 <p>Scoped device credentials, role-based access, and audit history keep every reading accountable from meter to dashboard.</p>
-                <a href="#about">Learn about Smart Water <span aria-hidden="true">↗</span></a>
+                <a href="#about">Learn about Smart Water <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
             </article>
         </div>
     </section>
@@ -125,10 +130,12 @@
     <section class="landing-bottom-cta" id="contact" aria-labelledby="contact-title">
         <div>
             <p class="eyebrow">Ready when you are</p>
-            <h2 id="contact-title">Ready When You Are, Make Everything Count</h2>
-            <p>Sign in to see the workspace built for your role, or contact your system administrator for access.</p>
+            <h2 id="contact-title">Your water data, in one clear workspace.</h2>
+            <p>Sign in to open the tools and insights configured for your account.</p>
         </div>
-        <a class="button button-light" href="{{ route('login') }}">Sign In to Smart Water <span aria-hidden="true">→</span></a>
+        <a class="button button-light" href="{{ route('login') }}" data-home-session-action data-authenticated-label="Open Your Dashboard">
+            <span data-home-session-label>Sign In to Smart Water</span> <i class="bi bi-arrow-right" aria-hidden="true"></i>
+        </a>
     </section>
 
     <footer class="home-footer">

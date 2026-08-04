@@ -327,7 +327,7 @@ body[data-page="home"] .brand {
 body[data-page="home"] .brand-mark {
     width: 2.375rem;
     height: 2.375rem;
-    border-radius: 9px;
+    border-radius: 12px;
 }
 
 body[data-page="home"] .brand strong {
@@ -995,12 +995,7 @@ body[data-page="login"] .shell {
 }
 
 body[data-page="login"] .brand-mark {
-    border-color: #bae6fd;
-    background: #e0f2fe;
-}
-
-body[data-page="login"] .brand-mark::after {
-    background: var(--login-primary);
+    border-color: rgb(125 211 252 / 38%);
 }
 
 body[data-page="login"] .topnav a {
@@ -1085,12 +1080,8 @@ body[data-page="login"] .topnav a:hover {
 }
 
 .login-brand-lockup .brand-mark {
-    border-color: rgb(224 242 254 / 55%);
-    background: rgb(224 242 254 / 18%);
-}
-
-.login-brand-lockup .brand-mark::after {
-    background: #ffffff;
+    border-color: rgb(207 250 254 / 42%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 28%), 0 10px 24px rgb(6 78 99 / 28%);
 }
 
 .login-brand-lockup strong,
@@ -1191,6 +1182,101 @@ body[data-page="login"] .topnav a:hover {
     padding: 0.5rem;
 }
 
+.login-transition {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: grid;
+    place-items: center;
+    padding: 1.5rem;
+    background: rgb(5 22 38 / 48%);
+    backdrop-filter: blur(5px);
+    animation: login-transition-backdrop 180ms ease-out both;
+}
+
+.login-transition[hidden] {
+    display: none;
+}
+
+.login-transition-card {
+    display: flex;
+    min-width: min(20rem, calc(100vw - 3rem));
+    align-items: center;
+    gap: 0.9rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid color-mix(in srgb, var(--login-primary) 28%, var(--line));
+    border-radius: 1rem;
+    color: var(--text);
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+    box-shadow: 0 22px 55px rgb(3 15 24 / 24%);
+    animation: login-transition-card-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.login-transition-mark {
+    display: grid;
+    width: 2.65rem;
+    height: 2.65rem;
+    flex: 0 0 2.65rem;
+    place-items: center;
+    border-radius: 50%;
+    color: #ffffff;
+    background: linear-gradient(135deg, #2dd4bf, #0891b2);
+    box-shadow: 0 8px 20px rgb(13 148 136 / 24%);
+    animation: login-transition-check-in 420ms 100ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.login-transition-mark i {
+    font-size: 1.25rem;
+    line-height: 1;
+}
+
+.login-transition-copy {
+    display: grid;
+    gap: 0.18rem;
+}
+
+.login-transition-copy strong {
+    font-size: 0.95rem;
+    letter-spacing: -0.015em;
+}
+
+.login-transition-copy small {
+    color: var(--muted);
+    font-size: 0.78rem;
+}
+
+body.login-is-transitioning .login-layout {
+    transform: scale(0.995);
+    transition: transform 220ms ease;
+}
+
+@keyframes login-transition-backdrop {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes login-transition-card-in {
+    from { opacity: 0; transform: translateY(0.65rem) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes login-transition-check-in {
+    from { opacity: 0; transform: scale(0.65) rotate(-8deg); }
+    to { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .login-transition,
+    .login-transition-card,
+    .login-transition-mark {
+        animation: none;
+    }
+
+    body.login-is-transitioning .login-layout {
+        transition: none;
+    }
+}
+
 .login-card-header h2 {
     margin: 0.75rem 0 0.5rem;
     color: var(--login-ink);
@@ -1249,6 +1335,8 @@ body[data-page="login"] .topnav a:hover {
 
 .login-field .form-control {
     height: 3.5rem;
+    padding-top: 0.85rem;
+    padding-bottom: 0.85rem;
     padding-left: 3.25rem;
     border: 1px solid var(--login-border);
     border-radius: 12px;
@@ -1257,17 +1345,27 @@ body[data-page="login"] .topnav a:hover {
     box-shadow: none;
 }
 
-.login-field .form-control::placeholder { color: transparent; }
+.login-field .form-control::placeholder {
+    color: #94a3b8;
+    opacity: 1;
+}
 
 .login-field .form-control:focus {
     border-color: var(--login-primary);
-    box-shadow: 0 0 0 4px rgb(14 165 233 / 14%);
+    outline: 0;
+    box-shadow: 0 0 0 1px rgb(14 165 233 / 22%);
 }
 
-.login-field label {
-    padding-left: 3.25rem;
-    color: #94a3b8;
-    font-size: 0.88rem;
+.login-field-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
 .login-field-icon {
@@ -1728,24 +1826,54 @@ a {
 }
 
 .brand-mark {
+    position: relative;
+    isolation: isolate;
+    display: inline-grid;
     width: 2.25rem;
     height: 2.25rem;
-    border-radius: 8px;
-    background: #dff5fb;
-    border: 1px solid #b6e5f0;
-    position: relative;
+    flex: 0 0 auto;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid rgb(103 232 249 / 38%);
+    border-radius: 11px;
+    background: linear-gradient(145deg, #13b8bd 0%, #0784ad 58%, #075985 100%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 24%), 0 8px 18px rgb(3 105 161 / 20%);
 }
 
-.brand-mark::after {
+.brand-mark::before {
     content: "";
     position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 0.7rem;
-    height: 1rem;
-    border-radius: 999px 999px 999px 0;
-    background: var(--primary);
-    transform: translate(-50%, -50%) rotate(-45deg);
+    z-index: -1;
+    top: -45%;
+    left: -22%;
+    width: 86%;
+    height: 86%;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 14%);
+}
+
+.brand-mark-logo {
+    width: 88%;
+    height: 88%;
+    overflow: visible;
+}
+
+.brand-mark-drop {
+    fill: rgb(240 253 250 / 96%);
+}
+
+.brand-mark-wave {
+    fill: none;
+    stroke: #087b89;
+    stroke-width: 2.15;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.brand-mark-signal {
+    fill: #a7f3d0;
+    stroke: rgb(255 255 255 / 78%);
+    stroke-width: 0.8;
 }
 
 .brand strong,
@@ -2693,6 +2821,17 @@ body[data-page="household"] .household-billing-header {
     background: linear-gradient(135deg, #f5fcfe, #ffffff);
 }
 
+body[data-page="household"] .household-billing-heading {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.9rem;
+}
+
+body[data-page="household"] .household-billing-heading > div {
+    min-width: 0;
+}
+
 body[data-page="household"] .household-billing-header h1 {
     margin: 0.35rem 0 0;
     color: var(--text);
@@ -2723,6 +2862,21 @@ body[data-page="household"] .household-billing-summary {
     margin: 1rem 0;
 }
 
+body[data-page="household"] .billing-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.85rem;
+}
+
+body[data-page="household"] .billing-summary-grid .metric-card {
+    min-width: 0;
+}
+
+body[data-page="household"] .billing-summary-grid .metric-card > strong {
+    overflow-wrap: anywhere;
+    font-size: clamp(1.25rem, 2vw, 1.7rem);
+}
+
 body[data-page="household"] .household-billing-summary .stat-card small {
     display: block;
     margin-top: 0.35rem;
@@ -2733,6 +2887,18 @@ body[data-page="household"] .household-billing-grid {
     grid-template-columns: minmax(0, 1.2fr) minmax(18rem, 0.8fr);
     align-items: start;
     gap: 1rem;
+}
+
+body[data-page="household"] .household-billing-calculation,
+body[data-page="household"] .household-billing-reading {
+    min-width: 0;
+    padding: 1.2rem 1.25rem;
+}
+
+body[data-page="household"] .household-billing-grid .panel-head {
+    align-items: center;
+    padding-bottom: 0.9rem;
+    border-bottom: 1px solid var(--line);
 }
 
 body[data-page="household"] .household-billing-calculation h2,
@@ -2788,6 +2954,10 @@ body[data-page="household"] .billing-meter-summary {
     background: var(--surface-soft);
 }
 
+body[data-page="household"] .billing-meter-summary > .empty-state {
+    width: 100%;
+}
+
 body[data-page="household"] .billing-meter-summary > div:last-child { display: grid; gap: 0.18rem; min-width: 0; }
 body[data-page="household"] .billing-meter-summary strong { overflow-wrap: anywhere; }
 body[data-page="household"] .billing-meter-summary small { color: var(--muted); }
@@ -2805,7 +2975,13 @@ body[data-page="household"] .billing-meter-icon {
     font-weight: 900;
 }
 
-body[data-page="household"] .billing-latest-reading { margin-top: 1rem; }
+body[data-page="household"] .billing-latest-reading {
+    margin-top: 1rem;
+    padding: 0.2rem 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 0.8rem;
+    background: var(--surface-soft);
+}
 body[data-page="household"] .household-billing-history { margin-top: 1rem; }
 body[data-page="household"] .billing-history-table { min-width: 680px; }
 body[data-page="household"] .billing-history-table th,
@@ -5184,6 +5360,35 @@ body[data-page="household"] .household-account-copy {
     border-bottom: 1px solid var(--line);
 }
 
+.household-sidebar-brand-copy {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.household-sidebar-collapse {
+    display: none;
+    width: 2rem;
+    height: 2rem;
+    flex: 0 0 2rem;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 0.65rem;
+    color: var(--muted);
+    background: var(--surface-soft);
+    cursor: pointer;
+    transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease;
+}
+
+.household-sidebar-collapse:hover {
+    color: var(--primary-dark);
+    border-color: var(--primary);
+}
+
+.household-sidebar-collapse .ui-icon {
+    transition: transform 200ms ease;
+}
+
 .household-sidebar-mark {
     width: 2.35rem;
     height: 2.35rem;
@@ -5226,6 +5431,7 @@ body[data-page="household"] .household-account-copy {
 }
 
 .household-sidebar-nav button {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -5359,6 +5565,114 @@ body[data-page="household"] .dashboard-view {
     gap: 0.65rem;
 }
 
+.ui-icon {
+    display: block;
+    width: 1.15rem;
+    height: 1.15rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.analytics-range-control {
+    position: relative;
+    display: flex;
+    min-width: 8.5rem;
+    align-items: center;
+    gap: 0.38rem;
+}
+
+.analytics-range-control .analytics-range-select {
+    min-width: 8.5rem;
+    flex: 1 1 auto;
+}
+
+.analytics-custom-toggle {
+    display: grid;
+    width: 2.35rem;
+    height: 2.35rem;
+    flex: 0 0 2.35rem;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--line-strong);
+    border-radius: 0.72rem;
+    color: var(--primary-dark);
+    background: var(--surface);
+    cursor: pointer;
+    transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.analytics-custom-toggle:hover,
+.analytics-custom-toggle[aria-expanded="true"] {
+    border-color: var(--primary);
+    background: var(--surface-soft);
+    transform: translateY(-1px);
+}
+
+.analytics-custom-range {
+    position: absolute;
+    top: calc(100% + 0.55rem);
+    right: 0;
+    z-index: 24;
+    display: grid;
+    width: min(21rem, calc(100vw - 2.5rem));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.7rem;
+    padding: 0.85rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 0.9rem;
+    background: var(--surface);
+    box-shadow: 0 18px 42px rgb(3 15 24 / 18%);
+}
+
+.analytics-custom-range[hidden] {
+    display: none;
+}
+
+.analytics-custom-range > strong {
+    grid-column: 1 / -1;
+    color: var(--text);
+    font-size: 0.78rem;
+}
+
+.analytics-custom-range label {
+    display: grid;
+    min-width: 0;
+    gap: 0.32rem;
+}
+
+.analytics-custom-range label > span {
+    color: var(--muted);
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.analytics-custom-range .filter-input {
+    width: 100%;
+    min-width: 0;
+}
+
+.dashboard-refresh-button {
+    display: inline-flex;
+    min-width: 6.2rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    white-space: nowrap;
+}
+
+.dashboard-refresh-button.is-loading .ui-icon-refresh {
+    animation: dashboard-refresh-spin 700ms linear infinite;
+}
+
+@keyframes dashboard-refresh-spin {
+    to { transform: rotate(360deg); }
+}
+
 .dashboard-updated,
 .panel-context {
     color: var(--muted);
@@ -5367,15 +5681,20 @@ body[data-page="household"] .dashboard-view {
 }
 
 .dashboard-feedback {
-    grid-column: 1 / -1;
-    padding: 0.75rem 0.85rem;
+    display: inline-flex;
+    max-width: 15rem;
+    align-items: center;
+    padding: 0.34rem 0.58rem;
     border: 1px solid var(--line-strong);
-    border-radius: 0.7rem;
+    border-radius: 999px;
     color: var(--primary-dark);
     background: var(--surface-soft);
-    font-size: 0.82rem;
+    font-size: 0.7rem;
     font-weight: 700;
+    line-height: 1.25;
 }
+
+.dashboard-feedback[hidden] { display: none; }
 
 .dashboard-feedback.is-error {
     border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
@@ -5419,10 +5738,12 @@ body[data-page="household"] .dashboard-view {
     justify-content: center;
     width: 2rem;
     height: 2rem;
-    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--line));
+    border-radius: 0.68rem;
     color: var(--primary-dark);
-    background: #e7f6f4;
+    background: linear-gradient(145deg, #effaf8, #dff3f1);
     font-size: 0.95rem;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 62%);
 }
 
 .metric-card-badge {
@@ -5488,6 +5809,160 @@ body[data-page="household"] .metric-card {
 .household-dashboard-grid > .panel,
 .household-activity-grid > .panel {
     height: 100%;
+}
+
+body[data-page="household"] .household-analytics-card {
+    padding: 1.25rem;
+    overflow: hidden;
+}
+
+.household-analytics-head {
+    align-items: center;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--line);
+}
+
+.household-analytics-head h2 {
+    margin-top: 0.3rem;
+}
+
+.analytics-timezone {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.42rem;
+    padding: 0.42rem 0.62rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--muted);
+    background: var(--surface-soft);
+    font-size: 0.72rem;
+    line-height: 1;
+}
+
+.analytics-timezone strong {
+    color: var(--text);
+    font-size: 0.75rem;
+}
+
+.analytics-period-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    margin: 1rem 0;
+    padding: 0.9rem 1rem;
+    border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--line));
+    border-radius: 0.75rem;
+    background: color-mix(in srgb, var(--primary) 7%, var(--surface));
+}
+
+.analytics-period-icon,
+.analytics-group-icon {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+}
+
+.analytics-period-icon {
+    width: 2.55rem;
+    height: 2.55rem;
+    border: 1px solid color-mix(in srgb, var(--primary) 25%, var(--line));
+    border-radius: 0.72rem;
+}
+
+.analytics-period-copy {
+    min-width: 0;
+}
+
+.analytics-period-copy dt,
+.analytics-metric-list dt {
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 750;
+    letter-spacing: 0.025em;
+}
+
+.analytics-period-copy dd {
+    margin: 0.24rem 0 0;
+    color: var(--text);
+    font-size: 0.95rem;
+    font-weight: 800;
+    line-height: 1.35;
+}
+
+.analytics-summary-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15.5rem), 1fr));
+    align-items: stretch;
+    gap: 0.8rem;
+}
+
+.analytics-summary-group {
+    min-width: 0;
+    padding: 0.9rem;
+    border: 1px solid var(--line);
+    border-radius: 0.8rem;
+    background: var(--surface-soft);
+}
+
+.analytics-group-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    min-height: 2.8rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--line);
+}
+
+.analytics-group-icon {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.65rem;
+}
+
+.analytics-group-heading h3 {
+    margin: 0;
+    color: var(--text);
+    font-size: 0.9rem;
+    line-height: 1.2;
+}
+
+.analytics-group-heading p {
+    margin: 0.18rem 0 0;
+    color: var(--muted);
+    font-size: 0.7rem;
+    line-height: 1.3;
+}
+
+.analytics-metric-list {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0.75rem 0 0;
+}
+
+.analytics-metric-list > div {
+    min-width: 0;
+    padding: 0.62rem 0.7rem;
+    border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+    border-radius: 0.62rem;
+    background: var(--surface);
+}
+
+.analytics-metric-list dd {
+    margin: 0.22rem 0 0;
+    overflow-wrap: anywhere;
+    color: var(--text);
+    font-size: 0.84rem;
+    font-weight: 800;
+    line-height: 1.35;
+}
+
+.analytics-period-copy dd.is-empty,
+.analytics-metric-list dd.is-empty {
+    color: var(--muted);
+    font-weight: 650;
 }
 
 .household-usage-panel,
@@ -5747,6 +6222,33 @@ body[data-page="household"] .activity-panel .panel-head h2 {
     border-style: solid;
 }
 
+html.dark body[data-page="household"] .dashboard-empty-state {
+    border-color: color-mix(in srgb, var(--primary) 24%, var(--line-strong));
+    color: #b8c9d9;
+    background:
+        radial-gradient(circle at 50% 0%, rgb(73 183 173 / 9%), transparent 65%),
+        linear-gradient(145deg, #172d45 0%, #10243a 100%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%), 0 10px 24px rgb(2 12 27 / 10%);
+}
+
+html.dark body[data-page="household"] .dashboard-empty-state strong {
+    color: #f1f7fb;
+}
+
+html.dark body[data-page="household"] .dashboard-empty-state span {
+    color: #b8c9d9;
+}
+
+html.dark body[data-page="household"] .dashboard-empty-state .loading-skeleton-card {
+    border-color: var(--line);
+    background: #142a42;
+}
+
+html.dark body[data-page="household"] .dashboard-empty-state .loading-skeleton-line {
+    background: linear-gradient(90deg, #263f59 0%, #3a5873 50%, #263f59 100%);
+    background-size: 200% 100%;
+}
+
 body[data-page="household"] [data-household-monthly-chart] {
     min-height: 18rem;
     padding: 1rem 0.25rem 0.25rem;
@@ -5920,6 +6422,56 @@ html.dark body[data-page="household"] .system-status-panel {
     box-shadow: 0 12px 30px rgb(3 15 24 / 18%);
 }
 
+html.dark body[data-page="household"] .metric-card-icon {
+    border-color: color-mix(in srgb, var(--primary) 34%, var(--line));
+    color: #c9fbf4;
+    background: linear-gradient(145deg, #1f5261, #173d51);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%);
+}
+
+html.dark body[data-page="household"] .metric-card-label,
+html.dark body[data-page="household"] .metric-card small {
+    color: #b8c9d9;
+}
+
+html.dark body[data-page="household"] .metric-card-badge {
+    color: #c9fbf4;
+    background: #214b55;
+}
+
+html.dark body[data-page="household"] .metric-card-badge-neutral {
+    color: #c7d5e2;
+    background: #263d56;
+}
+
+html.dark body[data-page="household"] .household-sidebar-nav button {
+    color: #c4d3df;
+}
+
+html.dark body[data-page="household"] .household-sidebar-nav button :is(i, .ui-icon) {
+    color: #85d4ce;
+}
+
+html.dark body[data-page="household"] .household-sidebar-nav button:is(:hover, .is-active) {
+    color: #f1f7fb;
+}
+
+html.dark body[data-page="household"] .sidebar-section-title {
+    color: #9eb4c6;
+}
+
+html.dark body[data-page="household"] .analytics-custom-range {
+    border-color: var(--line-strong);
+    background: #172a42;
+    box-shadow: 0 20px 46px rgb(0 7 18 / 38%);
+}
+
+html.dark body[data-page="household"] .analytics-custom-toggle {
+    color: #bff5ef;
+    border-color: var(--line-strong);
+    background: var(--surface-soft);
+}
+
 @media (max-width: 1100px) {
     .household-kpi-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5949,6 +6501,11 @@ html.dark body[data-page="household"] .system-status-panel {
     .household-dashboard-meta,
     .household-dashboard-controls {
         justify-content: flex-start;
+    }
+
+    .analytics-custom-range {
+        right: auto;
+        left: 0;
     }
 
     body[data-page="household"] .household-sidebar {
@@ -6031,6 +6588,18 @@ html.dark body[data-page="household"] .system-status-panel {
 
     .panel-context {
         display: none;
+    }
+}
+
+@media (max-width: 420px) {
+    .analytics-custom-range {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dashboard-refresh-button.is-loading .ui-icon-refresh {
+        animation: none;
     }
 }
 
@@ -6331,5 +6900,2171 @@ html.dark body.page .auth-panel {
 
     body.page[data-page="login"] .login-form-area {
         padding: 2rem 1.25rem;
+    }
+}
+
+/* 2026 interface refinement --------------------------------------------
+ * These rules deliberately sit at the end of the cascade. They consolidate
+ * the application shells onto the shared tokens and prevent older page-level
+ * colors from reducing contrast when the theme changes.
+ */
+:root {
+    --bg: #f2f6f8;
+    --surface: #ffffff;
+    --surface-soft: #f5f8fa;
+    --line: #d8e2e8;
+    --line-strong: #b8c8d2;
+    --text: #142438;
+    --muted: #5f7183;
+    --primary: #0f8f86;
+    --primary-dark: #08736c;
+    --success: #147a50;
+    --warning: #94610b;
+    --danger: #b6384b;
+    --shadow: 0 14px 38px rgb(20 36 56 / 8%);
+}
+
+html.dark {
+    --bg: #091726;
+    --surface: #10243a;
+    --surface-soft: #193149;
+    --line: #2b465f;
+    --line-strong: #49657e;
+    --text: #f1f6fa;
+    --muted: #b7c6d5;
+    --primary: #43bdb1;
+    --primary-dark: #82ddd3;
+    --success: #75d6a7;
+    --warning: #f0c973;
+    --danger: #ff9bab;
+    --shadow: 0 16px 42px rgb(0 7 18 / 28%);
+}
+
+body.page {
+    min-width: 20rem;
+    line-height: 1.55;
+}
+
+body.page :is(a, button, input, select, textarea):focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--primary) 38%, transparent);
+    outline-offset: 2px;
+}
+
+body.page :is(.panel, .metric-card, .activity-panel, .system-status-panel, .feature-card, .home-about) {
+    box-shadow: var(--shadow);
+}
+
+body[data-page="admin"] {
+    --admin-ink: var(--text);
+    --admin-muted: var(--muted);
+    --admin-line: var(--line);
+}
+
+body[data-page="admin"] .shell-dashboard {
+    background: var(--bg);
+}
+
+body[data-page="admin"] :is(.admin-sidebar-brand strong, .admin-topbar-title strong, .admin-profile) {
+    color: var(--text);
+}
+
+body[data-page="admin"] :is(.admin-sidebar-brand small, .admin-profile-copy small, .admin-topbar-title span) {
+    color: var(--muted);
+}
+
+/* The public nav only indicates hover/focus. A static Home underline looked
+ * like a stuck interaction state, particularly on the dark header. */
+.site-nav-desktop a:not(.nav-cta):focus-visible {
+    color: var(--primary-dark);
+    background: transparent;
+}
+
+.site-nav-desktop a:not(.nav-cta):focus-visible::after {
+    opacity: 1;
+    transform: scaleX(1);
+}
+
+.login-status {
+    margin: 1.25rem 0 0;
+    padding: 0.8rem 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--primary) 32%, var(--line));
+    border-radius: 0.8rem;
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.login-status.is-error {
+    border-color: color-mix(in srgb, var(--danger) 42%, var(--line));
+    color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 9%, var(--surface));
+}
+
+.login-field:has(.login-password-toggle) .form-control {
+    padding-right: 3.4rem;
+}
+
+.login-password-toggle {
+    position: absolute;
+    z-index: 5;
+    top: 50%;
+    right: 0.7rem;
+    display: grid;
+    width: 2.35rem;
+    height: 2.35rem;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 0.7rem;
+    color: var(--login-muted);
+    background: transparent;
+    cursor: pointer;
+    transform: translateY(-50%);
+}
+
+.login-password-toggle:hover,
+.login-password-toggle:focus-visible {
+    color: var(--login-primary-dark);
+    background: color-mix(in srgb, var(--login-primary) 10%, transparent);
+}
+
+.login-submit:disabled {
+    opacity: 0.68;
+    cursor: wait;
+    transform: none;
+}
+
+.household-sidebar-scrim {
+    display: none;
+}
+
+.household-sidebar-nav button > span:first-child {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    gap: 0.72rem;
+}
+
+.household-sidebar-nav button :is(i, .ui-icon) {
+    width: 1.1rem;
+    height: 1.1rem;
+    flex: 0 0 auto;
+    color: color-mix(in srgb, var(--muted) 82%, var(--primary));
+    font-size: 1rem;
+    text-align: center;
+}
+
+.household-sidebar-nav button:is(:hover, .is-active) :is(i, .ui-icon) {
+    color: var(--primary);
+}
+
+@media (min-width: 768px) {
+    .household-sidebar-collapse {
+        display: grid;
+    }
+
+    body[data-page="household"] .app-shell {
+        display: block;
+        padding-left: 15.5rem;
+        transition: padding-left 200ms ease;
+    }
+
+    body[data-page="household"] .household-sidebar {
+        position: fixed;
+        top: 4.7rem;
+        bottom: 0;
+        left: max(0px, calc((100vw - 1440px) / 2));
+        z-index: 18;
+        width: 15.5rem;
+        min-height: 0;
+        max-height: calc(100dvh - 4.7rem);
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
+        transition: width 200ms ease, padding 200ms ease;
+    }
+
+    body[data-page="household"].household-sidebar-collapsed .app-shell {
+        padding-left: 5.25rem;
+    }
+
+    body[data-page="household"].household-sidebar-collapsed .household-sidebar {
+        width: 5.25rem;
+        padding-inline: 0.65rem;
+    }
+
+    body[data-page="household"].household-sidebar-collapsed .household-sidebar-brand {
+        justify-content: center;
+        padding-inline: 0;
+    }
+
+    body[data-page="household"].household-sidebar-collapsed :is(.household-sidebar-mark, .household-sidebar-brand-copy, .sidebar-section-title, .sidebar-nav-label, .household-sidebar-account) {
+        display: none;
+    }
+
+    body[data-page="household"].household-sidebar-collapsed .household-sidebar-collapse .ui-icon {
+        transform: rotate(180deg);
+    }
+
+    body[data-page="household"].household-sidebar-collapsed .household-sidebar-nav button {
+        justify-content: center;
+        padding-inline: 0.55rem;
+    }
+
+    body[data-page="household"].household-sidebar-collapsed .household-sidebar-nav button > span:first-child {
+        justify-content: center;
+        gap: 0;
+    }
+
+    body[data-page="household"].household-sidebar-collapsed .household-sidebar-nav button .ui-icon {
+        width: 1.2rem;
+        height: 1.2rem;
+    }
+
+    body[data-page="household"].household-sidebar-collapsed .sidebar-count {
+        position: absolute;
+        top: 0.15rem;
+        right: 0.2rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body[data-page="household"] :is(.app-shell, .household-sidebar),
+    .household-sidebar-collapse .ui-icon {
+        transition: none;
+    }
+}
+
+@media (min-width: 992px) {
+    body[data-page="admin"] .app-shell {
+        display: block;
+        padding-left: 16.5rem;
+    }
+
+    body[data-page="admin"] .admin-sidebar {
+        position: fixed;
+        top: 4.7rem;
+        bottom: 0;
+        left: max(0px, calc((100vw - 1440px) / 2));
+        z-index: 18;
+        width: 16.5rem;
+        min-height: 0;
+        max-height: calc(100dvh - 4.7rem);
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        visibility: visible;
+        transform: none;
+        scrollbar-width: thin;
+    }
+}
+
+@media (max-width: 767px) {
+    .household-sidebar-scrim {
+        position: fixed;
+        inset: 4.35rem 0 0;
+        z-index: 29;
+        width: 100%;
+        height: auto;
+        padding: 0;
+        border: 0;
+        background: rgb(3 13 24 / 52%);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 180ms ease;
+        backdrop-filter: blur(2px);
+    }
+
+    .household-sidebar.is-open + .household-sidebar-scrim {
+        display: block;
+        opacity: 1;
+        pointer-events: auto;
+    }
+}
+
+html.dark body {
+    background: linear-gradient(145deg, #0d2034, var(--bg) 60%, #0a1b2d);
+}
+
+html.dark body.page :is(.subtle, .table-secondary, .panel-context, .empty-state, .login-card-header p, .login-options .form-check-label) {
+    color: var(--muted);
+}
+
+html.dark body.page :is(input, select, textarea, .form-control) {
+    color: var(--text);
+    border-color: var(--line-strong);
+    background-color: var(--surface-soft);
+}
+
+html.dark body.page :is(input, textarea)::placeholder {
+    color: #9eb0c1;
+    opacity: 1;
+}
+
+html.dark body.page select option {
+    color: var(--text);
+    background: var(--surface);
+}
+
+html.dark body.page :is(.dropdown-menu, dialog, .admin-user-dialog, .billing-detail-dialog) {
+    color: var(--text);
+    border-color: var(--line);
+    background: var(--surface);
+}
+
+html.dark body.page :is(.dropdown-item, .dropdown-item-text) {
+    color: var(--text);
+}
+
+html.dark body.page .dropdown-item:hover,
+html.dark body.page .dropdown-item:focus {
+    color: var(--text);
+    background: var(--surface-soft);
+}
+
+html.dark body.page .dropdown-divider {
+    border-color: var(--line);
+}
+
+html.dark body[data-page="home"] .topbar,
+html.dark body[data-page="landing"] .topbar {
+    background: rgb(9 23 38 / 88%);
+}
+
+html.dark body[data-page="home"] :is(.site-nav-toggle, .home-offcanvas),
+html.dark body[data-page="landing"] :is(.site-nav-toggle, .home-offcanvas) {
+    color: var(--text);
+    border-color: var(--line);
+    background: var(--surface);
+}
+
+html.dark body[data-page="login"] .login-password-toggle {
+    color: var(--muted);
+}
+
+html.dark body[data-page="login"] .login-password-toggle:hover,
+html.dark body[data-page="login"] .login-password-toggle:focus-visible {
+    color: var(--primary-dark);
+    background: var(--surface-soft);
+}
+
+/* Application-wide polish and table unification ----------------------- */
+body[data-page="home"] .site-nav-desktop {
+    column-gap: clamp(1.25rem, 2.5vw, 2.25rem);
+}
+
+body[data-page="home"] .site-nav-desktop a:not(.nav-cta) {
+    padding-inline: 0.25rem;
+}
+
+body[data-page="home"] .site-nav-desktop a.nav-cta {
+    margin-left: 0.5rem;
+    display: inline-flex;
+    min-height: 2.55rem;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.38rem 0.42rem 0.38rem 0.95rem;
+    border: 1px solid rgb(103 232 249 / 32%);
+    border-radius: 999px;
+    color: #f7fdff;
+    background: linear-gradient(135deg, #087da3 0%, #0796bb 100%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 18%), 0 7px 18px rgb(2 132 199 / 18%);
+    letter-spacing: -0.01em;
+    transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+body[data-page="home"] .site-nav-desktop a.nav-cta:hover,
+body[data-page="home"] .site-nav-desktop a.nav-cta:focus-visible {
+    border-color: rgb(165 243 252 / 58%);
+    color: #ffffff;
+    background: linear-gradient(135deg, #076f94 0%, #089fc3 100%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 22%), 0 10px 24px rgb(2 132 199 / 24%);
+    filter: none;
+    transform: translateY(-1px);
+}
+
+.nav-cta-icon {
+    display: inline-grid;
+    width: 1.72rem;
+    height: 1.72rem;
+    flex: 0 0 1.72rem;
+    place-items: center;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 16%);
+    transition: background-color 180ms ease, transform 180ms ease;
+}
+
+.nav-cta-icon i {
+    font-size: 1.05rem;
+    line-height: 1;
+}
+
+.nav-cta:hover .nav-cta-icon,
+.nav-cta:focus-visible .nav-cta-icon {
+    background: rgb(255 255 255 / 24%);
+    transform: translateX(2px);
+}
+
+html.dark body[data-page="home"] .site-nav-desktop a.nav-cta {
+    border-color: rgb(103 232 249 / 28%);
+    background: linear-gradient(135deg, #126b84 0%, #087f9d 100%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 14%), 0 8px 20px rgb(0 0 0 / 22%);
+}
+
+body[data-page="home"] .home-offcanvas-nav a.nav-cta {
+    gap: 0.55rem;
+    border: 1px solid rgb(103 232 249 / 28%);
+    border-radius: 999px;
+    background: linear-gradient(135deg, #087da3 0%, #0796bb 100%);
+}
+
+@media (min-width: 992px) {
+    body[data-page="home"] .site-nav-desktop {
+        margin-left: auto;
+    }
+
+    body[data-page="home"] .site-theme-toggle {
+        order: 2;
+        margin-left: 0.65rem;
+    }
+}
+
+body[data-page="home"] .landing-hero .hero-actions,
+body[data-page="landing"] .landing-hero .hero-actions {
+    column-gap: 1.1rem;
+    row-gap: 0.85rem;
+}
+
+body[data-page="home"] .landing-hero .hero-actions .button,
+body[data-page="landing"] .landing-hero .hero-actions .button {
+    padding-inline: 1.15rem;
+}
+
+/* Keep the login theme control available without reserving an otherwise
+ * empty application header above the card. */
+body.page[data-page="login"] .topbar {
+    position: fixed;
+    top: 0.9rem;
+    right: 0.9rem;
+    left: auto;
+    z-index: 40;
+    width: auto;
+    height: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+}
+
+body.page[data-page="login"] .shell {
+    padding-top: 1rem;
+}
+
+body.page[data-page="login"] .login-field .form-control::placeholder,
+html.dark body.page[data-page="login"] .login-field .form-control::placeholder {
+    color: var(--login-muted) !important;
+    opacity: 1 !important;
+}
+
+body.page[data-page="login"] .login-layout {
+    border-radius: 1.4rem;
+    box-shadow: 0 24px 64px rgb(20 36 56 / 12%);
+}
+
+html.dark body.page[data-page="login"] .login-layout {
+    box-shadow: 0 24px 64px rgb(0 7 18 / 32%);
+}
+
+body.page :is(.filter-panel, .panel-table, .admin-card, .chart-panel, .activity-panel, .system-status-panel) {
+    border-color: var(--line);
+    border-radius: 1rem;
+    background: var(--surface);
+}
+
+body.page :is(.filter-input, .stack-form input, .stack-form select, .stack-form textarea, .filter-bar input, .filter-bar select) {
+    min-height: 2.75rem;
+    border-radius: 0.7rem;
+}
+
+body.page .filter-bar {
+    gap: 0.75rem;
+}
+
+body.page .button {
+    border-radius: 0.72rem;
+}
+
+body.page .button-primary {
+    box-shadow: 0 7px 16px color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+/* Grid-backed and semantic HTML tables share the same surface, density,
+ * typography, borders, hover state, and dark-mode contrast. */
+body.page .table,
+body.page .table-wrap {
+    margin-top: 1.15rem;
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: 0.9rem;
+    color: var(--text);
+    background: var(--surface);
+    box-shadow: 0 1px 2px rgb(20 36 56 / 3%);
+}
+
+body.page .table-head,
+body.page .data-table thead {
+    color: var(--muted);
+    background: var(--surface-soft);
+}
+
+body.page .table-head {
+    min-height: 3rem;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.085em;
+    line-height: 1.35;
+    text-transform: uppercase;
+}
+
+body.page .table-body {
+    max-height: 28rem;
+    color: var(--text);
+    background: var(--surface);
+}
+
+body.page .table-row {
+    min-height: 3.6rem;
+    padding: 0.9rem 1rem;
+    border-top: 0;
+    border-bottom: 1px solid var(--line);
+    color: var(--text);
+    background: var(--surface);
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+body.page .table-row:last-child {
+    border-bottom: 0;
+}
+
+body.page .table-row:hover {
+    background: color-mix(in srgb, var(--primary) 5%, var(--surface));
+}
+
+body.page .data-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    color: var(--text);
+    background: var(--surface);
+    font-size: 0.86rem;
+}
+
+body.page .data-table th,
+body.page .data-table td {
+    padding: 0.9rem 1rem;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    color: inherit;
+    line-height: 1.45;
+    text-align: left;
+    vertical-align: middle;
+}
+
+body.page .data-table th {
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.085em;
+    text-transform: uppercase;
+}
+
+body.page .data-table tbody tr {
+    color: var(--text);
+    background: var(--surface);
+    transition: background 150ms ease;
+}
+
+body.page .data-table tbody tr:hover {
+    background: color-mix(in srgb, var(--primary) 5%, var(--surface));
+}
+
+body.page .data-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+body.page .app-table-card {
+    margin-top: 1.5rem;
+    padding: clamp(1.15rem, 2.5vw, 1.6rem);
+}
+
+body.page .app-table-card-header {
+    align-items: center;
+}
+
+body.page .app-table-card-header .eyebrow {
+    margin-bottom: 0.35rem;
+}
+
+body.page .table-empty-state {
+    justify-items: center;
+    margin: 0;
+    padding: 2.4rem 1rem;
+    color: var(--muted);
+    text-align: center;
+}
+
+body.page .table-empty-state > i {
+    display: grid;
+    width: 2.8rem;
+    height: 2.8rem;
+    place-items: center;
+    margin-bottom: 0.35rem;
+    border-radius: 0.8rem;
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+    font-size: 1.25rem;
+}
+
+body.page .table-empty-state strong {
+    color: var(--text);
+    font-size: 0.92rem;
+}
+
+body.page .table-primary {
+    color: var(--text);
+}
+
+body.page .table-secondary {
+    color: var(--muted);
+}
+
+body.page .pager {
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+
+body.page .pager button {
+    color: var(--text);
+    border-color: var(--line-strong);
+    background: var(--surface);
+}
+
+body.page .pager button:hover:not(:disabled) {
+    color: var(--primary-dark);
+    border-color: var(--primary);
+    background: var(--surface-soft);
+}
+
+html.dark body.page .household-dashboard-hero {
+    border-color: var(--line);
+    background: linear-gradient(135deg, var(--surface-soft), var(--surface));
+    box-shadow: var(--shadow);
+}
+
+html.dark body.page :is(.table, .table-wrap, .table-body, .table-row, .data-table, .data-table tbody tr) {
+    color: var(--text);
+    border-color: var(--line);
+    background: var(--surface);
+}
+
+html.dark body.page :is(.table-head, .data-table thead) {
+    color: var(--muted);
+    border-color: var(--line);
+    background: var(--surface-soft);
+}
+
+html.dark body.page .table-row:hover,
+html.dark body.page .data-table tbody tr:hover {
+    color: var(--text);
+    background: color-mix(in srgb, var(--primary) 9%, var(--surface));
+}
+
+html.dark body.page .data-table :is(th, td) {
+    border-color: var(--line);
+}
+
+html.dark body.page .pager button {
+    color: var(--text);
+    border-color: var(--line-strong);
+    background: var(--surface);
+    box-shadow: none;
+}
+
+html.dark body.page .pager button:hover:not(:disabled) {
+    color: var(--primary-dark);
+    border-color: var(--primary);
+    background: var(--surface-soft);
+}
+
+html.dark body.page .pager button:disabled {
+    color: var(--muted);
+    border-color: var(--line);
+    background: var(--surface-soft);
+}
+
+/* Normalize the Tailwind-authored billing surfaces to the same application
+ * tokens so switching themes never produces a bright card inside a dark tab. */
+html.dark body[data-page="household"] [data-household-view="billing"] [class*="dark:bg-slate-900"] {
+    border-color: var(--line) !important;
+    background: var(--surface) !important;
+}
+
+html.dark body[data-page="household"] [data-household-view="billing"] [class*="dark:bg-slate-800"] {
+    border-color: var(--line) !important;
+    background: var(--surface-soft) !important;
+}
+
+html.dark body[data-page="household"] [data-household-view="billing"] [class*="dark:border-slate-700"] {
+    border-color: var(--line) !important;
+}
+
+html.dark body[data-page="household"] [data-household-view="billing"] [class*="dark:text-slate-100"] {
+    color: var(--text) !important;
+}
+
+html.dark body[data-page="household"] [data-household-view="billing"] :is([class*="dark:text-slate-300"], [class*="dark:text-slate-400"]) {
+    color: var(--muted) !important;
+}
+
+@media (max-width: 575.98px) {
+    body.page[data-page="login"] .topbar {
+        top: 0.7rem;
+        right: 0.7rem;
+        width: auto;
+    }
+
+    body[data-page="home"] .landing-hero .hero-actions,
+    body[data-page="landing"] .landing-hero .hero-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    body[data-page="home"] .landing-hero .hero-actions .button,
+    body[data-page="landing"] .landing-hero .hero-actions .button {
+        width: 100%;
+    }
+
+    body.page .app-table-card-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+}
+
+/* Full-height household navigation ------------------------------------
+ * Keep every destination and account action visible on desktop without
+ * introducing a second scroll area beside the page content. */
+@media (min-width: 768px) {
+    body[data-page="household"] .household-sidebar {
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        height: calc(100dvh - 4.7rem);
+        padding: 0.8rem 0.75rem 0.65rem;
+        gap: 0.5rem;
+        overflow: hidden;
+    }
+
+    body[data-page="household"] .household-sidebar-brand {
+        gap: 0.6rem;
+        padding: 0 0.35rem 0.7rem;
+    }
+
+    body[data-page="household"] .household-sidebar-mark {
+        width: 2.15rem;
+        height: 2.15rem;
+    }
+
+    body[data-page="household"] .household-sidebar-nav {
+        align-content: start;
+        gap: 0.18rem;
+        min-height: 0;
+    }
+
+    body[data-page="household"] .sidebar-section-title {
+        margin: 0.3rem 0.55rem 0.18rem;
+        font-size: 0.61rem;
+    }
+
+    body[data-page="household"] .household-sidebar-nav button {
+        min-height: 2.28rem;
+        padding: 0.46rem 0.62rem;
+        border-radius: 0.65rem;
+        font-size: 0.78rem;
+        line-height: 1.2;
+    }
+
+    body[data-page="household"] .household-sidebar-nav button > span:first-child {
+        gap: 0.62rem;
+    }
+
+    body[data-page="household"] .household-sidebar-account {
+        gap: 0.35rem;
+        padding: 0.55rem 0.4rem 0;
+    }
+
+    body[data-page="household"] .household-sidebar-logout {
+        min-height: 1.85rem;
+        padding: 0.3rem 0;
+    }
+}
+
+@media (min-width: 768px) and (max-height: 620px) {
+    body[data-page="household"] .household-sidebar {
+        padding-block: 0.55rem;
+        gap: 0.3rem;
+    }
+
+    body[data-page="household"] .household-sidebar-brand {
+        padding-bottom: 0.45rem;
+    }
+
+    body[data-page="household"] .household-sidebar-brand small {
+        display: none;
+    }
+
+    body[data-page="household"] .household-sidebar-nav button {
+        min-height: 2rem;
+        padding-block: 0.34rem;
+    }
+
+    body[data-page="household"] .household-sidebar-account {
+        padding-top: 0.4rem;
+    }
+}
+
+/* Household notification dropdown ------------------------------------ */
+.household-notification-control {
+    position: relative;
+}
+
+.household-notification-button {
+    gap: 0.5rem;
+}
+
+.household-notification-button > i {
+    font-size: 0.95rem;
+}
+
+.household-notification-button.has-unread {
+    color: var(--danger);
+    border-color: color-mix(in srgb, var(--danger) 58%, var(--line));
+    background: color-mix(in srgb, var(--danger) 9%, var(--surface));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 9%, transparent);
+}
+
+.household-notification-button.has-unread:hover,
+.household-notification-button.has-unread:focus-visible,
+.household-notification-control.is-open .household-notification-button.has-unread {
+    color: var(--danger);
+    border-color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 14%, var(--surface));
+}
+
+.household-notification-dropdown {
+    position: absolute;
+    top: calc(100% + 0.65rem);
+    right: 0;
+    z-index: 70;
+    width: min(25rem, calc(100vw - 2rem));
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    color: var(--text);
+    background: var(--surface);
+    box-shadow: 0 24px 60px rgb(4 18 32 / 22%);
+}
+
+.household-notification-dropdown[hidden] {
+    display: none;
+}
+
+.notification-dropdown-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.05rem 0.85rem;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+}
+
+.notification-dropdown-header strong,
+.notification-dropdown-header small {
+    display: block;
+}
+
+.notification-dropdown-header strong {
+    color: var(--text);
+    font-size: 1rem;
+}
+
+.notification-dropdown-header small {
+    margin-top: 0.15rem;
+    color: var(--muted);
+    font-size: 0.74rem;
+}
+
+.notification-live-dot {
+    display: none;
+    width: 0.62rem;
+    height: 0.62rem;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: var(--danger);
+    box-shadow: 0 0 0 0.28rem color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.household-notification-button.has-unread + .household-notification-dropdown .notification-live-dot {
+    display: block;
+}
+
+.notification-dropdown-list {
+    max-height: min(25rem, calc(100dvh - 11rem));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+}
+
+.notification-dropdown-item {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 2.35rem minmax(0, 1fr) 0.55rem;
+    align-items: start;
+    gap: 0.75rem;
+    padding: 0.9rem 1rem;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    color: var(--text);
+    background: var(--surface);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background 150ms ease;
+}
+
+.notification-dropdown-item:hover,
+.notification-dropdown-item:focus-visible {
+    background: var(--surface-soft);
+}
+
+.notification-dropdown-item.is-unread {
+    background: color-mix(in srgb, var(--danger) 6%, var(--surface));
+}
+
+.notification-dropdown-item.is-unread:hover,
+.notification-dropdown-item.is-unread:focus-visible {
+    background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+}
+
+.notification-dropdown-icon {
+    display: grid;
+    width: 2.35rem;
+    height: 2.35rem;
+    place-items: center;
+    border-radius: 999px;
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 11%, var(--surface));
+}
+
+.notification-dropdown-item.is-unread .notification-dropdown-icon {
+    color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+}
+
+.notification-dropdown-copy {
+    display: block;
+    min-width: 0;
+}
+
+.notification-dropdown-copy strong,
+.notification-dropdown-copy > span,
+.notification-dropdown-copy small {
+    display: block;
+}
+
+.notification-dropdown-copy strong {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 0.84rem;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.notification-dropdown-copy > span {
+    display: -webkit-box;
+    margin-top: 0.2rem;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 0.77rem;
+    line-height: 1.4;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.notification-dropdown-copy small {
+    margin-top: 0.35rem;
+    color: var(--muted);
+    font-size: 0.67rem;
+}
+
+.notification-dropdown-unread-dot {
+    display: none;
+    width: 0.5rem;
+    height: 0.5rem;
+    align-self: center;
+    border-radius: 999px;
+    background: var(--danger);
+}
+
+.notification-dropdown-item.is-unread .notification-dropdown-unread-dot {
+    display: block;
+}
+
+.notification-dropdown-empty {
+    display: grid;
+    min-height: 11rem;
+    place-items: center;
+    align-content: center;
+    gap: 0.35rem;
+    padding: 1.5rem;
+    color: var(--muted);
+    text-align: center;
+}
+
+.notification-dropdown-empty > i {
+    margin-bottom: 0.3rem;
+    color: var(--primary-dark);
+    font-size: 1.5rem;
+}
+
+.notification-dropdown-empty strong {
+    color: var(--text);
+    font-size: 0.88rem;
+}
+
+.notification-dropdown-empty span {
+    font-size: 0.76rem;
+}
+
+.notification-dropdown-empty.is-error {
+    color: var(--danger);
+}
+
+.notification-dropdown-footer {
+    width: 100%;
+    min-height: 2.85rem;
+    padding: 0.65rem 1rem;
+    border: 0;
+    border-top: 1px solid var(--line);
+    color: var(--primary-dark);
+    background: var(--surface);
+    font-size: 0.78rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.notification-dropdown-footer:hover,
+.notification-dropdown-footer:focus-visible {
+    background: var(--surface-soft);
+}
+
+html.dark .household-notification-dropdown {
+    box-shadow: 0 24px 60px rgb(0 6 16 / 42%);
+}
+
+@media (max-width: 575.98px) {
+    .household-notification-button > span:not(.header-action-count) {
+        display: none;
+    }
+
+    .household-notification-dropdown {
+        position: fixed;
+        top: 4.4rem;
+        right: 0.65rem;
+        left: 0.65rem;
+        width: auto;
+    }
+}
+
+/* Consumption history filters ---------------------------------------- */
+.history-filter-panel {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    padding: clamp(1.15rem, 2.2vw, 1.5rem);
+    background:
+        radial-gradient(circle at 96% 0%, color-mix(in srgb, var(--primary) 10%, transparent), transparent 16rem),
+        var(--surface);
+}
+
+.history-filter-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.25rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--line);
+}
+
+.history-filter-heading {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.9rem;
+}
+
+.history-filter-heading-icon {
+    display: grid;
+    width: 2.75rem;
+    height: 2.75rem;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 1px solid color-mix(in srgb, var(--primary) 25%, var(--line));
+    border-radius: 0.85rem;
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 9%, var(--surface));
+    font-size: 1.1rem;
+}
+
+.history-filter-heading .eyebrow {
+    margin: 0 0 0.22rem;
+}
+
+.history-filter-heading h2 {
+    margin: 0;
+    color: var(--text);
+    font-size: clamp(1.1rem, 2vw, 1.35rem);
+    letter-spacing: -0.025em;
+}
+
+.history-filter-heading p:last-child {
+    margin: 0.28rem 0 0;
+    color: var(--muted);
+    font-size: 0.78rem;
+}
+
+.history-export-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 0.5rem;
+}
+
+.history-export-actions .button {
+    min-height: 2.45rem;
+    gap: 0.45rem;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.76rem;
+}
+
+.history-filter-form {
+    display: grid;
+    grid-template-columns: minmax(9rem, 0.85fr) minmax(9rem, 0.85fr) minmax(14rem, 1.45fr) minmax(6rem, 0.5fr) auto;
+    align-items: end;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+.history-filter-field {
+    display: grid;
+    min-width: 0;
+    gap: 0.38rem;
+}
+
+.history-filter-field > span:first-child {
+    color: var(--muted);
+    font-size: 0.67rem;
+    font-weight: 800;
+    letter-spacing: 0.075em;
+    text-transform: uppercase;
+}
+
+.history-filter-control {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    align-items: center;
+}
+
+.history-filter-control > i {
+    position: absolute;
+    z-index: 1;
+    left: 0.75rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+    pointer-events: none;
+}
+
+body.page .history-filter-control :is(input, select) {
+    width: 100%;
+    min-width: 0;
+    min-height: 2.7rem;
+    margin: 0;
+    padding: 0.62rem 0.72rem 0.62rem 2.15rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 0.72rem;
+    color: var(--text);
+    background: var(--surface);
+    font-size: 0.78rem;
+    box-shadow: 0 1px 2px rgb(20 36 56 / 3%);
+}
+
+body.page .history-filter-control :is(input, select):hover {
+    border-color: color-mix(in srgb, var(--primary) 45%, var(--line-strong));
+}
+
+body.page .history-filter-control :is(input, select):focus {
+    border-color: var(--primary);
+    outline: 0;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.history-filter-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.history-filter-buttons .button {
+    min-height: 2.7rem;
+    gap: 0.42rem;
+    padding-inline: 0.8rem;
+    white-space: nowrap;
+}
+
+html.dark .history-filter-panel {
+    background:
+        radial-gradient(circle at 96% 0%, color-mix(in srgb, var(--primary) 11%, transparent), transparent 16rem),
+        var(--surface);
+}
+
+html.dark body.page .history-filter-control :is(input, select) {
+    color: var(--text);
+    border-color: var(--line-strong);
+    background: var(--surface-soft);
+    box-shadow: none;
+}
+
+@media (max-width: 1180px) {
+    .history-filter-form {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .history-filter-search {
+        grid-column: 1 / -1;
+    }
+
+    .history-filter-rows {
+        max-width: 8rem;
+    }
+
+    .history-filter-buttons {
+        justify-content: flex-end;
+    }
+}
+
+@media (max-width: 767px) {
+    .history-filter-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .history-export-actions {
+        width: 100%;
+    }
+
+    .history-export-actions .button {
+        flex: 1 1 0;
+    }
+}
+
+@media (max-width: 520px) {
+    .history-filter-heading {
+        align-items: flex-start;
+    }
+
+    .history-filter-heading-icon {
+        width: 2.45rem;
+        height: 2.45rem;
+    }
+
+    .history-filter-form {
+        grid-template-columns: 1fr;
+    }
+
+    .history-filter-search {
+        grid-column: auto;
+    }
+
+    .history-filter-rows {
+        max-width: none;
+    }
+
+    .history-filter-buttons {
+        justify-content: stretch;
+    }
+
+    .history-filter-buttons .button {
+        flex: 1 1 0;
+    }
+}
+
+/* Balance five history summary cards without leaving an empty grid slot. */
+@media (min-width: 1101px) {
+    .history-summary-grid {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+
+    .history-summary-grid > .metric-card {
+        grid-column: span 2;
+    }
+
+    .history-summary-grid > .metric-card:nth-last-child(-n + 2) {
+        grid-column: span 3;
+    }
+}
+
+@media (min-width: 768px) and (max-width: 1100px) {
+    .history-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .history-summary-grid > .metric-card {
+        grid-column: span 1;
+    }
+
+    .history-summary-grid > .metric-card:last-child {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 767px) {
+    .history-summary-grid > .metric-card {
+        grid-column: auto;
+    }
+}
+
+body[data-page="household"] [data-history-chart].is-empty {
+    min-height: 10.5rem;
+    margin-top: 0.5rem;
+    padding: 0;
+}
+
+body[data-page="household"] [data-history-chart].is-empty::before,
+body[data-page="household"] [data-history-chart].is-empty::after {
+    display: none;
+}
+
+body[data-page="household"] [data-history-chart].is-empty .chart-empty-state {
+    min-height: 9.5rem;
+    padding: 1.25rem;
+}
+
+/* Compact household summary ------------------------------------------
+ * Present the six headline readings as one cohesive surface instead of
+ * six full-size cards. The live helper copy remains available to assistive
+ * technology without repeating the visible metric status.
+ */
+body[data-page="household"] .metric-overview-grid {
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    background: var(--line);
+    box-shadow: 0 12px 30px rgb(20 36 56 / 7%);
+}
+
+body[data-page="household"] .metric-overview-grid > .metric-card {
+    display: grid;
+    grid-template-areas:
+        "icon label badge"
+        "icon value value";
+    grid-template-columns: 1.85rem minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    min-height: 5.75rem;
+    align-content: center;
+    justify-content: initial;
+    column-gap: 0.75rem;
+    row-gap: 0.22rem;
+    padding: 0.8rem 1rem;
+    border: 0;
+    border-radius: 0;
+    background: var(--surface);
+    box-shadow: none;
+}
+
+body[data-page="household"] .metric-overview-grid > .metric-card-primary {
+    border: 0;
+    background: var(--surface);
+}
+
+body[data-page="household"] .metric-overview-grid .metric-card-top {
+    display: contents;
+}
+
+body[data-page="household"] .metric-overview-grid .metric-card-icon {
+    grid-area: icon;
+    width: 1.85rem;
+    height: 1.85rem;
+    align-self: center;
+    border-radius: 0.6rem;
+    font-size: 0.82rem;
+}
+
+body[data-page="household"] .metric-overview-grid .metric-card-label {
+    grid-area: label;
+    align-self: end;
+    overflow: hidden;
+    font-size: 0.68rem;
+    letter-spacing: 0.045em;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body[data-page="household"] .metric-overview-grid .metric-card-badge {
+    grid-area: badge;
+    align-self: end;
+    padding: 0.18rem 0.4rem;
+    font-size: 0.6rem;
+    line-height: 1.2;
+}
+
+body[data-page="household"] .metric-overview-grid .metric-card > strong,
+body[data-page="household"] .metric-overview-grid .metric-card-primary > strong {
+    grid-area: value;
+    min-width: 0;
+    min-height: 0;
+    align-self: start;
+    overflow: hidden;
+    font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body[data-page="household"] .metric-overview-grid .metric-card > small {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+html.dark body[data-page="household"] .metric-overview-grid {
+    background: var(--line);
+    box-shadow: 0 14px 34px rgb(0 7 18 / 24%);
+}
+
+html.dark body[data-page="household"] .metric-overview-grid > .metric-card,
+html.dark body[data-page="household"] .metric-overview-grid > .metric-card-primary {
+    background: var(--surface);
+    box-shadow: none;
+}
+
+@media (min-width: 576px) and (max-width: 767px) {
+    body[data-page="household"] .metric-overview-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 575px) {
+    body[data-page="household"] .metric-overview-grid {
+        grid-template-columns: 1fr;
+    }
+
+    body[data-page="household"] .metric-overview-grid > .metric-card {
+        min-height: 4.9rem;
+        padding-block: 0.7rem;
+    }
+}
+
+@media (max-width: 1100px) {
+    body[data-page="household"] .billing-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 600px) {
+    body[data-page="household"] .billing-summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    body[data-page="household"] .household-billing-heading {
+        align-items: flex-start;
+    }
+}
+
+/* Full-width household data panels and billing details ---------------- */
+body[data-page="household"] .household-data-panel {
+    padding: clamp(1rem, 2vw, 1.35rem);
+}
+
+body[data-page="household"] .household-data-panel .panel-head {
+    align-items: center;
+}
+
+body[data-page="household"] .household-data-panel .table {
+    width: 100%;
+    max-width: none;
+    margin-top: 1.1rem;
+}
+
+body[data-page="household"] .household-data-panel :is(.table-head, .table-row) {
+    width: 100%;
+    grid-template-columns: minmax(10rem, 1.4fr) repeat(4, minmax(7.5rem, 1fr));
+}
+
+body[data-page="household"] .household-data-panel .table-body > .table-empty-state {
+    min-height: 8.25rem;
+    align-content: center;
+    border: 0;
+    border-radius: 0;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 5%, var(--surface)), var(--surface));
+}
+
+body[data-page="household"] .household-data-panel .table-empty-state span {
+    max-width: 34rem;
+    font-size: 0.82rem;
+    line-height: 1.5;
+}
+
+body[data-page="household"] .household-billing-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+}
+
+body[data-page="household"] .household-billing-grid > .panel {
+    display: flex;
+    height: 100%;
+    flex-direction: column;
+    padding: clamp(1rem, 2vw, 1.35rem);
+}
+
+body[data-page="household"] .billing-calculation-list:has(.billing-empty-state) {
+    margin-top: 1rem;
+    border-top: 0;
+}
+
+body[data-page="household"] .billing-empty-state {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 2.5rem minmax(0, 1fr);
+    align-items: center;
+    gap: 0.85rem;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: 0.85rem;
+    background: var(--surface-soft);
+}
+
+body[data-page="household"] .billing-empty-icon {
+    display: grid;
+    width: 2.5rem;
+    height: 2.5rem;
+    place-items: center;
+    border-radius: 0.72rem;
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+    font-size: 1rem;
+}
+
+body[data-page="household"] .billing-empty-state > div,
+body[data-page="household"] .billing-reading-empty > div {
+    display: grid;
+    min-width: 0;
+    gap: 0.18rem;
+}
+
+body[data-page="household"] .billing-empty-state strong,
+body[data-page="household"] .billing-reading-empty strong {
+    color: var(--text);
+    font-size: 0.88rem;
+}
+
+body[data-page="household"] .billing-empty-state span,
+body[data-page="household"] .billing-reading-empty span {
+    color: var(--muted);
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+body[data-page="household"] .billing-explanation {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    margin-top: auto;
+}
+
+body[data-page="household"] .billing-explanation > i {
+    margin-top: 0.08rem;
+    flex: 0 0 auto;
+}
+
+body[data-page="household"] .billing-meter-summary {
+    margin-top: 1rem;
+}
+
+body[data-page="household"] .billing-latest-reading {
+    flex: 1 1 auto;
+}
+
+body[data-page="household"] .billing-reading-empty {
+    display: flex;
+    min-height: 5.25rem;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.75rem 0.1rem;
+}
+
+body[data-page="household"] .billing-reading-empty > i {
+    display: grid;
+    width: 2.35rem;
+    height: 2.35rem;
+    flex: 0 0 2.35rem;
+    place-items: center;
+    border-radius: 0.7rem;
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+}
+
+html.dark body[data-page="household"] .household-data-panel .table-body > .table-empty-state {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 6%, var(--surface)), var(--surface));
+}
+
+@media (max-width: 767px) {
+    body[data-page="household"] .household-billing-grid {
+        grid-template-columns: 1fr;
+    }
+
+    body[data-page="household"] .household-data-panel .table-body > .table-empty-state {
+        min-height: 7rem;
+    }
+}
+
+/* Compact account settings ------------------------------------------- */
+body[data-page="household"] .account-settings-intro {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.25rem 0.15rem 0.85rem;
+    border-bottom: 1px solid var(--line);
+}
+
+body[data-page="household"] .account-settings-intro-icon,
+body[data-page="household"] .account-settings-card-icon {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 11%, var(--surface));
+}
+
+body[data-page="household"] .account-settings-intro-icon {
+    width: 2.65rem;
+    height: 2.65rem;
+    border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--line));
+    border-radius: 0.78rem;
+}
+
+body[data-page="household"] .account-settings-intro > div {
+    min-width: 0;
+}
+
+body[data-page="household"] .account-settings-intro h1 {
+    margin: 0.12rem 0 0;
+    color: var(--text);
+    font-size: clamp(1.25rem, 2vw, 1.55rem);
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+}
+
+body[data-page="household"] .account-settings-intro p:last-child {
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+body[data-page="household"] .account-settings-intro [data-account-profile-state] {
+    margin-left: auto;
+    flex: 0 0 auto;
+}
+
+body[data-page="household"] .account-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 0.85rem;
+}
+
+body[data-page="household"] .account-settings-card {
+    min-width: 0;
+    padding: 1rem 1.05rem;
+    border-radius: 1rem;
+    background: var(--surface);
+    box-shadow: 0 12px 30px rgb(20 36 56 / 7%);
+}
+
+body[data-page="household"] .account-settings-card-head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding-bottom: 0.8rem;
+    border-bottom: 1px solid var(--line);
+}
+
+body[data-page="household"] .account-settings-card-icon {
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: 0.7rem;
+    font-size: 0.95rem;
+}
+
+body[data-page="household"] .account-settings-card-head > div {
+    min-width: 0;
+}
+
+body[data-page="household"] .account-settings-card h2 {
+    margin: 0.12rem 0 0;
+    color: var(--text);
+    font-size: 1rem;
+    letter-spacing: -0.015em;
+}
+
+body[data-page="household"] .account-settings-card-head p:last-child {
+    margin: 0.18rem 0 0;
+    color: var(--muted);
+    font-size: 0.75rem;
+    line-height: 1.4;
+}
+
+body[data-page="household"] .compact-settings-form {
+    gap: 0.65rem;
+    margin-top: 0.8rem;
+}
+
+body[data-page="household"] .compact-settings-form label {
+    gap: 0.3rem;
+    color: var(--text);
+    font-size: 0.76rem;
+    font-weight: 750;
+}
+
+body[data-page="household"] .compact-settings-form input {
+    min-height: 2.5rem;
+    padding: 0.6rem 0.72rem;
+    border-radius: 0.68rem;
+    font-size: 0.82rem;
+}
+
+body[data-page="household"] .account-settings-form-footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 2.5rem;
+    margin-top: 0.1rem;
+}
+
+body[data-page="household"] .account-settings-form-footer .button {
+    grid-column: 2;
+    min-height: 2.5rem;
+    padding: 0.62rem 0.85rem;
+    font-size: 0.78rem;
+}
+
+body[data-page="household"] .account-settings-form-footer .form-feedback {
+    grid-column: 1;
+    grid-row: 1;
+    margin: 0;
+    padding: 0.6rem 0.7rem;
+    font-size: 0.74rem;
+}
+
+html.dark body[data-page="household"] .account-settings-card {
+    border-color: var(--line);
+    background: var(--surface);
+    box-shadow: 0 14px 34px rgb(0 7 18 / 24%);
+}
+
+@media (max-width: 900px) {
+    body[data-page="household"] .account-settings-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 575px) {
+    body[data-page="household"] .account-settings-intro {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    body[data-page="household"] .account-settings-intro [data-account-profile-state] {
+        margin-left: 3.5rem;
+    }
+
+    body[data-page="household"] .account-settings-form-footer {
+        grid-template-columns: 1fr;
+    }
+
+    body[data-page="household"] .account-settings-form-footer .button {
+        grid-column: 1;
+        width: 100%;
+    }
+
+    body[data-page="household"] .account-settings-form-footer .form-feedback {
+        grid-column: 1;
+        grid-row: auto;
+    }
+}
+
+/* Unified public landing experience ---------------------------------- */
+body.page[data-page="home"] .shell {
+    gap: 1.15rem;
+    padding-top: 1.15rem;
+    padding-bottom: 1.25rem;
+}
+
+body.page[data-page="home"] .landing-hero {
+    gap: clamp(1.5rem, 4vw, 3rem);
+    min-height: 0;
+    padding: clamp(1.75rem, 4vw, 3rem);
+    border-radius: 1.15rem;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+
+body.page[data-page="home"] .landing-hero::before {
+    right: -16rem;
+    bottom: -17rem;
+    width: 32rem;
+    height: 28rem;
+    border-width: 3rem;
+    opacity: 0.7;
+}
+
+body.page[data-page="home"] .landing-hero-copy {
+    max-width: 32rem;
+}
+
+body.page[data-page="home"] .landing-hero h1 {
+    margin: 0.7rem 0 0.9rem;
+    font-size: clamp(2.6rem, 5vw, 4.3rem);
+    line-height: 0.98;
+}
+
+body.page[data-page="home"] .landing-lede {
+    max-width: 31rem;
+    font-size: 0.98rem;
+    line-height: 1.6;
+}
+
+body.page[data-page="home"] .landing-hero .hero-actions {
+    margin-top: 1.35rem;
+}
+
+body.page[data-page="home"] :is(.landing-hero, .landing-bottom-cta) .button {
+    gap: 0.42rem;
+}
+
+body.page[data-page="home"] .landing-proof {
+    gap: 0.7rem 1rem;
+    margin-top: 1.25rem;
+}
+
+body.page[data-page="home"] .landing-preview {
+    min-height: 0;
+}
+
+body.page[data-page="home"] .preview-glow {
+    width: 14rem;
+    height: 14rem;
+    opacity: 0.65;
+}
+
+body.page[data-page="home"] .preview-card {
+    width: min(100%, 22rem);
+    padding: 1.05rem;
+    border-color: var(--line);
+    border-radius: 1rem;
+    background: var(--surface-soft);
+    box-shadow: 0 14px 34px rgb(20 36 56 / 10%);
+    transform: none;
+}
+
+body.page[data-page="home"] .preview-header {
+    padding-bottom: 0.8rem;
+}
+
+body.page[data-page="home"] .preview-main-stat {
+    padding: 0.9rem 0 0.35rem;
+}
+
+body.page[data-page="home"] .preview-main-stat strong {
+    font-size: 2.55rem;
+}
+
+body.page[data-page="home"] .preview-chart {
+    height: 6rem;
+}
+
+body.page[data-page="home"] .preview-days {
+    padding-bottom: 0.85rem;
+}
+
+body.page[data-page="home"] .landing-strip {
+    gap: 0;
+    padding: 0.8rem 1rem;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    background: var(--surface);
+    box-shadow: 0 8px 24px rgb(20 36 56 / 5%);
+}
+
+body.page[data-page="home"] .landing-strip > div {
+    min-height: 2.6rem;
+}
+
+body.page[data-page="home"] .landing-features {
+    padding: 1.15rem 0 0;
+}
+
+body.page[data-page="home"] .section-heading {
+    margin-bottom: 1rem;
+}
+
+body.page[data-page="home"] :is(.section-heading, .home-about-copy) h2 {
+    font-size: clamp(1.55rem, 2.6vw, 2.15rem);
+}
+
+body.page[data-page="home"] .feature-grid {
+    gap: 0.75rem;
+}
+
+body.page[data-page="home"] .feature-card {
+    min-height: 0;
+    padding: 1.15rem;
+    border-radius: 1rem;
+    background: var(--surface);
+    box-shadow: 0 8px 24px rgb(20 36 56 / 5%);
+}
+
+body.page[data-page="home"] .feature-card:hover {
+    box-shadow: 0 12px 28px rgb(20 36 56 / 9%);
+    transform: translateY(-2px);
+}
+
+body.page[data-page="home"] .feature-icon {
+    width: 2.35rem;
+    height: 2.35rem;
+    margin-bottom: 0.85rem;
+    border-radius: 0.7rem;
+    font-size: 1rem;
+}
+
+body.page[data-page="home"] .feature-card > p:not(.eyebrow) {
+    min-height: 0;
+    margin: 0.6rem 0 0.9rem;
+    font-size: 0.84rem;
+    line-height: 1.55;
+}
+
+body.page[data-page="home"] .feature-card a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+body.page[data-page="home"] .home-about {
+    gap: 1.25rem;
+    padding: 1.35rem;
+    border-radius: 1rem;
+    box-shadow: 0 8px 24px rgb(20 36 56 / 5%);
+}
+
+body.page[data-page="home"] .home-about-copy p:last-child {
+    font-size: 0.88rem;
+    line-height: 1.55;
+}
+
+body.page[data-page="home"] .home-about-stats div {
+    padding: 0.75rem;
+}
+
+body.page[data-page="home"] .landing-bottom-cta {
+    padding: 1.3rem 1.4rem;
+    border-radius: 1rem;
+    box-shadow: 0 10px 28px rgb(20 36 56 / 8%);
+}
+
+body.page[data-page="home"] .landing-bottom-cta h2 {
+    font-size: clamp(1.35rem, 2.4vw, 1.9rem);
+}
+
+body.page[data-page="home"] .home-footer {
+    padding: 0.5rem 0 0;
+}
+
+/* Purposeful sparse household states --------------------------------- */
+body[data-page="household"] :is(.household-status-panel, .household-notifications-panel) {
+    padding: clamp(1rem, 2vw, 1.25rem);
+}
+
+body[data-page="household"] .household-section-heading {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+body[data-page="household"] .household-section-icon {
+    display: grid;
+    width: 2.4rem;
+    height: 2.4rem;
+    flex: 0 0 2.4rem;
+    place-items: center;
+    border-radius: 0.72rem;
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 11%, var(--surface));
+}
+
+body[data-page="household"] .household-section-heading h2 {
+    margin: 0.12rem 0 0;
+    color: var(--text);
+    font-size: 1.05rem;
+}
+
+body[data-page="household"] .household-section-heading p:last-child {
+    margin: 0.2rem 0 0;
+    color: var(--muted);
+    font-size: 0.76rem;
+}
+
+body[data-page="household"] .household-status-panel .leak-banner {
+    margin: 0.9rem 0 0;
+}
+
+body[data-page="household"] .household-status-panel .summary-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 0.85rem;
+    background: var(--surface-soft);
+}
+
+body[data-page="household"] .household-status-panel .summary-list > div {
+    display: grid;
+    align-content: center;
+    justify-content: initial;
+    gap: 0.3rem;
+    min-height: 4.8rem;
+    padding: 0.8rem 1rem;
+    border-right: 1px solid var(--line);
+}
+
+body[data-page="household"] .household-status-panel .summary-list > div:last-child {
+    border-right: 0;
+}
+
+body[data-page="household"] .household-status-panel .summary-list dt {
+    font-size: 0.72rem;
+}
+
+body[data-page="household"] .household-status-panel .summary-list dd {
+    font-size: 0.88rem;
+}
+
+body[data-page="household"] .household-notifications-panel .notification-head {
+    align-items: center;
+}
+
+body[data-page="household"] .household-notifications-panel [data-notifications-list] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: none;
+    padding-right: 0;
+}
+
+body[data-page="household"] .household-notifications-panel .notification-card {
+    border-radius: 0.85rem;
+    background: var(--surface-soft);
+}
+
+body[data-page="household"] .notification-page-empty {
+    display: grid;
+    min-height: 12rem;
+    grid-column: 1 / -1;
+    place-items: center;
+    align-content: center;
+    gap: 0.3rem;
+    padding: 1.5rem;
+    border: 1px dashed var(--line-strong);
+    border-radius: 0.9rem;
+    color: var(--muted);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 4%, var(--surface)), var(--surface));
+    text-align: center;
+}
+
+body[data-page="household"] .notification-page-empty > i {
+    display: grid;
+    width: 2.7rem;
+    height: 2.7rem;
+    place-items: center;
+    margin-bottom: 0.35rem;
+    border-radius: 0.8rem;
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+    font-size: 1.15rem;
+}
+
+body[data-page="household"] .notification-page-empty strong {
+    color: var(--text);
+    font-size: 0.9rem;
+}
+
+body[data-page="household"] .notification-page-empty span {
+    font-size: 0.78rem;
+}
+
+body.page .button:disabled {
+    opacity: 0.48;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+}
+
+@media (max-width: 767px) {
+    body.page[data-page="home"] .landing-hero {
+        padding: 1.5rem 1.15rem;
+    }
+
+    body.page[data-page="home"] .landing-preview {
+        min-height: 0;
+    }
+
+    body.page[data-page="home"] .landing-strip {
+        gap: 0.65rem;
+    }
+
+    body[data-page="household"] .household-status-panel .summary-list,
+    body[data-page="household"] .household-notifications-panel [data-notifications-list] {
+        grid-template-columns: 1fr;
+    }
+
+    body[data-page="household"] .household-status-panel .summary-list > div {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+    }
+
+    body[data-page="household"] .household-status-panel .summary-list > div:last-child {
+        border-bottom: 0;
     }
 }

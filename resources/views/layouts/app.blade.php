@@ -25,7 +25,7 @@
                 @yield('admin-topbar')
             @else
                 <a href="{{ route('home') }}" class="brand" aria-label="Smart Water Monitoring home">
-                    <span class="brand-mark" aria-hidden="true"></span>
+                    @include('components.brand-mark')
                     <span>
                         <strong>Smart Water</strong>
                         <small>Monitoring System</small>
@@ -83,6 +83,7 @@
                 <aside id="household-sidebar" class="dashboard-sidebar household-sidebar panel" data-household-sidebar aria-label="Household navigation">
                     @yield('household-sidebar')
                 </aside>
+                <button class="household-sidebar-scrim" type="button" data-household-sidebar-dismiss aria-label="Close navigation" tabindex="-1"></button>
             @else
                 <aside class="dashboard-sidebar panel">
                     <div class="sidebar-brand">

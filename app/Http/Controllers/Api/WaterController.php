@@ -3,15 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\WaterReading;
 use App\Models\Device;
-use App\Services\WaterConsumptionService;
+use App\Models\WaterReading;
 use App\Services\BillingStatementService;
+use App\Services\WaterConsumptionService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Throwable;
 
 class WaterController extends Controller
@@ -89,94 +89,104 @@ class WaterController extends Controller
         $settings = $this->waterConsumptionService->resolveSettingsForUser($userId);
         $totalLiters = (float) $baseQuery->sum('liters_used');
         $totalCubicMeter = (float) $baseQuery->sum('cubic_meter');
+        $totalEstimatedBill = (float) $baseQuery->sum('estimated_bill');
         $readingCount = (int) $baseQuery->count();
-        $estimatedBill = max((float) $totalCubicMeter * (float) $settings->water_rate + (float) $settings->fixed_monthly_charge - (float) $settings->subsidy_deduction, 0);
-
-        $dailyPaginator = (clone $baseQuery)
-            ->with('device')
-            ->orderByDesc('recorded_at')
-            ->orderByDesc('id')
-            ->paginate($validated['per_page'] ?? 10)
-            ->withQueryString();
-
-        $dailyItems = $dailyPaginator->getCollection()->map(function (WaterReading $reading) use ($settings) {
-            $condition = 'normal';
-            if ($reading->is_possible_leak) {
-                $condition = 'leak';
-            } elseif ($reading->is_threshold_exceeded) {
-                $condition = 'threshold';
-            } else {
-                $hour = (int) $reading->recorded_at?->format('G');
-                $start = (int) $settings->quiet_hours_start;
-                $end = (int) $settings->quiet_hours_end;
-                $isNight = $start < $end
-                    ? $hour >= $start && $hour < $end
-                    : $hour >= $start || $hour < $end;
-                if ($isNight) {
-                    $condition = 'night';
-                }
-            }
-
-            return [
-                'id' => $reading->id,
-                'reading_id' => $reading->reading_id,
-                'device_name' => $reading->device_name,
-                'recorded_at' => $reading->recorded_at?->toISOString(),
-                'liters_used' => (float) $reading->liters_used,
-                'cubic_meter' => (float) $reading->cubic_meter,
-                'estimated_bill' => (float) $reading->estimated_bill,
-                'condition' => $condition,
-                'status' => $reading->is_possible_leak ? 'Leak Detected' : ($reading->is_threshold_exceeded ? 'Monthly Threshold Exceeded' : ($condition === 'night' ? 'Night-time Usage' : 'Normal')),
-            ];
-        })->all();
+        $driver = DB::connection()->getDriverName();
+        [$dailyPeriod, $weeklyPeriod, $monthlyPeriod, $hourExpression] = match ($driver) {
+            'mysql', 'mariadb' => [
+                'date(recorded_at)',
+                'date_sub(date(recorded_at), interval weekday(recorded_at) day)',
+                "date_format(recorded_at, '%Y-%m-01')",
+                'hour(recorded_at)',
+            ],
+            'pgsql' => [
+                'cast(recorded_at as date)',
+                "cast(date_trunc('week', recorded_at) as date)",
+                "to_char(date_trunc('month', recorded_at), 'YYYY-MM-01')",
+                'extract(hour from recorded_at)',
+            ],
+            default => [
+                'date(recorded_at)',
+                "date(recorded_at, '-' || ((cast(strftime('%w', recorded_at) as integer) + 6) % 7) || ' days')",
+                "date(recorded_at, 'start of month')",
+                "cast(strftime('%H', recorded_at) as integer)",
+            ],
+        };
 
         $nightCondition = $settings->quiet_hours_start < $settings->quiet_hours_end
-            ? "hour(recorded_at) >= {$settings->quiet_hours_start} and hour(recorded_at) < {$settings->quiet_hours_end}"
-            : "hour(recorded_at) >= {$settings->quiet_hours_start} or hour(recorded_at) < {$settings->quiet_hours_end}";
+            ? "{$hourExpression} >= {$settings->quiet_hours_start} and {$hourExpression} < {$settings->quiet_hours_end}"
+            : "{$hourExpression} >= {$settings->quiet_hours_start} or {$hourExpression} < {$settings->quiet_hours_end}";
+        $aggregateColumns = "sum(liters_used) as total_liters, sum(cubic_meter) as total_cubic_meter, sum(estimated_bill) as estimated_bill, sum(case when is_possible_leak = 1 then 1 else 0 end) as leak_count, sum(case when is_threshold_exceeded = 1 then 1 else 0 end) as limit_count, sum(case when ({$nightCondition}) then 1 else 0 end) as night_count";
+        $mapAggregates = static function ($rows) {
+            return $rows->map(function ($row) {
+                $condition = $row->leak_count > 0 ? 'leak' : ($row->limit_count > 0 ? 'threshold' : ($row->night_count > 0 ? 'night' : 'normal'));
+
+                return [
+                    'period' => $row->period,
+                    'total_liters' => (float) $row->total_liters,
+                    'total_cubic_meter' => (float) $row->total_cubic_meter,
+                    'estimated_bill' => (float) $row->estimated_bill,
+                    'leak_count' => (int) $row->leak_count,
+                    'limit_count' => (int) $row->limit_count,
+                    'night_count' => (int) $row->night_count,
+                    'condition' => $condition,
+                    'status' => $condition === 'leak' ? 'Leak Detected' : ($condition === 'threshold' ? 'Monthly Threshold Exceeded' : ($condition === 'night' ? 'Night-time Usage' : 'Normal')),
+                ];
+            })->values();
+        };
+
+        $dailyPaginator = (clone $baseQuery)
+            ->selectRaw("{$dailyPeriod} as period, {$aggregateColumns}")
+            ->groupBy(DB::raw($dailyPeriod))
+            ->orderByDesc('period')
+            ->paginate($validated['per_page'] ?? 10)
+            ->withQueryString();
+        $dailyItems = $mapAggregates($dailyPaginator->getCollection())->all();
 
         $weeklyItems = (clone $baseQuery)
-            ->selectRaw("date_sub(date(recorded_at), interval weekday(recorded_at) day) as period, sum(liters_used) as total_liters, sum(cubic_meter) as total_cubic_meter, sum(estimated_bill) as estimated_bill, sum(case when is_possible_leak = 1 then 1 else 0 end) as leak_count, sum(case when is_threshold_exceeded = 1 then 1 else 0 end) as limit_count, sum(case when ({$nightCondition}) then 1 else 0 end) as night_count")
-            ->groupBy(DB::raw('period'))
+            ->selectRaw("{$weeklyPeriod} as period, {$aggregateColumns}")
+            ->groupBy(DB::raw($weeklyPeriod))
             ->orderByDesc('period')
             ->get()
-            ->map(function ($row) {
-                $condition = $row->leak_count > 0 ? 'leak' : ($row->limit_count > 0 ? 'threshold' : ($row->night_count > 0 ? 'night' : 'normal'));
-
-                return [
-                    'period' => $row->period,
-                    'total_liters' => (float) $row->total_liters,
-                    'total_cubic_meter' => (float) $row->total_cubic_meter,
-                    'estimated_bill' => max((float) $row->total_cubic_meter * (float) $settings->water_rate + (float) $settings->fixed_monthly_charge - (float) $settings->subsidy_deduction, 0),
-                    'leak_count' => (int) $row->leak_count,
-                    'limit_count' => (int) $row->limit_count,
-                    'night_count' => (int) $row->night_count,
-                    'condition' => $condition,
-                    'status' => $condition === 'leak' ? 'Leak Detected' : ($condition === 'threshold' ? 'Monthly Threshold Exceeded' : ($condition === 'night' ? 'Night-time Usage' : 'Normal')),
-                ];
-            })
-            ->values();
+            ->pipe($mapAggregates);
 
         $monthlyItems = (clone $baseQuery)
-            ->selectRaw("date_format(recorded_at, '%Y-%m-01') as period, sum(liters_used) as total_liters, sum(cubic_meter) as total_cubic_meter, sum(estimated_bill) as estimated_bill, sum(case when is_possible_leak = 1 then 1 else 0 end) as leak_count, sum(case when is_threshold_exceeded = 1 then 1 else 0 end) as limit_count, sum(case when ({$nightCondition}) then 1 else 0 end) as night_count")
-            ->groupBy(DB::raw('period'))
+            ->selectRaw("{$monthlyPeriod} as period, {$aggregateColumns}")
+            ->groupBy(DB::raw($monthlyPeriod))
             ->orderByDesc('period')
             ->get()
-            ->map(function ($row) {
-                $condition = $row->leak_count > 0 ? 'leak' : ($row->limit_count > 0 ? 'threshold' : ($row->night_count > 0 ? 'night' : 'normal'));
+            ->pipe($mapAggregates);
 
-                return [
-                    'period' => $row->period,
-                    'total_liters' => (float) $row->total_liters,
-                    'total_cubic_meter' => (float) $row->total_cubic_meter,
-                    'estimated_bill' => max((float) $row->total_cubic_meter * (float) $settings->water_rate + (float) $settings->fixed_monthly_charge - (float) $settings->subsidy_deduction, 0),
-                    'leak_count' => (int) $row->leak_count,
-                    'limit_count' => (int) $row->limit_count,
-                    'night_count' => (int) $row->night_count,
-                    'condition' => $condition,
-                    'status' => $condition === 'leak' ? 'Leak Detected' : ($condition === 'threshold' ? 'Monthly Threshold Exceeded' : ($condition === 'night' ? 'Night-time Usage' : 'Normal')),
-                ];
-            })
-            ->values();
+        $historyMeta = [
+            'current_page' => $dailyPaginator->currentPage(),
+            'last_page' => $dailyPaginator->lastPage(),
+            'from' => $dailyPaginator->firstItem(),
+            'to' => $dailyPaginator->lastItem(),
+            'total' => $dailyPaginator->total(),
+        ];
+
+        if ($period !== 'daily') {
+            $perPage = $validated['per_page'] ?? 10;
+            $currentPage = $validated['page'] ?? 1;
+            $selectedItems = $period === 'weekly' ? $weeklyItems : $monthlyItems;
+            $total = $selectedItems->count();
+            $offset = ($currentPage - 1) * $perPage;
+            $pagedItems = $selectedItems->slice($offset, $perPage)->values();
+
+            if ($period === 'weekly') {
+                $weeklyItems = $pagedItems;
+            } else {
+                $monthlyItems = $pagedItems;
+            }
+
+            $historyMeta = [
+                'current_page' => $currentPage,
+                'last_page' => max(1, (int) ceil($total / $perPage)),
+                'from' => $pagedItems->isEmpty() ? null : $offset + 1,
+                'to' => $pagedItems->isEmpty() ? null : min($offset + $perPage, $total),
+                'total' => $total,
+            ];
+        }
 
         $chartItems = match ($period) {
             'weekly' => $weeklyItems,
@@ -191,7 +201,7 @@ class WaterController extends Controller
                     ? Carbon::parse($item['period'])->startOfWeek()->format('M j')
                     : ($period === 'monthly'
                         ? Carbon::parse($item['period'])->format('M Y')
-                        : Carbon::parse($item['recorded_at'])->format('M j, H:mm'));
+                        : Carbon::parse($item['period'])->format('M j'));
 
                 return [
                     'label' => $label,
@@ -205,11 +215,11 @@ class WaterController extends Controller
             'from' => $from->toDateString(),
             'to' => $to->toDateString(),
             'reading_count' => $readingCount,
-            'today_usage' => (float) $baseQuery->whereDate('recorded_at', now()->toDateString())->sum('liters_used'),
-            'week_usage' => (float) $baseQuery->where('recorded_at', '>=', now()->startOfWeek())->sum('liters_used'),
-            'month_usage' => (float) $baseQuery->where('recorded_at', '>=', now()->startOfMonth())->sum('liters_used'),
+            'today_usage' => (float) (clone $baseQuery)->whereDate('recorded_at', now()->toDateString())->sum('liters_used'),
+            'week_usage' => (float) (clone $baseQuery)->where('recorded_at', '>=', now()->startOfWeek())->sum('liters_used'),
+            'month_usage' => (float) (clone $baseQuery)->where('recorded_at', '>=', now()->startOfMonth())->sum('liters_used'),
             'average_daily_usage' => $readingCount > 0 ? round($totalLiters / max(1, $from->diffInDays($to) + 1), 4) : 0,
-            'estimated_bill' => round($estimatedBill, 2),
+            'estimated_bill' => round($totalEstimatedBill, 2),
             'water_rate' => (float) $settings->water_rate,
             'fixed_monthly_charge' => (float) $settings->fixed_monthly_charge,
             'subsidy_deduction' => (float) $settings->subsidy_deduction,
@@ -222,13 +232,7 @@ class WaterController extends Controller
             'monthly' => $monthlyItems,
             'chart' => $chart,
             'summary' => $summary,
-            'meta' => [
-                'current_page' => $dailyPaginator->currentPage(),
-                'last_page' => $dailyPaginator->lastPage(),
-                'from' => $dailyPaginator->firstItem(),
-                'to' => $dailyPaginator->lastItem(),
-                'total' => $dailyPaginator->total(),
-            ],
+            'meta' => $historyMeta,
         ]]);
     }
 
@@ -264,17 +268,20 @@ class WaterController extends Controller
         $registeredDevice = Device::query()->where('auth_user_id', $deviceUser->id)->first();
         if (! $registeredDevice || ! $deviceUser->isDevice() || ! $registeredDevice->household?->isHousehold()) {
             Log::warning('Rejected water telemetry from an unregistered device identity.', ['device_user_id' => $deviceUser->id]);
+
             return response()->json(['message' => 'This device is not registered with Smart Water.'], 403);
         }
 
         if ($registeredDevice->status !== 'active' || ! $deviceUser->isAccountActive()) {
             $this->recordTelemetryFailure($deviceUser, $registeredDevice, 'inactive_device');
+
             return response()->json(['message' => 'This municipal meter is not active.'], 403);
         }
         $targetUserId = $registeredDevice->household_id;
 
         if (isset($validated['user_id']) && (int) $validated['user_id'] !== (int) $targetUserId) {
             $this->recordTelemetryFailure($deviceUser, $registeredDevice, 'household_mismatch', $validated['reading_id']);
+
             return response()->json([
                 'message' => 'This device may only submit readings for its assigned household.',
             ], 403);

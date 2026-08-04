@@ -33,6 +33,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test User',
             'password' => Hash::make('password'),
             'role' => 'user',
+            'address' => '123 Sample Street',
             'account_number' => 'ACC-USER-0001',
             'email_verified_at' => now(),
             'is_active' => true,
@@ -55,6 +56,8 @@ class DatabaseSeeder extends Seeder
             'approved_at' => now(),
             'account_status' => User::ACCOUNT_STATUS_ACTIVE,
         ]);
+
+
 
         Device::updateOrCreate(['serial_number' => 'CORES3-DEMO-0001'], [
             'uuid' => '00000000-0000-4000-8000-000000000001',

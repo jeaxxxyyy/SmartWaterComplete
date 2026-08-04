@@ -217,7 +217,7 @@
                     <p class="eyebrow">Consumption trend</p>
                     <h2>Total water usage over the last 12 months</h2>
                 </div>
-                <span class="status-pill">mÂ³</span>
+                <span class="status-pill">m³</span>
             </div>
             <div class="chart-legend">
                 <span><i class="legend-dot usage-dot"></i>m³</span>

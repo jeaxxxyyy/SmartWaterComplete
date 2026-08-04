@@ -65,6 +65,13 @@ const saveTokenButton = $('[data-token-save]');
 const refreshButton = $('[data-refresh]');
 const householdSidebar = $('[data-household-sidebar]');
 const householdSidebarToggle = $('[data-household-sidebar-toggle]');
+const householdSidebarDismiss = $('[data-household-sidebar-dismiss]');
+const householdSidebarCollapse = $('[data-household-sidebar-collapse]');
+const notificationControl = $('[data-notification-control]');
+const notificationToggle = $('[data-notification-toggle]');
+const notificationDropdown = $('[data-notification-dropdown]');
+const notificationDropdownList = $('[data-notification-dropdown-list]');
+const notificationDropdownSummary = $('[data-notification-dropdown-summary]');
 const dashboardFilterForm = $('[data-reading-filters]');
 const consumptionFilterForm = $('[data-consumption-filters]');
 const householdUserFilterForm = $('[data-household-user-filters]');
@@ -101,6 +108,7 @@ const adminAnalyticsRange = $('[data-admin-analytics-range]');
 const householdAnalyticsRange = $('[data-household-analytics-range]');
 const adminAnalyticsCustom = $('[data-admin-analytics-custom]');
 const householdAnalyticsCustom = $('[data-household-analytics-custom]');
+const householdAnalyticsCustomToggle = $('[data-household-analytics-custom-toggle]');
 const adminAnalyticsFrom = $('[data-admin-analytics-from]');
 const adminAnalyticsTo = $('[data-admin-analytics-to]');
 const householdAnalyticsFrom = $('[data-household-analytics-from]');
@@ -154,10 +162,27 @@ const clearFieldErrors = () => {
 
 const setHouseholdAlertCount = (value) => {
     const count = Number(value ?? 0);
+    const hasUnread = count > 0;
     $$('[data-household-alert-count]').forEach((node) => {
         node.textContent = count;
-        node.hidden = count === 0;
+        node.hidden = !hasUnread;
     });
+    notificationToggle?.classList.toggle('has-unread', hasUnread);
+    notificationToggle?.setAttribute('aria-label', hasUnread
+        ? `Open notifications, ${count} unread`
+        : 'Open notifications');
+    if (notificationDropdownSummary) {
+        notificationDropdownSummary.textContent = hasUnread
+            ? `${count} unread message${count === 1 ? '' : 's'}`
+            : 'No unread messages';
+    }
+};
+
+const setNotificationDropdownOpen = (isOpen) => {
+    if (!notificationDropdown || !notificationToggle) return;
+    notificationDropdown.hidden = !isOpen;
+    notificationToggle.setAttribute('aria-expanded', String(isOpen));
+    notificationControl?.classList.toggle('is-open', isOpen);
 };
 
 const dashboardState = {
@@ -176,6 +201,7 @@ const historyState = {
 };
 let consumptionHistory = { daily: [], weekly: [], monthly: [] };
 let historyPeriod = 'daily';
+let historyReloadQueued = false;
 let notificationObserver = null;
 let householdChartObserver = null;
 let adminChartObserver = null;
@@ -677,7 +703,17 @@ const analyticsQuery = (select, fromInput, toInput, fallback) => buildQuery({
 
 const updateCustomAnalyticsRange = (select, container) => {
     if (!select || !container) return;
-    container.hidden = select.value !== 'custom';
+    const isCustom = select.value === 'custom';
+    container.hidden = !isCustom;
+    select.setAttribute('aria-expanded', String(isCustom));
+};
+
+const setHouseholdCustomRangeOpen = (isOpen) => {
+    if (!householdAnalyticsRange || !householdAnalyticsCustom) return;
+    const shouldOpen = Boolean(isOpen) && householdAnalyticsRange.value === 'custom';
+    householdAnalyticsCustom.hidden = !shouldOpen;
+    householdAnalyticsRange.setAttribute('aria-expanded', String(shouldOpen));
+    householdAnalyticsCustomToggle?.setAttribute('aria-expanded', String(shouldOpen));
 };
 
 const responseItems = (response) => {
@@ -771,11 +807,13 @@ const renderHouseholdAreaChart = (container, series, options = {}) => {
     const emptyMarkup = options.emptyMessage ?? '<div class="empty-state">No consumption history available yet.</div>';
 
     if (!hasData || !actualIndexes.length) {
+        container.classList.add('is-empty');
         container.dataset.chartSignature = JSON.stringify({ rows, state: 'empty' });
         container.innerHTML = emptyMarkup;
         return;
     }
 
+    container.classList.remove('is-empty');
     const chartRows = actualIndexes.map((index) => rows[index]);
     const signature = JSON.stringify({ chartRows, state: 'area' });
     if (container.dataset.chartSignature === signature) return;
@@ -994,6 +1032,52 @@ const redirectToRoleHome = async () => {
     }
 };
 
+const bootHomeSessionActions = () => {
+    const actions = $$('[data-home-session-action]');
+    if (page !== 'home' || !actions.length || !readToken()) return;
+
+    let destination = '';
+    const destinationPromise = requestJson('/api/me')
+        .then((response) => pathForUser(response.data))
+        .catch(() => {
+            persistToken('');
+            return '/login';
+        })
+        .then((target) => {
+            destination = target;
+
+            actions.forEach((action) => {
+                const label = $('[data-home-session-label]', action);
+                action.href = target;
+                action.removeAttribute('aria-busy');
+
+                if (target === '/login' && label) {
+                    label.textContent = action.dataset.signedOutLabel ?? 'Sign In';
+                }
+            });
+
+            return target;
+        });
+
+    actions.forEach((action) => {
+        const label = $('[data-home-session-label]', action);
+        action.dataset.signedOutLabel = label?.textContent?.trim() ?? 'Sign In';
+        action.href = '#';
+        action.setAttribute('aria-busy', 'true');
+
+        if (label) {
+            label.textContent = action.dataset.authenticatedLabel ?? 'Open Dashboard';
+        }
+
+        action.addEventListener('click', async (event) => {
+            if (destination) return;
+
+            event.preventDefault();
+            safeRedirect(await destinationPromise);
+        });
+    });
+};
+
 const handleAuthFailure = (error) => {
     if (error?.status === 401) {
         persistToken('');
@@ -1130,12 +1214,29 @@ const activeTab = (target) => {
     });
 };
 
+const completeLoginTransition = async (destination) => {
+    const transition = $('[data-login-transition]');
+    if (!transition) {
+        safeRedirect(destination);
+        return;
+    }
+
+    document.body.classList.add('login-is-transitioning');
+    transition.hidden = false;
+
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    await new Promise((resolve) => window.setTimeout(resolve, reducedMotion ? 250 : 850));
+    safeRedirect(destination);
+};
+
 const bootLoginPage = () => {
     const authStatus = $('[data-auth-status]');
 
-    const report = (message) => {
+    const report = (message, state = 'info') => {
         if (authStatus) {
             authStatus.textContent = message;
+            authStatus.hidden = !message;
+            authStatus.classList.toggle('is-error', state === 'error');
         }
     };
 
@@ -1146,8 +1247,13 @@ const bootLoginPage = () => {
     $$('[data-auth-form]').forEach((form) => {
         form.addEventListener('submit', async (event) => {
             event.preventDefault();
+            if (form.dataset.submitting === 'true') return;
+
+            const submitButton = $('button[type="submit"]', form);
             const formData = new FormData(form);
             const payload = Object.fromEntries(formData.entries());
+            form.dataset.submitting = 'true';
+            if (submitButton) submitButton.disabled = true;
 
             try {
                 if (form.dataset.authForm === 'login') {
@@ -1161,7 +1267,7 @@ const bootLoginPage = () => {
                     }
                     persistToken(response.data.token);
                     report('Login successful.');
-                    safeRedirect(destination);
+                    await completeLoginTransition(destination);
                     return;
                 }
 
@@ -1178,7 +1284,10 @@ const bootLoginPage = () => {
             } catch (error) {
                 report(handleAuthFailure(error)
                     ? 'Session expired.'
-                    : errorMessage(error, 'Unable to log in. Please check your credentials or contact the administrator.'));
+                    : errorMessage(error, 'Unable to log in. Please check your credentials or contact the administrator.'), 'error');
+            } finally {
+                form.dataset.submitting = 'false';
+                if (submitButton) submitButton.disabled = false;
             }
         });
     });
@@ -1197,7 +1306,7 @@ const renderReadings = (items) => {
 
     if (!items?.length) {
         containers.forEach((container) => {
-            container.innerHTML = '<div class="empty-state">No readings available for the selected account.</div>';
+            container.innerHTML = '<div class="table-empty-state"><i class="bi bi-broadcast" aria-hidden="true"></i><strong>No recent readings</strong><span>The connected meter has not submitted data for this account yet.</span></div>';
         });
         previews.forEach((container) => {
             container.innerHTML = '<div class="dashboard-empty-state"><strong>No recent readings yet</strong><span>Readings will appear here after the connected water meter sends an update.</span></div>';
@@ -1240,13 +1349,13 @@ const renderReadings = (items) => {
 };
 
 const renderHistorySummary = (summary) => {
+    setText('[data-history-period-label]', `${historyPeriod.charAt(0).toUpperCase() + historyPeriod.slice(1)} trend`);
     if (!summary) return;
     setText('[data-history-today-usage]', `${formatNumber(summary.today_usage, 3)} L`);
     setText('[data-history-week-usage]', `${formatNumber(summary.week_usage, 3)} L`);
     setText('[data-history-month-usage]', `${formatNumber(summary.month_usage, 3)} L`);
     setText('[data-history-estimated-bill]', formatCurrency(summary.estimated_bill, summary.currency));
     setText('[data-history-average-usage]', `${formatNumber(summary.average_daily_usage, 3)} L`);
-    setText('[data-history-period-label]', `${historyPeriod.charAt(0).toUpperCase() + historyPeriod.slice(1)} trend`);
 };
 
 const renderHistoryChart = (chartData = []) => {
@@ -1315,7 +1424,7 @@ const renderConsumptionHistory = () => {
     const items = consumptionHistory[historyPeriod] ?? [];
     historyTableHeadLabels(historyPeriod);
     if (!items.length) {
-        container.innerHTML = '<div class="empty-state">No consumption totals are available yet.</div>';
+        container.innerHTML = '<div class="table-empty-state"><i class="bi bi-bar-chart-line" aria-hidden="true"></i><strong>No usage records yet</strong><span>Try another period, or wait for the meter to submit readings.</span></div>';
         return;
     }
 
@@ -1355,6 +1464,35 @@ const notificationTypeLabel = (type) => ({
     threshold_exceeded: 'Usage threshold alert',
 }[type] ?? 'System notification');
 
+const renderNotificationDropdown = (items) => {
+    if (!notificationDropdownList) return;
+
+    const notifications = Array.isArray(items) ? items.slice(0, 6) : [];
+    if (!notifications.length) {
+        notificationDropdownList.innerHTML = `
+            <div class="notification-dropdown-empty">
+                <i class="bi bi-bell-slash" aria-hidden="true"></i>
+                <strong>You’re all caught up</strong>
+                <span>New messages will appear here.</span>
+            </div>`;
+        return;
+    }
+
+    notificationDropdownList.innerHTML = notifications.map((notification) => {
+        const isUnread = !notification.is_read;
+        return `
+            <button class="notification-dropdown-item${isUnread ? ' is-unread' : ''}" type="button" data-notification-dropdown-item data-notification-id="${notification.id}" data-notification-read="${notification.is_read ? '1' : '0'}">
+                <span class="notification-dropdown-icon" aria-hidden="true"><i class="bi ${notification.type === 'leak_alert' || notification.type === 'possible_leak' ? 'bi-exclamation-triangle' : 'bi-bell'}"></i></span>
+                <span class="notification-dropdown-copy">
+                    <strong>${escapeHtml(notification.title)}</strong>
+                    <span>${escapeHtml(notification.message)}</span>
+                    <small>${escapeHtml(notificationTypeLabel(notification.type))} · ${escapeHtml(formatCompactDateTime(notification.sent_at ?? notification.created_at))}</small>
+                </span>
+                <i class="notification-dropdown-unread-dot" aria-label="Unread"></i>
+            </button>`;
+    }).join('');
+};
+
 const renderNotifications = (items, selector = '[data-notifications-list]') => {
     const containers = $$(selector);
     if (!containers.length) {
@@ -1362,13 +1500,17 @@ const renderNotifications = (items, selector = '[data-notifications-list]') => {
     }
 
     const isPreview = selector === '[data-dashboard-notifications-list]';
+    if (!isPreview) {
+        const clearButton = $('[data-clear-notifications]');
+        if (clearButton) clearButton.disabled = !items?.length;
+    }
 
     if (!items?.length) {
         const emptyMessage = selector === '[data-dashboard-notifications-list]'
             ? '<div class="dashboard-empty-state"><strong>No recent notifications</strong><span>New alerts and service updates will appear here.</span></div>'
-            : 'No notifications yet.';
+            : '<div class="notification-page-empty"><i class="bi bi-bell-slash" aria-hidden="true"></i><strong>No notifications yet</strong><span>New alerts and service updates will appear here automatically.</span></div>';
         containers.forEach((container) => {
-            container.innerHTML = isPreview ? emptyMessage : `<div class="empty-state">${emptyMessage}</div>`;
+            container.innerHTML = emptyMessage;
         });
         return;
     }
@@ -1407,19 +1549,31 @@ const loadNotifications = async () => {
         const items = responseItems(response);
         renderNotifications(items);
         renderNotifications(items, '[data-dashboard-notifications-list]');
+        renderNotificationDropdown(items);
+        setHouseholdAlertCount(items.filter((item) => !item.is_read).length);
     } catch (error) {
         if (handleAuthFailure(error)) return;
         $$('[data-notifications-list], [data-dashboard-notifications-list]').forEach((container) => {
             container.innerHTML = '<div class="empty-state is-error">Unable to retrieve notifications. Try again.</div>';
         });
+        if (notificationDropdownList) {
+            notificationDropdownList.innerHTML = '<div class="notification-dropdown-empty is-error">Unable to load notifications.</div>';
+        }
     } finally {
         notificationRefreshInFlight = false;
     }
 };
 
 const loadConsumptionHistory = async () => {
-    if (historyRefreshInFlight || !readToken()) return;
+    if (!readToken()) return;
+    if (historyRefreshInFlight) {
+        historyReloadQueued = true;
+        return;
+    }
+
     historyRefreshInFlight = true;
+    const requestedPeriod = historyState.period;
+    $('[data-history-tabs]')?.setAttribute('aria-busy', 'true');
 
     try {
         const response = await requestJson(`/api/consumption-history${buildQuery({
@@ -1432,6 +1586,11 @@ const loadConsumptionHistory = async () => {
         })}`);
 
         const data = response.data ?? {};
+        if (requestedPeriod !== historyState.period) {
+            historyReloadQueued = true;
+            return;
+        }
+
         consumptionHistory = {
             daily: data.daily ?? [],
             weekly: data.weekly ?? [],
@@ -1451,6 +1610,11 @@ const loadConsumptionHistory = async () => {
         if (container) container.innerHTML = '<div class="empty-state is-error">Unable to retrieve consumption history. Try again.</div>';
     } finally {
         historyRefreshInFlight = false;
+        $('[data-history-tabs]')?.removeAttribute('aria-busy');
+        if (historyReloadQueued) {
+            historyReloadQueued = false;
+            loadConsumptionHistory();
+        }
     }
 };
 
@@ -1467,6 +1631,8 @@ const markNotificationRead = async (card) => {
             badge.classList.remove('status-chip-soft');
             badge.classList.add('status-chip-muted');
         }
+        card.classList.remove('is-unread');
+        $('.notification-dropdown-unread-dot', card)?.remove();
         const unreadCount = Math.max(0, Number($('[data-household-alert-count]')?.textContent ?? 0) - 1);
         setHouseholdAlertCount(unreadCount);
     } catch (error) {
@@ -1706,7 +1872,12 @@ const renderHouseholdBilling = (billing) => {
     setText('[data-billing-rate-effective]', billing?.rate_effective_date ? `Effective ${billing.rate_effective_date}` : 'No active rate configured');
     setText('[data-billing-balance]', calculation.remaining_balance === null || calculation.remaining_balance === undefined ? 'Not finalized' : formatCurrency(calculation.remaining_balance, currency));
     setText('[data-billing-record-type]', `${billingRecordTypeLabel(type)} · ${billing?.period?.label ?? 'Current period'}`);
-    setText('[data-billing-explanation]', unavailableReason);
+    setText(
+        '[data-billing-explanation]',
+        type === 'unavailable'
+            ? 'This estimate will update automatically after the missing meter data or billing rate becomes available.'
+            : unavailableReason,
+    );
 
     const typeChip = $('[data-billing-type-chip]');
     if (typeChip) {
@@ -1719,7 +1890,7 @@ const renderHouseholdBilling = (billing) => {
     const calculationContainer = $('[data-billing-calculation]');
     if (calculationContainer) {
         calculationContainer.innerHTML = type === 'unavailable'
-            ? `<div class="empty-state"><strong>Estimate unavailable</strong><span>${escapeHtml(unavailableReason)}</span></div>`
+            ? `<div class="billing-empty-state"><span class="billing-empty-icon" aria-hidden="true"><i class="bi bi-calculator"></i></span><div><strong>Estimate unavailable</strong><span>${escapeHtml(unavailableReason)}</span></div></div>`
             : `<div class="billing-calculation-row"><span>Consumption</span><strong>${formatCubicMeterValue(calculation.total_cubic_meter)} <small>${formatNumber(calculation.total_liters, 2)} L</small></strong></div>
                 <div class="billing-calculation-row"><span>Usage charge</span><strong>${formatCurrency(calculation.usage_charge, currency)}</strong></div>
                 <div class="billing-calculation-row"><span>Fixed monthly charge</span><strong>${formatCurrency(calculation.fixed_monthly_charge, currency)}</strong></div>
@@ -1732,7 +1903,7 @@ const renderHouseholdBilling = (billing) => {
         const meter = billing?.meter;
         meterContainer.innerHTML = meter
             ? `<div class="billing-meter-icon" aria-hidden="true">⌁</div><div><strong>${escapeHtml(meter.name ?? 'Assigned water meter')}</strong><small>${escapeHtml(meter.asset_number ?? meter.serial_number ?? 'Meter identity unavailable')}</small><span class="status-chip ${meter.is_online ? 'status-chip-soft' : 'status-chip-muted'}">${meter.is_online ? 'Online' : 'Offline'}</span></div>`
-            : '<div class="empty-state">No active meter is assigned to this household account.</div>';
+            : '<div class="billing-empty-state"><span class="billing-empty-icon" aria-hidden="true"><i class="bi bi-cpu"></i></span><div><strong>No meter assigned</strong><span>Contact the administrator to connect a household meter.</span></div></div>';
     }
 
     const latest = billing?.latest_reading;
@@ -1740,7 +1911,7 @@ const renderHouseholdBilling = (billing) => {
     if (latestContainer) {
         latestContainer.innerHTML = latest
             ? `<div><dt>Recorded</dt><dd>${escapeHtml(formatDateTime(latest.recorded_at))}</dd></div><div><dt>Flow rate</dt><dd>${formatNumber(latest.flow_rate)} L/min</dd></div><div><dt>Reading volume</dt><dd>${formatNumber(latest.liters_used, 2)} L · ${formatCubicMeterValue(latest.cubic_meter)}</dd></div><div><dt>Meter connection</dt><dd>${escapeHtml(normalizeConnectionStatus(latest.device_connection_status))}</dd></div>`
-            : '<div class="empty-state">No latest reading is available for this billing period.</div>';
+            : '<div class="billing-reading-empty"><i class="bi bi-activity" aria-hidden="true"></i><div><strong>No recent meter reading</strong><span>The latest billing-period reading will appear here automatically.</span></div></div>';
     }
 
     const history = Array.isArray(billing?.history) ? billing.history : [];
@@ -2096,6 +2267,13 @@ const applySummary = (summary) => {
     renderHouseholdSummaryCards(summaryData, latestReading, notifications);
 };
 
+const setHouseholdAnalyticsValue = (selector, value, isEmpty = false) => {
+    $$(selector).forEach((node) => {
+        node.textContent = value;
+        node.classList.toggle('is-empty', isEmpty);
+    });
+};
+
 const applyHouseholdAnalytics = (analytics) => {
     householdAnalytics = analytics ?? null;
     const period = analytics?.period ?? {};
@@ -2107,29 +2285,38 @@ const applyHouseholdAnalytics = (analytics) => {
     const latestMonth = Array.isArray(analytics?.monthly_consumption) ? analytics.monthly_consumption.at(-1) : null;
 
     setText('[data-household-analytics-timezone]', period.timezone ?? analytics?.timezone ?? 'UTC');
-    setText('[data-household-analytics-period]', period.from && period.to
+    const hasPeriod = Boolean(period.from && period.to);
+    const hasDaily = analytics?.daily_consumption !== null && analytics?.daily_consumption !== undefined;
+    const hasBill = current.estimated_bill !== null && current.estimated_bill !== undefined;
+    const hasPrevious = previous.total_liters !== null && previous.total_liters !== undefined;
+    const hasComparison = comparison.change_percent !== null && comparison.change_percent !== undefined;
+    const hasLeakHistory = Array.isArray(analytics?.leak_warning_history);
+    const hasLastReading = Boolean(analytics?.last_successful_meter_reading?.recorded_at);
+
+    setHouseholdAnalyticsValue('[data-household-analytics-period]', hasPeriod
         ? `${formatCompactDateTime(period.from)} – ${formatCompactDateTime(period.to)}`
-        : 'No analytics data available yet.');
-    setText('[data-household-daily-consumption]', analytics?.daily_consumption === null || analytics?.daily_consumption === undefined
-        ? 'No analytics data available yet.' : formatCubicMeters(analytics.daily_consumption));
-    setText('[data-household-weekly-consumption]', latestWeek ? formatCubicMeters(latestWeek.total_liters) : 'No analytics data available yet.');
-    setText('[data-household-monthly-consumption]', latestMonth ? formatCubicMeters(latestMonth.total_liters) : 'No analytics data available yet.');
-    setText('[data-household-analytics-bill]', current.estimated_bill === null || current.estimated_bill === undefined
-        ? 'No analytics data available yet.' : formatCurrency(current.estimated_bill));
-    setText('[data-household-previous-period]', previous.total_liters === null || previous.total_liters === undefined
-        ? 'No comparison data available'
-        : formatCubicMeters(previous.total_liters));
-    setText('[data-household-period-comparison]', comparison.change_percent === null || comparison.change_percent === undefined
-        ? 'No comparison data available'
-        : `${comparison.change_percent > 0 ? '+' : ''}${formatNumber(comparison.change_percent)}% (${comparison.direction})`);
-    setText('[data-household-highest-usage]', highest
+        : 'Choose a date range to begin', !hasPeriod);
+    setHouseholdAnalyticsValue('[data-household-daily-consumption]', hasDaily
+        ? formatCubicMeters(analytics.daily_consumption) : 'Awaiting readings', !hasDaily);
+    setHouseholdAnalyticsValue('[data-household-weekly-consumption]', latestWeek
+        ? formatCubicMeters(latestWeek.total_liters) : 'Awaiting readings', !latestWeek);
+    setHouseholdAnalyticsValue('[data-household-monthly-consumption]', latestMonth
+        ? formatCubicMeters(latestMonth.total_liters) : 'Awaiting readings', !latestMonth);
+    setHouseholdAnalyticsValue('[data-household-analytics-bill]', hasBill
+        ? formatCurrency(current.estimated_bill) : 'Not calculated yet', !hasBill);
+    setHouseholdAnalyticsValue('[data-household-previous-period]', hasPrevious
+        ? formatCubicMeters(previous.total_liters) : 'Awaiting comparison', !hasPrevious);
+    setHouseholdAnalyticsValue('[data-household-period-comparison]', hasComparison
+        ? `${comparison.change_percent > 0 ? '+' : ''}${formatNumber(comparison.change_percent)}% (${comparison.direction})`
+        : 'Awaiting comparison', !hasComparison);
+    setHouseholdAnalyticsValue('[data-household-highest-usage]', highest
         ? `${formatCompactDateTime(highest.period)} · ${formatCubicMeters(highest.total_liters)}`
-        : 'No analytics data available yet.');
-    setText('[data-household-leak-warning-count]', Array.isArray(analytics?.leak_warning_history)
-        ? analytics.leak_warning_history.length : 'No analytics data available yet.');
-    setText('[data-household-last-reading]', analytics?.last_successful_meter_reading?.recorded_at
+        : 'No usage recorded', !highest);
+    setHouseholdAnalyticsValue('[data-household-leak-warning-count]', hasLeakHistory
+        ? analytics.leak_warning_history.length : 'Not available', !hasLeakHistory);
+    setHouseholdAnalyticsValue('[data-household-last-reading]', hasLastReading
         ? formatDateTime(analytics.last_successful_meter_reading.recorded_at)
-        : 'No successful meter reading yet.');
+        : 'No reading recorded', !hasLastReading);
 };
 
 const setDashboardFeedback = (message = '', type = 'info') => {
@@ -2209,42 +2396,6 @@ const renderHouseholdSummaryCards = (summaryData, latestReading, notifications) 
     setText('[data-live-label]', latestReading ? 'Live' : 'Offline');
 };
 
-const renderHouseholdAnalyticsSummary = (analytics) => {
-    householdAnalytics = analytics ?? null;
-    const period = analytics?.period ?? {};
-    const current = analytics?.current_period ?? {};
-    const previous = analytics?.previous_period ?? {};
-    const comparison = analytics?.comparison ?? {};
-    const highest = analytics?.highest_usage_period ?? null;
-    const latestWeek = Array.isArray(analytics?.weekly_consumption) ? analytics.weekly_consumption.at(-1) : null;
-    const latestMonth = Array.isArray(analytics?.monthly_consumption) ? analytics.monthly_consumption.at(-1) : null;
-
-    setText('[data-household-analytics-timezone]', period.timezone ?? analytics?.timezone ?? 'UTC');
-    setText('[data-household-analytics-period]', period.from && period.to
-        ? `${formatCompactDateTime(period.from)} – ${formatCompactDateTime(period.to)}`
-        : 'No analytics data available yet.');
-    setText('[data-household-daily-consumption]', analytics?.daily_consumption === null || analytics?.daily_consumption === undefined
-        ? 'No analytics data available yet.' : formatCubicMeters(analytics.daily_consumption));
-    setText('[data-household-weekly-consumption]', latestWeek ? formatCubicMeters(latestWeek.total_liters) : 'No analytics data available yet.');
-    setText('[data-household-monthly-consumption]', latestMonth ? formatCubicMeters(latestMonth.total_liters) : 'No analytics data available yet.');
-    setText('[data-household-analytics-bill]', current.estimated_bill === null || current.estimated_bill === undefined
-        ? 'No analytics data available yet.' : formatCurrency(current.estimated_bill));
-    setText('[data-household-previous-period]', previous.total_liters === null || previous.total_liters === undefined
-        ? 'No comparison data available'
-        : formatCubicMeters(previous.total_liters));
-    setText('[data-household-period-comparison]', comparison.change_percent === null || comparison.change_percent === undefined
-        ? 'No comparison data available'
-        : `${comparison.change_percent > 0 ? '+' : ''}${formatNumber(comparison.change_percent)}% (${comparison.direction})`);
-    setText('[data-household-highest-usage]', highest
-        ? `${formatCompactDateTime(highest.period)} · ${formatCubicMeters(highest.total_liters)}`
-        : 'No analytics data available yet.');
-    setText('[data-household-leak-warning-count]', Array.isArray(analytics?.leak_warning_history)
-        ? analytics.leak_warning_history.length : 'No analytics data available yet.');
-    setText('[data-household-last-reading]', analytics?.last_successful_meter_reading?.recorded_at
-        ? formatDateTime(analytics.last_successful_meter_reading.recorded_at)
-        : 'No successful meter reading yet.');
-};
-
 const loadDashboard = async (options = {}) => {
     const { reschedule = true, manual = false } = options;
 
@@ -2265,9 +2416,10 @@ const loadDashboard = async (options = {}) => {
     dashboardRefreshInFlight = true;
     if (manual && refreshButton) {
         refreshButton.disabled = true;
-        refreshButton.textContent = 'Refreshing…';
+        refreshButton.classList.add('is-loading');
+        refreshButton.setAttribute('aria-busy', 'true');
+        refreshButton.setAttribute('aria-label', 'Refreshing dashboard data');
     }
-    if (manual) setDashboardFeedback('Refreshing dashboard data…', 'loading');
 
     try {
         const me = householdProfile ? { data: householdProfile } : await requestJson('/api/me');
@@ -2357,7 +2509,9 @@ const loadDashboard = async (options = {}) => {
         dashboardRefreshInFlight = false;
         if (manual && refreshButton) {
             refreshButton.disabled = false;
-            refreshButton.textContent = 'Refresh';
+            refreshButton.classList.remove('is-loading');
+            refreshButton.removeAttribute('aria-busy');
+            refreshButton.setAttribute('aria-label', 'Refresh dashboard data');
         }
     }
 };
@@ -2497,16 +2651,16 @@ const renderConsumptionMonitoring = (response) => {
             const latest = item.latest_reading;
             const condition = usage.condition ?? 'no_data';
             const meterLabel = meter
-                ? `<span class="table-primary">${escapeHtml(formatPersonalDisplay(meter.name))}</span><small class="table-secondary">${escapeHtml(meter.asset_number ?? meter.serial_number ?? 'Meter')}</small><small class="table-secondary">${escapeHtml(meter.status ?? 'Unknown')}${meter.is_online ? ' Â· Online' : ' Â· Offline'}</small>`
+                ? `<span class="table-primary">${escapeHtml(formatPersonalDisplay(meter.name))}</span><small class="table-secondary">${escapeHtml(meter.asset_number ?? meter.serial_number ?? 'Meter')}</small><small class="table-secondary">${escapeHtml(meter.status ?? 'Unknown')}${meter.is_online ? ' · Online' : ' · Offline'}</small>`
                 : '<span class="table-secondary">No meter assigned</span>';
             const latestLabel = latest
-                ? `<span class="table-primary">${escapeHtml(formatDateTime(latest.recorded_at))}</span><small class="table-secondary">${formatNumber(latest.flow_rate ?? 0)} L/min Â· ${formatNumber(latest.liters_used, 3)} L</small>`
+                ? `<span class="table-primary">${escapeHtml(formatDateTime(latest.recorded_at))}</span><small class="table-secondary">${formatNumber(latest.flow_rate ?? 0)} L/min · ${formatNumber(latest.liters_used, 3)} L</small>`
                 : '<span class="table-secondary">No reading in period</span>';
 
             return `<div class="table-row admin-table-row consumption-monitoring-row">
                 <span><strong class="table-primary">${escapeHtml(formatPersonalDisplay(household.name))}</strong><small class="table-secondary">${escapeHtml(household.account_number ?? household.email ?? 'No account number')}</small><small class="table-secondary">${escapeHtml(household.address ?? 'No address')}</small></span>
                 <span>${meterLabel}</span>
-                <span><strong class="table-primary">${formatNumber(usage.total_liters, 3)} L</strong><small class="table-secondary">${formatCubicMeterValue(usage.total_cubic_meter)} Â· ${formatNumber(usage.reading_count, 0)} readings</small></span>
+                <span><strong class="table-primary">${formatNumber(usage.total_liters, 3)} L</strong><small class="table-secondary">${formatCubicMeterValue(usage.total_cubic_meter)} · ${formatNumber(usage.reading_count, 0)} readings</small></span>
                 <span>${formatCurrency(usage.estimated_bill)}</span>
                 <span>${latestLabel}</span>
                 <span><span class="${consumptionConditionClass(condition)}">${consumptionConditionLabel(condition)}</span></span>
@@ -2941,7 +3095,7 @@ const renderAdminOverviewActivity = (analytics) => {
     container.innerHTML = activity.length
         ? activity.map((item) => {
             const label = String(item.action ?? 'system event').replaceAll('_', ' ').replace(/^./, (character) => character.toUpperCase());
-            return `<div class="admin-overview-list-item"><span class="admin-overview-list-icon"><i class="bi bi-clock-history" aria-hidden="true"></i></span><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description ?? 'Administrative event')} Â· ${escapeHtml(item.actor ?? 'System')} Â· ${escapeHtml(formatCompactDateTime(item.created_at))}</small></span></div>`;
+            return `<div class="admin-overview-list-item"><span class="admin-overview-list-icon"><i class="bi bi-clock-history" aria-hidden="true"></i></span><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description ?? 'Administrative event')} · ${escapeHtml(item.actor ?? 'System')} · ${escapeHtml(formatCompactDateTime(item.created_at))}</small></span></div>`;
         }).join('')
         : '<div class="empty-state">No recent administrative or device activity.</div>';
 };
@@ -3689,9 +3843,77 @@ const bootCommon = () => {
     setTokenInput();
     bootLogout();
 
+    $$('[data-visibility-toggle]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const input = $(button.dataset.visibilityToggle);
+            if (!input) return;
+
+            const shouldReveal = input.type === 'password';
+            input.type = shouldReveal ? 'text' : 'password';
+            button.setAttribute('aria-pressed', String(shouldReveal));
+            button.setAttribute('aria-label', shouldReveal ? 'Hide password' : 'Show password');
+            button.setAttribute('title', shouldReveal ? 'Hide password' : 'Show password');
+            const icon = $('i', button);
+            icon?.classList.toggle('bi-eye', !shouldReveal);
+            icon?.classList.toggle('bi-eye-slash', shouldReveal);
+        });
+    });
+
+    const closeHouseholdSidebar = () => {
+        householdSidebar?.classList.remove('is-open');
+        householdSidebarToggle?.setAttribute('aria-expanded', 'false');
+    };
+
+    const setHouseholdSidebarCollapsed = (isCollapsed, persist = false) => {
+        document.body.classList.toggle('household-sidebar-collapsed', isCollapsed);
+        if (householdSidebarCollapse) {
+            householdSidebarCollapse.setAttribute('aria-expanded', String(!isCollapsed));
+            householdSidebarCollapse.setAttribute('aria-label', isCollapsed ? 'Expand sidebar' : 'Collapse sidebar');
+            householdSidebarCollapse.setAttribute('title', isCollapsed ? 'Expand sidebar' : 'Collapse sidebar');
+        }
+        if (persist) {
+            localStorage.setItem('smart-water-household-sidebar-collapsed', isCollapsed ? '1' : '0');
+        }
+    };
+
+    if (page === 'household' && householdSidebarCollapse) {
+        setHouseholdSidebarCollapsed(localStorage.getItem('smart-water-household-sidebar-collapsed') === '1');
+        householdSidebarCollapse.addEventListener('click', () => {
+            setHouseholdSidebarCollapsed(!document.body.classList.contains('household-sidebar-collapsed'), true);
+        });
+    }
+
     householdSidebarToggle?.addEventListener('click', () => {
         const isOpen = householdSidebar?.classList.toggle('is-open') === true;
         householdSidebarToggle.setAttribute('aria-expanded', String(isOpen));
+    });
+    householdSidebarDismiss?.addEventListener('click', closeHouseholdSidebar);
+    notificationToggle?.addEventListener('click', () => {
+        const shouldOpen = notificationDropdown?.hidden !== false;
+        setNotificationDropdownOpen(shouldOpen);
+        if (shouldOpen) void loadNotifications();
+    });
+    notificationDropdown?.addEventListener('click', (event) => {
+        const notificationItem = event.target.closest('[data-notification-dropdown-item]');
+        if (notificationItem) markNotificationRead(notificationItem);
+        if (event.target.closest('[data-household-nav="notifications"]')) {
+            setNotificationDropdownOpen(false);
+        }
+    });
+    document.addEventListener('click', (event) => {
+        if (notificationDropdown?.hidden === false && !notificationControl?.contains(event.target)) {
+            setNotificationDropdownOpen(false);
+        }
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && householdSidebar?.classList.contains('is-open')) {
+            closeHouseholdSidebar();
+            householdSidebarToggle?.focus();
+        }
+        if (event.key === 'Escape' && notificationDropdown?.hidden === false) {
+            setNotificationDropdownOpen(false);
+            notificationToggle?.focus();
+        }
     });
 
     document.addEventListener('click', async (event) => {
@@ -3864,12 +4086,19 @@ const bootCommon = () => {
 
     $$('[data-history-period]').forEach((button) => {
         button.addEventListener('click', () => {
-            historyPeriod = button.dataset.historyPeriod;
-            historyState.period = button.dataset.historyPeriod;
-            $$('[data-history-period]').forEach((tab) => tab.classList.toggle('is-active', tab === button));
+            const nextPeriod = button.dataset.historyPeriod;
+            if (!['daily', 'weekly', 'monthly'].includes(nextPeriod)) return;
+
+            historyPeriod = nextPeriod;
+            historyState.period = nextPeriod;
+            historyState.page = 1;
+            $$('[data-history-period]').forEach((tab) => {
+                const isActive = tab === button;
+                tab.classList.toggle('is-active', isActive);
+                tab.setAttribute('aria-selected', String(isActive));
+            });
             renderHistorySummary();
-            renderHistoryChart(consumptionHistory[historyPeriod] ?? []);
-            renderConsumptionHistory();
+            loadConsumptionHistory();
         });
     });
 
@@ -3983,15 +4212,40 @@ const bootCommon = () => {
     });
 
     householdAnalyticsRange?.addEventListener('change', () => {
-        updateCustomAnalyticsRange(householdAnalyticsRange, householdAnalyticsCustom);
+        setHouseholdCustomRangeOpen(householdAnalyticsRange.value === 'custom');
         householdAnalyticsLoadedRange = '';
+        if (householdAnalyticsRange.value === 'custom'
+            && (!householdAnalyticsFrom?.value || !householdAnalyticsTo?.value)) return;
         loadDashboard();
+    });
+
+    householdAnalyticsRange?.addEventListener('pointerdown', () => {
+        setHouseholdCustomRangeOpen(false);
+    });
+
+    householdAnalyticsCustomToggle?.addEventListener('click', () => {
+        if (householdAnalyticsRange.value !== 'custom') {
+            householdAnalyticsRange.value = 'custom';
+            householdAnalyticsLoadedRange = '';
+        }
+        setHouseholdCustomRangeOpen(householdAnalyticsCustom.hidden);
     });
 
     [householdAnalyticsFrom, householdAnalyticsTo].forEach((input) => input?.addEventListener('change', () => {
         householdAnalyticsLoadedRange = '';
+        if (!householdAnalyticsFrom?.value || !householdAnalyticsTo?.value) return;
+        if (householdAnalyticsFrom.value > householdAnalyticsTo.value) {
+            setDashboardFeedback('The start date must be before the end date.', 'error');
+            return;
+        }
         loadDashboard();
     }));
+
+    document.addEventListener('click', (event) => {
+        const rangeControl = householdAnalyticsRange?.closest('.analytics-range-control');
+        if (!rangeControl || rangeControl.contains(event.target) || householdAnalyticsRange?.value !== 'custom') return;
+        setHouseholdCustomRangeOpen(false);
+    });
 
     adminAnalyticsRange?.addEventListener('change', () => {
         updateCustomAnalyticsRange(adminAnalyticsRange, adminAnalyticsCustom);
@@ -4020,6 +4274,10 @@ const bootCommon = () => {
 
 document.addEventListener('DOMContentLoaded', () => {
     bootCommon();
+
+    if (page === 'home') {
+        bootHomeSessionActions();
+    }
 
     if (page === 'login') {
         bootLoginPage();

@@ -19,7 +19,7 @@
             <section class="login-brand-panel col-lg-5" aria-labelledby="login-brand-title">
                 <div class="login-brand-content">
                     <div class="login-brand-lockup">
-                        <span class="brand-mark" aria-hidden="true"></span>
+                        @include('components.brand-mark')
                         <span>
                             <strong>Smart Water</strong>
                             <small>Monitoring System</small>
@@ -93,22 +93,24 @@
                         </div>
                     @endif
 
-                    {{-- Keeps JavaScript login feedback accessible without showing a redundant status card. --}}
-                    <div class="visually-hidden" data-auth-status role="status" aria-live="polite"></div>
+                    <div class="login-status" data-auth-status role="status" aria-live="polite" hidden></div>
 
                     <form class="login-form" data-auth-form="login" novalidate>
                         @csrf
 
-                        <div class="form-floating login-field">
+                        <div class="login-field">
+                            <label class="login-field-label" for="email">Email Address</label>
                             <i class="bi bi-envelope login-field-icon" aria-hidden="true"></i>
                             <input id="email" class="form-control" type="email" name="email" value="{{ old('email') }}" autocomplete="email" placeholder="Email Address" required>
-                            <label for="email">Email Address</label>
                         </div>
 
-                        <div class="form-floating login-field">
+                        <div class="login-field">
+                            <label class="login-field-label" for="password">Password</label>
                             <i class="bi bi-lock login-field-icon" aria-hidden="true"></i>
                             <input id="password" class="form-control" type="password" name="password" autocomplete="current-password" placeholder="Password" required>
-                            <label for="password">Password</label>
+                            <button class="login-password-toggle" type="button" data-visibility-toggle="#password" aria-controls="password" aria-pressed="false" aria-label="Show password" title="Show password">
+                                <i class="bi bi-eye" aria-hidden="true"></i>
+                            </button>
                         </div>
 
                         <div class="login-options">
@@ -138,5 +140,15 @@
         <footer class="login-footer text-center" aria-label="Application information">
             <span>&copy; {{ now()->year }} Smart Water Monitoring System <b aria-hidden="true">&bull;</b> Version 1.0</span>
         </footer>
+
+        <div class="login-transition" data-login-transition role="status" aria-live="polite" hidden>
+            <div class="login-transition-card">
+                <span class="login-transition-mark" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
+                <span class="login-transition-copy">
+                    <strong>Welcome back</strong>
+                    <small>Opening your dashboard&hellip;</small>
+                </span>
+            </div>
+        </div>
     </section>
 @endsection
