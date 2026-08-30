@@ -46,21 +46,21 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public static function generateAccountNumber(): string
     {
-        $latest = self::query()
+        $highestNumber = self::query()
+            ->where('role', 'user')
             ->where('account_number', 'like', 'ACC-USER-%')
-            ->orderByDesc('id')
-            ->first();
+            ->pluck('account_number')
+            ->map(function (?string $accountNumber): int {
+                preg_match('/^ACC-USER-(\d+)$/', $accountNumber ?? '', $matches);
 
-        $nextNumber = 1;
+                return isset($matches[1]) ? (int) $matches[1] : 0;
+            })
+            ->max() ?? 0;
 
-        if ($latest?->account_number !== null) {
-            $matches = [];
-            preg_match('/(\d+)$/', $latest->account_number, $matches);
-            $nextNumber = isset($matches[1]) ? (int) $matches[1] + 1 : 1;
-        }
+        $nextNumber = $highestNumber + 1;
 
         do {
-            $candidate = 'ACC-USER-'.$nextNumber;
+            $candidate = sprintf('ACC-USER-%04d', $nextNumber);
             $nextNumber++;
         } while (self::query()->where('account_number', $candidate)->exists());
 

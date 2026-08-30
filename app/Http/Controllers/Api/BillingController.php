@@ -56,7 +56,8 @@ class BillingController extends Controller
             'effective_date' => ['sometimes', 'nullable', 'date'],
             'threshold_liters' => ['required', 'numeric', 'min:0'],
             'consumption_alert_enabled' => ['sometimes', 'boolean'],
-            'consumption_alert_unit' => ['sometimes', Rule::in(['liters', 'cubic_meters'])],
+            'consumption_change_threshold_percent' => ['sometimes', 'numeric', 'min:0.01', 'max:10000'],
+            'consumption_alert_unit' => ['sometimes', Rule::in(['liters', 'cubic_meters', 'percentage'])],
             'consumption_alert_behavior' => ['sometimes', Rule::in(['household', 'household_admin', 'disabled'])],
             'leak_flow_rate_threshold' => ['required', 'numeric', 'min:0'],
             'leak_alert_enabled' => ['sometimes', 'boolean'],
@@ -102,17 +103,15 @@ class BillingController extends Controller
     {
         $validated = $request->validate([
             'user_id' => ['nullable', 'integer', 'exists:users,id'],
-            'threshold_value' => ['required', 'numeric', 'min:0'],
-            'threshold_unit' => ['required', Rule::in(['liters', 'cubic_meters'])],
+            'percentage_threshold' => ['required', 'numeric', 'min:0.01', 'max:10000'],
             'notification_behavior' => ['required', Rule::in(['household', 'household_admin', 'disabled'])],
             'consumption_alert_enabled' => ['sometimes', 'boolean'],
         ]);
 
-        $validated['threshold_liters'] = (float) $validated['threshold_value']
-            * ($validated['threshold_unit'] === 'cubic_meters' ? 1000 : 1);
-        $validated['consumption_alert_unit'] = $validated['threshold_unit'];
+        $validated['consumption_change_threshold_percent'] = (float) $validated['percentage_threshold'];
+        $validated['consumption_alert_unit'] = 'percentage';
         $validated['consumption_alert_behavior'] = $validated['notification_behavior'];
-        unset($validated['threshold_value'], $validated['threshold_unit'], $validated['notification_behavior']);
+        unset($validated['percentage_threshold'], $validated['notification_behavior']);
 
         return $this->saveSection($request, $validated, 'consumption_alerts', 'Consumption alert settings saved successfully.');
     }
@@ -177,7 +176,8 @@ class BillingController extends Controller
             'effective_date' => $settings->effective_date,
             'threshold_liters' => $settings->threshold_liters ?? 0,
             'consumption_alert_enabled' => $settings->consumption_alert_enabled ?? true,
-            'consumption_alert_unit' => $settings->consumption_alert_unit ?? 'liters',
+            'consumption_change_threshold_percent' => $settings->consumption_change_threshold_percent ?? 100,
+            'consumption_alert_unit' => $settings->consumption_alert_unit ?? 'percentage',
             'consumption_alert_behavior' => $settings->consumption_alert_behavior ?? 'household',
             'leak_flow_rate_threshold' => $settings->leak_flow_rate_threshold ?? 0,
             'leak_alert_enabled' => $settings->leak_alert_enabled ?? true,

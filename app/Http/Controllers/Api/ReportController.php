@@ -11,16 +11,20 @@ use App\Models\WaterReading;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class ReportController extends Controller
 {
     public function summary(Request $request)
     {
+        $validated = $request->validate([
+            'user_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where('role', 'user')],
+        ]);
         $user = $request->user();
         $isAdmin = $user?->isAdmin() === true;
-        $userId = $isAdmin && $request->filled('user_id')
-            ? $request->integer('user_id')
+        $userId = $isAdmin && isset($validated['user_id'])
+            ? (int) $validated['user_id']
             : ($isAdmin ? null : $user?->id);
 
         $currentMonthStart = now()->startOfMonth();
@@ -120,7 +124,7 @@ class ReportController extends Controller
         $validated = $request->validate([
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date'],
-            'user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'user_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where('role', 'user')],
         ]);
 
         [$from, $to] = $this->resolveDateRange($validated);
@@ -157,7 +161,7 @@ class ReportController extends Controller
         $validated = $request->validate([
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date'],
-            'user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'user_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where('role', 'user')],
         ]);
 
         [$from, $to] = $this->resolveDateRange($validated);

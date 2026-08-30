@@ -24,7 +24,7 @@ class WaterController extends Controller
     public function index(Request $request)
     {
         $validated = $request->validate([
-            'user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'user_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where('role', 'user')],
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date'],
             'page' => ['nullable', 'integer', 'min:1'],
@@ -54,9 +54,88 @@ class WaterController extends Controller
             ->withQueryString();
     }
 
+    public function liveReadings(Request $request)
+    {
+        $validated = $request->validate([
+            'user_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where('role', 'user')],
+            'device_id' => ['nullable', 'integer', 'exists:devices,id'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:30'],
+        ]);
+
+        $user = $request->user();
+        $isAdmin = $user?->isAdmin() === true;
+        $requestedUserId = $isAdmin && isset($validated['user_id'])
+            ? (int) $validated['user_id']
+            : ($isAdmin ? null : (int) $user->id);
+        $deviceId = isset($validated['device_id']) ? (int) $validated['device_id'] : null;
+
+        $baseQuery = WaterReading::query()
+            ->when($requestedUserId !== null, fn ($query) => $query->where('user_id', $requestedUserId))
+            ->when($deviceId !== null, fn ($query) => $query->where('device_id', $deviceId));
+
+        $totalRecordedLiters = (float) (clone $baseQuery)->sum('liters_used');
+        $readings = (clone $baseQuery)
+            ->select([
+                'id',
+                'device_id',
+                'reading_id',
+                'device_name',
+                'device_payload',
+                'flow_rate',
+                'liters_used',
+                'cubic_meter',
+                'recorded_at',
+                'is_threshold_exceeded',
+                'is_possible_leak',
+                'monitoring_status',
+                'wifi_signal_strength',
+                'device_connection_status',
+                'server_connection_status',
+            ])
+            ->latest('recorded_at')
+            ->latest('id')
+            ->limit($validated['limit'] ?? 30)
+            ->get()
+            ->sortBy(fn (WaterReading $reading) => [$reading->recorded_at?->getTimestamp() ?? 0, $reading->id])
+            ->values();
+
+        $latest = $readings->last();
+        $device = $deviceId !== null
+            ? Device::query()->find($deviceId)
+            : ($latest?->device_id ? Device::query()->find($latest->device_id) : null);
+        $latestRecordedAt = $latest?->recorded_at;
+        $ageSeconds = $latestRecordedAt ? max(0, now()->diffInSeconds($latestRecordedAt)) : null;
+        $status = $ageSeconds === null
+            ? 'offline'
+            : ($ageSeconds <= 10 ? 'live' : ($ageSeconds <= 30 ? 'delayed' : 'offline'));
+
+        return response()->json([
+            'success' => true,
+            'timezone' => config('app.timezone'),
+            'device' => $device ? [
+                'id' => $device->id,
+                'name' => $device->name,
+            ] : ($latest ? [
+                'id' => $latest->device_id,
+                'name' => $latest->device_name,
+            ] : null),
+            'latest' => $latest ? $this->liveReadingItem($latest, $totalRecordedLiters) : null,
+            'total_recorded_liters' => $totalRecordedLiters,
+            'status' => [
+                'value' => $status,
+                'age_seconds' => $ageSeconds,
+                'last_reading_at' => $this->localReadingTimestamp($latestRecordedAt),
+            ],
+            'readings' => $readings
+                ->map(fn (WaterReading $reading): array => $this->liveReadingItem($reading))
+                ->all(),
+        ]);
+    }
+
     public function history(Request $request)
     {
         $validated = $request->validate([
+            'user_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where('role', 'user')],
             'period' => ['nullable', Rule::in(['daily', 'weekly', 'monthly'])],
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date', 'after_or_equal:from'],
@@ -66,8 +145,8 @@ class WaterController extends Controller
         ]);
 
         $user = $request->user();
-        $userId = $user?->isAdmin() === true && $request->filled('user_id')
-            ? $request->integer('user_id')
+        $userId = $user?->isAdmin() === true && isset($validated['user_id'])
+            ? (int) $validated['user_id']
             : ($user?->isAdmin() === true ? null : $user?->id);
 
         $period = $validated['period'] ?? 'daily';
@@ -321,14 +400,44 @@ class WaterController extends Controller
 
     public function liveState(Request $request)
     {
+        $validated = $request->validate([
+            'user_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where('role', 'user')],
+        ]);
         $user = $request->user();
-        $userId = $user?->isAdmin() === true && $request->filled('user_id')
-            ? $request->integer('user_id')
+        $userId = $user?->isAdmin() === true && isset($validated['user_id'])
+            ? (int) $validated['user_id']
             : ($user?->isAdmin() === true ? null : $user?->id);
 
         return response()->json([
             'data' => $this->waterConsumptionService->liveStateForUser($userId),
         ]);
+    }
+
+    private function liveReadingItem(WaterReading $reading, ?float $totalOverride = null): array
+    {
+        $deviceTotal = data_get($reading->device_payload, 'total_water_liters');
+
+        return [
+            'id' => $reading->id,
+            'reading_id' => $reading->reading_id,
+            'device_id' => $reading->device_id,
+            'flow_rate' => $reading->flow_rate === null ? null : (float) $reading->flow_rate,
+            'liters_used' => (float) $reading->liters_used,
+            'cubic_meter' => (float) $reading->cubic_meter,
+            'total_liters' => $totalOverride ?? (is_numeric($deviceTotal) ? (float) $deviceTotal : null),
+            'recorded_at' => $this->localReadingTimestamp($reading->recorded_at),
+            'is_threshold_exceeded' => (bool) $reading->is_threshold_exceeded,
+            'is_possible_leak' => (bool) $reading->is_possible_leak,
+            'monitoring_status' => $reading->monitoring_status,
+            'wifi_signal_strength' => $reading->wifi_signal_strength,
+            'device_connection_status' => $reading->device_connection_status,
+            'server_connection_status' => $reading->server_connection_status,
+        ];
+    }
+
+    private function localReadingTimestamp(?Carbon $timestamp): ?string
+    {
+        return $timestamp?->copy()->timezone(config('app.timezone'))->toIso8601String();
     }
 
     private function recordTelemetryFailure($deviceUser, Device $device, string $reason, ?string $readingId = null): void

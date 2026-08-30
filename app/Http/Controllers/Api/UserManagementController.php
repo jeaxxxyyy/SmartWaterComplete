@@ -104,6 +104,7 @@ class UserManagementController extends Controller
 
                 if ($status === 'inactive') {
                     $query->where('is_active', false);
+
                     return;
                 }
 
@@ -113,6 +114,7 @@ class UserManagementController extends Controller
                             $builder->whereNull('account_status')
                                 ->orWhere('account_status', User::ACCOUNT_STATUS_ACTIVE);
                         });
+
                     return;
                 }
 
@@ -232,7 +234,7 @@ class UserManagementController extends Controller
         $validator = Validator::make($input, [
             'name' => ['sometimes', 'string', 'max:255'],
             'email' => ['sometimes', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'password' => ['sometimes', 'nullable', 'string', 'min:8'],
+            'password' => ['sometimes', 'nullable', 'string', 'min:8', 'confirmed'],
             'role' => ['sometimes', Rule::in(['user', 'admin', 'device'])],
             'assigned_user_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
             'account_number' => ['sometimes', 'nullable', 'string', 'max:255', Rule::unique('users', 'account_number')->ignore($user->id)],
@@ -261,10 +263,11 @@ class UserManagementController extends Controller
             $validated['assigned_user_id'] = null;
         }
 
+        $passwordWasChanged = array_key_exists('password', $validated);
         $user->update($validated);
 
         $user->refresh();
-        if (! $user->isAccountActive()) {
+        if ($passwordWasChanged || ! $user->isAccountActive()) {
             $user->tokens()->delete();
         }
 
@@ -275,6 +278,16 @@ class UserManagementController extends Controller
             ['user_id' => $user->id],
             $user,
         );
+
+        if ($passwordWasChanged) {
+            $this->billingStatementService->recordAudit(
+                $request->user(),
+                'user_password_reset',
+                'Reset a user account password and revoked its existing sessions.',
+                ['user_id' => $user->id],
+                $user,
+            );
+        }
 
         if (array_key_exists('is_active', $validated) && $validated['is_active'] === false) {
             $this->billingStatementService->recordAudit(

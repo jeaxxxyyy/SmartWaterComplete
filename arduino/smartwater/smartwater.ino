@@ -13,13 +13,25 @@
 #ifndef SMARTWATER_DEVICE_TOKEN
 #define SMARTWATER_DEVICE_TOKEN ""
 #endif
+#ifndef SMARTWATER_SENSOR_PIN
+#error "Define SMARTWATER_SENSOR_PIN in secrets.h for the water-flow sensor signal pin."
+#endif
+#ifndef SMARTWATER_PULSES_PER_LITER
+#error "Define SMARTWATER_PULSES_PER_LITER in secrets.h for the installed sensor."
+#endif
+static_assert(SMARTWATER_PULSES_PER_LITER > 0.0F, "SMARTWATER_PULSES_PER_LITER must be greater than zero.");
 
 constexpr char DEVICE_NAME[] = "M5Stack CoreS3";
-constexpr char FIRMWARE_VERSION[] = "1.1.0";
+constexpr char FIRMWARE_VERSION[] = "1.2.0";
 constexpr unsigned long SAMPLE_INTERVAL_MS = 1000;
 constexpr unsigned long SEND_INTERVAL_MS = 3000;
 constexpr unsigned long ACTIVATION_RETRY_MS = 30000;
 constexpr unsigned long HTTP_TIMEOUT_MS = 5000;
+// Reject electrical bounce or duplicate edges that arrive less than 1 ms apart.
+// The value is a software noise filter; adjust only if physical testing shows
+// that the installed sensor can legitimately produce faster pulses.
+constexpr uint32_t MIN_VALID_PULSE_INTERVAL_US = 1000;
+constexpr float MAX_ACCEPTED_PULSE_RATE_HZ = 1000.0F;
 constexpr float WATER_LIMIT_LITERS = 500.0F;
 
 float flowRate = 0.0F;
@@ -34,6 +46,10 @@ unsigned long lastSample = 0;
 unsigned long lastSend = 0;
 unsigned long lastActivationAttempt = 0;
 unsigned long readingSequence = 0;
+volatile uint32_t flowPulseCount = 0;
+volatile uint32_t ignoredPulseCount = 0;
+volatile uint32_t lastPulseMicros = 0;
+uint32_t lastFlowPulseCount = 0;
 Preferences preferences;
 String deviceToken;
 String pendingReadingId;
@@ -108,17 +124,58 @@ bool activateDevice() {
   return true;
 }
 
-void updateDummySensor(unsigned long elapsedMs) {
-  if (!monitoring) {
-    flowRate = 0;
+void IRAM_ATTR onFlowPulse() {
+  const uint32_t nowMicros = micros();
+  if (nowMicros - lastPulseMicros < MIN_VALID_PULSE_INTERVAL_US) {
+    ++ignoredPulseCount;
     return;
   }
 
-  flowRate = random(150, 401) / 100.0F;
-  const float sampleLiters = flowRate * (elapsedMs / 60000.0F);
+  lastPulseMicros = nowMicros;
+  ++flowPulseCount;
+}
+
+void updateSensor(unsigned long elapsedMs) {
+  noInterrupts();
+  const uint32_t currentPulseCount = flowPulseCount;
+  const uint32_t ignoredPulses = ignoredPulseCount;
+  ignoredPulseCount = 0;
+  interrupts();
+
+  if (!monitoring) {
+    flowRate = 0;
+    lastFlowPulseCount = currentPulseCount;
+    Serial.printf("Flow pulses: 0\nTotal pulses: %lu\nFlow rate: 0.00 L/min\nInterval liters: %.4f L\nTotal liters: %.4f L\nIgnored pulses: %lu\n",
+      static_cast<unsigned long>(currentPulseCount),
+      0.0F, intervalLiters, totalLiters, static_cast<unsigned long>(ignoredPulses));
+    return;
+  }
+
+  const uint32_t pulseDelta = currentPulseCount - lastFlowPulseCount;
+  lastFlowPulseCount = currentPulseCount;
+  const float elapsedSeconds = elapsedMs / 1000.0F;
+  const float pulseRateHz = elapsedSeconds > 0.0F ? pulseDelta / elapsedSeconds : 0.0F;
+  const bool duplicateNoiseBurst = ignoredPulses >= 10
+    && (pulseDelta == 0 || ignoredPulses / pulseDelta > 4U);
+  const bool abnormalBurst = pulseRateHz > MAX_ACCEPTED_PULSE_RATE_HZ || duplicateNoiseBurst;
+  const float sampleLiters = abnormalBurst
+    ? 0.0F
+    : pulseDelta / static_cast<float>(SMARTWATER_PULSES_PER_LITER);
+  flowRate = abnormalBurst || elapsedMs == 0
+    ? 0.0F
+    : sampleLiters / (elapsedMs / 60000.0F);
   intervalLiters += sampleLiters;
   totalLiters += sampleLiters;
   persistReadingState();
+
+  Serial.printf("Flow pulses: %lu\nTotal pulses: %lu\nFlow rate: %.2f L/min\nInterval liters: %.4f L\nTotal liters: %.4f L\nIgnored pulses: %lu%s\n",
+    static_cast<unsigned long>(pulseDelta),
+    static_cast<unsigned long>(currentPulseCount),
+    flowRate,
+    intervalLiters,
+    totalLiters,
+    static_cast<unsigned long>(ignoredPulses),
+    abnormalBurst ? " (abnormal burst discarded)" : "");
 }
 
 void sendReading() {
@@ -216,7 +273,6 @@ void setup() {
   auto config = M5.config();
   M5.begin(config);
   M5.Display.setRotation(1);
-  randomSeed(esp_random());
   preferences.begin("smartwater", false);
   deviceToken = preferences.getString("api_token", "");
   readingSequence = preferences.getULong("reading_seq", 0);
@@ -228,6 +284,8 @@ void setup() {
     deviceToken = SMARTWATER_DEVICE_TOKEN;
     preferences.putString("api_token", deviceToken);
   }
+  pinMode(SMARTWATER_SENSOR_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(SMARTWATER_SENSOR_PIN), onFlowPulse, RISING);
   connectWifi();
   if (deviceToken.isEmpty()) activateDevice();
   lastSample = lastSend = millis();
@@ -242,7 +300,7 @@ void loop() {
     delay(250);
   }
   if (nowMs - lastSample >= SAMPLE_INTERVAL_MS) {
-    updateDummySensor(nowMs - lastSample);
+    updateSensor(nowMs - lastSample);
     lastSample = nowMs;
     drawScreen();
   }

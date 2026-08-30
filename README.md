@@ -21,7 +21,7 @@ npm run build
 composer demo
 ```
 
-Open `http://127.0.0.1:8000` after the demo command starts the application. The demo runs Laravel, Vite, and realistic sensor readings concurrently.
+Open the configured LAN URL after starting Laravel and Vite. Telemetry must come from the commissioned physical sensor panel.
 
 Demo accounts:
 
@@ -54,7 +54,7 @@ Registration displays a device UUID and one-time activation code. The code expir
 
 ## Commission an ESP32-S3 / M5Stack CoreS3 meter
 
-Firmware lives in `arduino/smartwater`. It displays dummy readings until a sensor is installed and uploads an interval reading every three seconds.
+Firmware lives in `arduino/smartwater`. It reads flow-sensor pulses and uploads an interval reading every three seconds. Configure the sensor GPIO and calibration value in the ignored `secrets.h` file before compiling.
 
 1. Register the meter in **Admin → Device Management** and copy the one-time UUID and activation code.
 2. Copy `arduino/smartwater/secrets.example.h` to the ignored `secrets.h` file.
@@ -77,7 +77,7 @@ php artisan serve --host=0.0.0.0 --port=8000
 ```bash
 php artisan test
 npm run build
-php artisan smartwater:simulate --once
+php artisan test
 ```
 
 Configuration defaults are documented in `.env.example`, `config/smartwater.php`, and `config/devices.php`.

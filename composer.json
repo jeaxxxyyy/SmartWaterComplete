@@ -48,7 +48,7 @@
         ],
         "demo": [
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#c4b5fd,#34d399\" \"php artisan serve --host=0.0.0.0\" \"npm run dev\" \"php artisan smartwater:simulate\" --names=server,vite,sensor --kill-others"
+            "npx concurrently -c \"#93c5fd,#c4b5fd\" \"php artisan serve --host=0.0.0.0\" \"npm run dev\" --names=server,vite --kill-others"
         ],
         "test": [
             "@php artisan config:clear --ansi @no_additional_args",

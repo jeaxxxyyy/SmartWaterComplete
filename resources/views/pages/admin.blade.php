@@ -237,6 +237,38 @@
             </article>
         </section>
 
+        <article class="panel admin-overview-system-health" aria-labelledby="admin-system-health-title">
+            <div class="panel-head">
+                <div>
+                    <p class="eyebrow">System diagnostics</p>
+                    <h2 id="admin-system-health-title">Application and data health</h2>
+                </div>
+                <span class="status-pill" data-admin-system-health-status>Checking</span>
+            </div>
+            <div class="stat-grid">
+                <article class="stat-card">
+                    <span class="stat-label">Database</span>
+                    <strong data-admin-system-database>Checking</strong>
+                    <small>Connection and foreign-key enforcement.</small>
+                </article>
+                <article class="stat-card">
+                    <span class="stat-label">Latest telemetry</span>
+                    <strong data-admin-system-telemetry>Checking</strong>
+                    <small data-admin-system-telemetry-detail>Waiting for diagnostics.</small>
+                </article>
+                <article class="stat-card">
+                    <span class="stat-label">Relational integrity</span>
+                    <strong data-admin-system-integrity>Checking</strong>
+                    <small>Orphan and device ownership checks.</small>
+                </article>
+                <article class="stat-card">
+                    <span class="stat-label">Failed background jobs</span>
+                    <strong data-admin-system-failed-jobs>Checking</strong>
+                    <small>Queued work that requires attention.</small>
+                </article>
+            </div>
+        </article>
+
         <article class="panel chart-panel admin-overview-trend">
             <div class="panel-head">
                 <div>
@@ -331,7 +363,7 @@
                             <span>Name</span>
                             <span>Contact</span>
                             <span>Device</span>
-                            <span>Status</span>
+                            <span>Account Status</span>
                             <span>Actions</span>
                         </div>
                         <div class="table-body" data-admin-household-users>
@@ -369,9 +401,19 @@
                         <small class="field-error" id="admin-user-password-error" data-admin-user-field-error="password"></small>
                     </label>
                     <label class="admin-form-field">
-                        Address <span class="required-mark" aria-hidden="true">*</span>
-                        <input type="text" name="address" placeholder="Address" autocomplete="street-address" aria-describedby="admin-user-address-error" required>
+                        House number, street, or purok <span class="required-mark" aria-hidden="true">*</span>
+                        <input type="text" name="address" placeholder="Example: Purok 1" autocomplete="address-line1" aria-describedby="admin-user-address-error" required>
                         <small class="field-error" id="admin-user-address-error" data-admin-user-field-error="address"></small>
+                    </label>
+                    <label class="admin-form-field">
+                        Barangay <span class="required-mark" aria-hidden="true">*</span>
+                        <select name="barangay" autocomplete="address-level3" aria-describedby="admin-user-barangay-error" required>
+                            <option value="">Select a barangay</option>
+                            @foreach (config('municipality.barangays', []) as $barangay)
+                                <option value="{{ $barangay }}">{{ $barangay }}</option>
+                            @endforeach
+                        </select>
+                        <small class="field-error" id="admin-user-barangay-error" data-admin-user-field-error="barangay"></small>
                     </label>
                     <label class="admin-form-field">
                         Phone <span class="field-hint">optional</span>
@@ -408,19 +450,46 @@
                     <small class="field-error" data-admin-user-field-error="email"></small>
                 </label>
                 <label class="admin-form-field">
-                    Address <span class="required-mark" aria-hidden="true">*</span>
-                    <input type="text" name="address" autocomplete="street-address" required>
+                    House number, street, or purok <span class="required-mark" aria-hidden="true">*</span>
+                    <input type="text" name="address" autocomplete="address-line1" required>
                     <small class="field-error" data-admin-user-field-error="address"></small>
+                </label>
+                <label class="admin-form-field">
+                    Barangay <span class="required-mark" aria-hidden="true">*</span>
+                    <select name="barangay" autocomplete="address-level3" required>
+                        <option value="">Select a barangay</option>
+                        @foreach (config('municipality.barangays', []) as $barangay)
+                            <option value="{{ $barangay }}">{{ $barangay }}</option>
+                        @endforeach
+                    </select>
+                    <small class="field-error" data-admin-user-field-error="barangay"></small>
                 </label>
                 <label class="admin-form-field">
                     Phone <span class="field-hint">optional</span>
                     <input type="tel" name="phone" autocomplete="tel">
                 </label>
-                <label class="admin-form-field admin-checkbox-field">
-                    <span>Account access</span>
-                    <span><input type="checkbox" name="is_active" value="1"> Active household login</span>
+                <label class="admin-form-field">
+                    New temporary password <span class="field-hint">optional</span>
+                    <input type="password" name="password" autocomplete="new-password" minlength="8">
+                    <small class="field-hint">Leave blank to keep the current password.</small>
+                    <small class="field-error" data-admin-user-field-error="password"></small>
                 </label>
-                    <label class="admin-form-field">
+                <label class="admin-form-field">
+                    Confirm new temporary password <span class="field-hint">optional</span>
+                    <input type="password" name="password_confirmation" autocomplete="new-password" minlength="8">
+                    <small class="field-error" data-admin-user-field-error="password_confirmation"></small>
+                </label>
+                <label class="admin-form-field">
+                    Account Status
+                    <select name="account_status" required>
+                        <option value="active">Active - household can sign in</option>
+                        <option value="inactive">Inactive - sign-in disabled</option>
+                        <option value="suspended">Suspended - access temporarily blocked</option>
+                        <option value="archived">Archived - account retained for records</option>
+                    </select>
+                    <small class="field-hint">Only active household accounts can sign in. Setting any other status revokes existing login sessions.</small>
+                </label>
+                <label class="admin-form-field">
                     Assigned water meter
                     <select name="device_id" data-household-device-select>
                         <option value="">Keep current assignment</option>
@@ -522,11 +591,11 @@
 
             <article class="panel admin-card water-rate-section-card">
                 <div class="panel-head"><div><p class="eyebrow">Consumption Alerts</p><h2>Consumption alert configuration</h2></div><i class="bi bi-graph-up-arrow admin-section-icon" aria-hidden="true"></i></div>
-                <p class="field-hint">Notify households when their cumulative usage reaches the configured period threshold.</p>
+                <p class="field-hint">Compare actual current month-to-date usage with the same period of the previous month. Only changes that reach the configured percentage are relevant and generate an alert.</p>
                 <div class="form-feedback" data-consumption-alert-status role="status" aria-live="polite" hidden></div>
                 <form class="stack-form" data-consumption-alert-form novalidate>
-                    <label>Monthly usage alert threshold <span class="required-mark" aria-hidden="true">*</span><input type="number" step="0.01" min="0" name="threshold_value" placeholder="10000" required></label>
-                    <label>Unit<select name="threshold_unit" required><option value="liters">Liters (L)</option><option value="cubic_meters">Cubic meters (m³)</option></select></label>
+                    <label>Relevant change percentage <span class="required-mark" aria-hidden="true">*</span><input type="number" step="0.01" min="0.01" max="10000" name="percentage_threshold" value="100" placeholder="100" required><small class="field-hint">Example: 100% increase means the current usage is twice the previous period's usage.</small></label>
+                    <div class="admin-settings-note"><strong>Comparison basis</strong><span>Current month-to-date versus the equivalent days of the previous month. Both increases and decreases are evaluated from actual readings.</span></div>
                     <label class="admin-checkbox-field"><span>Alert status</span><span><input type="checkbox" name="consumption_alert_enabled" value="1" checked> Enable consumption alerts</span></label>
                     <label>Notification behavior<select name="notification_behavior" required><option value="household">Notify household</option><option value="household_admin">Notify household and administrators</option><option value="disabled">Do not send notifications</option></select></label>
                     <button class="button button-primary" type="submit">Save consumption alerts</button>

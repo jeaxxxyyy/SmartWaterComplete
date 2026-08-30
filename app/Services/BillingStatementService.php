@@ -28,9 +28,9 @@ class BillingStatementService
                     ->orWhere('user_id', $user->id);
             })
             ->where('is_active', true)
-            ->where(function ($query): void {
+            ->where(function ($query) use ($periodStart): void {
                 $query->whereNull('effective_date')
-                    ->orWhereDate('effective_date', '<=', now()->toDateString());
+                    ->orWhereDate('effective_date', '<=', $periodStart->toDateString());
             })
             ->orderByRaw('CASE WHEN user_id IS NULL THEN 1 ELSE 0 END')
             ->orderByRaw('CASE WHEN effective_date IS NULL THEN 0 ELSE 1 END DESC')

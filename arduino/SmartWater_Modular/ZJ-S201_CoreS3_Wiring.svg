@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <style>
+      .title { font: 700 48px Arial, sans-serif; fill: #12345b; }
+      .heading { font: 700 28px Arial, sans-serif; fill: #12345b; }
+      .label { font: 700 22px Arial, sans-serif; fill: #172033; }
+      .small { font: 20px Arial, sans-serif; fill: #344054; }
+      .tiny { font: 18px Arial, sans-serif; fill: #344054; }
+      .wire { fill: none; stroke-width: 10; stroke-linecap: round; stroke-linejoin: round; }
+      .thin { fill: none; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#f7fafc"/>
+  <text x="800" y="72" text-anchor="middle" class="title">Correct ZJ-S201 to CoreS3 Wiring</text>
+  <text x="800" y="108" text-anchor="middle" class="small">10 kΩ / 20 kΩ divider • GPIO2 • 450 pulses/L starting calibration</text>
+
+  <!-- CoreS3 -->
+  <rect x="55" y="175" width="310" height="560" rx="32" fill="#142334" filter="url(#shadow)"/>
+  <rect x="90" y="220" width="205" height="280" rx="12" fill="#07111d" stroke="#50677f" stroke-width="4"/>
+  <text x="192" y="340" text-anchor="middle" font-family="Arial" font-size="25" fill="#d9e4ef">M5STACK</text>
+  <text x="192" y="380" text-anchor="middle" font-family="Arial" font-size="28" fill="#ffffff">CORE S3</text>
+  <rect x="310" y="255" width="55" height="390" rx="12" fill="#25384d"/>
+  <text x="346" y="454" text-anchor="middle" transform="rotate(-90 346 454)" font-family="Arial" font-size="25" font-weight="700" fill="#ffffff">PORT A</text>
+
+  <circle cx="365" cy="300" r="9" fill="#e32929"/>
+  <circle cx="365" cy="390" r="9" fill="#111827"/>
+  <circle cx="365" cy="500" r="9" fill="#f2b705"/>
+  <circle cx="365" cy="600" r="9" fill="#ffffff" stroke="#667085" stroke-width="3"/>
+
+  <!-- Sensor -->
+  <rect x="1240" y="205" width="305" height="500" rx="42" fill="#202a35" filter="url(#shadow)"/>
+  <circle cx="1392" cy="350" r="105" fill="#e8edf2" stroke="#0f1720" stroke-width="12"/>
+  <path d="M1350 290 H1435 M1410 265 L1438 290 L1410 315" fill="none" stroke="#172033" stroke-width="10"/>
+  <text x="1392" y="360" text-anchor="middle" class="heading">ZJ-S201</text>
+  <text x="1392" y="395" text-anchor="middle" class="small">Water flow sensor</text>
+  <circle cx="1240" cy="300" r="9" fill="#e32929"/>
+  <circle cx="1240" cy="390" r="9" fill="#111827"/>
+  <circle cx="1240" cy="500" r="9" fill="#f2b705"/>
+
+  <!-- Shared power rails -->
+  <path d="M430 205 H1175" class="wire" stroke="#e32929"/>
+  <text x="802" y="184" text-anchor="middle" class="label" fill="#e32929">SAME +5V RAIL SECTION</text>
+  <path d="M365 300 H400 V205 H430" class="wire" stroke="#e32929"/>
+  <path d="M1240 300 H1205 V205 H1175" class="wire" stroke="#e32929"/>
+
+  <path d="M430 750 H1175" class="wire" stroke="#111827"/>
+  <text x="1020" y="790" text-anchor="middle" class="label">SAME GND RAIL SECTION</text>
+  <path d="M365 390 H400 V750 H430" class="wire" stroke="#111827"/>
+  <path d="M1240 390 H1205 V750 H1175" class="wire" stroke="#111827"/>
+
+  <!-- Sensor signal and divider -->
+  <path d="M1240 500 H1080" class="wire" stroke="#f2b705"/>
+  <text x="1158" y="478" text-anchor="middle" class="label" fill="#b77900">OUT</text>
+
+  <!-- 10k horizontal resistor -->
+  <path d="M1080 500 H1035 L1020 478 L990 522 L960 478 L930 522 L900 478 L870 522 L845 500 H810" class="thin" stroke="#8a4b14"/>
+  <rect x="910" y="425" width="120" height="45" rx="10" fill="#fff4d6" stroke="#8a4b14" stroke-width="3"/>
+  <text x="970" y="456" text-anchor="middle" class="label">10 kΩ</text>
+
+  <!-- Shared node -->
+  <circle cx="800" cy="500" r="17" fill="#7c3aed" stroke="#ffffff" stroke-width="5"/>
+  <path d="M810 500 H800" class="thin" stroke="#7c3aed"/>
+  <rect x="675" y="375" width="250" height="62" rx="14" fill="#f2eaff" stroke="#7c3aed" stroke-width="4"/>
+  <text x="800" y="415" text-anchor="middle" class="heading" fill="#6d28d9">SHARED NODE</text>
+  <path d="M800 437 V480" class="thin" stroke="#7c3aed"/>
+
+  <!-- GPIO2 to shared node -->
+  <path d="M365 500 H783" class="wire" stroke="#f2b705"/>
+  <text x="540" y="478" text-anchor="middle" class="label">GPIO2</text>
+
+  <!-- 20k to ground -->
+  <path d="M800 517 V550 L778 567 L822 594 L778 621 L822 648 L778 675 L800 692 V750" class="thin" stroke="#8a4b14"/>
+  <rect x="830" y="585" width="120" height="45" rx="10" fill="#fff4d6" stroke="#8a4b14" stroke-width="3"/>
+  <text x="890" y="616" text-anchor="middle" class="label">20 kΩ</text>
+
+  <!-- Unused GPIO1 -->
+  <path d="M365 600 H500" class="wire" stroke="#ffffff"/>
+  <circle cx="505" cy="600" r="12" fill="#ffffff" stroke="#667085" stroke-width="4"/>
+  <rect x="410" y="650" width="280" height="55" rx="12" fill="#ffffff" stroke="#667085" stroke-width="3"/>
+  <text x="550" y="686" text-anchor="middle" class="label" fill="#667085">GPIO1: NOT CONNECTED</text>
+
+  <!-- Breadboard translation -->
+  <rect x="85" y="825" width="1430" height="125" rx="22" fill="#ffffff" stroke="#b8c7d9" stroke-width="4"/>
+  <text x="120" y="865" class="heading">Breadboard rule:</text>
+  <text x="350" y="865" class="small">Put the 10 kΩ end, 20 kΩ end, and GPIO2 wire in the same connected five-hole column.</text>
+  <text x="120" y="910" class="small">Use one side of the split rails. Port A: red = 5V, black = GND, yellow = GPIO2, white = unused.</text>
+  <circle cx="1410" cy="850" r="9" fill="#7c3aed"/><circle cx="1410" cy="875" r="9" fill="#7c3aed"/><circle cx="1410" cy="900" r="9" fill="#7c3aed"/><circle cx="1410" cy="925" r="9" fill="#7c3aed"/>
+  <text x="1440" y="895" class="tiny">same column</text>
+</svg>

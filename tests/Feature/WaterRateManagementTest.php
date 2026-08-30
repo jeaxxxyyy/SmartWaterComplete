@@ -14,6 +14,15 @@ class WaterRateManagementTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_admin_consumption_alert_form_uses_monthly_percentage_comparison(): void
+    {
+        $this->get('/admin')
+            ->assertOk()
+            ->assertSee('name="percentage_threshold"', false)
+            ->assertDontSee('name="threshold_unit"', false)
+            ->assertSee('Current month-to-date versus the equivalent days of the previous month.');
+    }
+
     public function test_admin_can_save_each_configuration_section_without_losing_the_other_sections(): void
     {
         $admin = User::factory()->admin()->create();
@@ -30,13 +39,12 @@ class WaterRateManagementTest extends TestCase
             ->assertJsonPath('data.fixed_monthly_charge', '75.00');
 
         $this->postJson('/api/billing-settings/consumption-alerts', [
-            'threshold_value' => 12.5,
-            'threshold_unit' => 'cubic_meters',
+            'percentage_threshold' => 100,
             'notification_behavior' => 'household_admin',
             'consumption_alert_enabled' => true,
         ])->assertCreated()
-            ->assertJsonPath('data.threshold_liters', '12500.00')
-            ->assertJsonPath('data.consumption_alert_unit', 'cubic_meters');
+            ->assertJsonPath('data.consumption_change_threshold_percent', '100.00')
+            ->assertJsonPath('data.consumption_alert_unit', 'percentage');
 
         $this->postJson('/api/billing-settings/leak-settings', [
             'leak_flow_rate_threshold' => 18,
@@ -51,7 +59,7 @@ class WaterRateManagementTest extends TestCase
         $settings = Billing::query()->latest('id')->firstOrFail();
         $this->assertSame('42.50', $settings->water_rate);
         $this->assertSame('75.00', $settings->fixed_monthly_charge);
-        $this->assertSame('12500.00', $settings->threshold_liters);
+        $this->assertSame('100.00', $settings->consumption_change_threshold_percent);
         $this->assertSame('18.00', $settings->leak_flow_rate_threshold);
         $this->assertSame('household_admin', $settings->consumption_alert_behavior);
         $this->assertSame('household_admin', $settings->leak_alert_behavior);
@@ -70,8 +78,7 @@ class WaterRateManagementTest extends TestCase
         ])->assertForbidden();
 
         $this->postJson('/api/billing-settings/consumption-alerts', [
-            'threshold_value' => 1000,
-            'threshold_unit' => 'liters',
+            'percentage_threshold' => 100,
             'notification_behavior' => 'household',
         ])->assertForbidden();
 
@@ -97,11 +104,10 @@ class WaterRateManagementTest extends TestCase
             ->assertJsonStructure(['errors' => ['currency']]);
 
         $this->postJson('/api/billing-settings/consumption-alerts', [
-            'threshold_value' => 1000,
-            'threshold_unit' => 'gallons',
+            'percentage_threshold' => 0,
             'notification_behavior' => 'household',
         ])->assertUnprocessable()
-            ->assertJsonStructure(['errors' => ['threshold_unit']]);
+            ->assertJsonStructure(['errors' => ['percentage_threshold']]);
 
         $this->postJson('/api/billing-settings/leak-settings', [
             'leak_flow_rate_threshold' => 10,

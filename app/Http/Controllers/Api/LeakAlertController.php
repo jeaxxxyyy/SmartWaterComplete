@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\LeakAlert;
 use App\Models\Notification;
-use App\Models\User;
 use App\Models\WaterReading;
 use App\Services\BillingStatementService;
 use Illuminate\Http\Request;
@@ -154,6 +153,7 @@ class LeakAlertController extends Controller
             ->with('waterReading')
             ->where('type', 'possible_leak')
             ->whereNotNull('user_id')
+            ->whereHas('user', fn ($query) => $query->where('role', 'user'))
             ->get()
             ->groupBy('user_id')
             ->each(function ($notifications, $userId): void {

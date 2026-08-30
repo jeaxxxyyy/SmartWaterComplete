@@ -96,20 +96,43 @@ class SmartWaterAdminApiTest extends TestCase
         Sanctum::actingAs($admin);
 
         $this->putJson('/api/users/'.$household->id, [
-            'is_active' => false,
+            'is_active' => true,
             'account_status' => User::ACCOUNT_STATUS_SUSPENDED,
         ])->assertOk()
-            ->assertJsonPath('data.is_active', false)
+            ->assertJsonPath('data.is_active', true)
             ->assertJsonPath('data.account_status', User::ACCOUNT_STATUS_SUSPENDED);
 
-        $this->getJson('/api/household-users?is_active=0')
+        $this->getJson('/api/household-users?account_status=suspended')
             ->assertOk()
-            ->assertJsonFragment(['id' => $household->id, 'role' => 'user', 'is_active' => false]);
+            ->assertJsonFragment(['id' => $household->id, 'role' => 'user', 'account_status' => User::ACCOUNT_STATUS_SUSPENDED]);
 
         $this->assertDatabaseHas('users', [
             'id' => $household->id,
-            'is_active' => false,
+            'is_active' => true,
             'account_status' => User::ACCOUNT_STATUS_SUSPENDED,
+        ]);
+    }
+
+    public function test_admin_can_deactivate_a_household_as_a_distinct_inactive_status(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $household = User::factory()->create(['role' => 'user']);
+        $household->createToken('existing-household-session');
+        Sanctum::actingAs($admin);
+
+        $this->putJson('/api/users/'.$household->id, [
+            'is_active' => false,
+            'account_status' => User::ACCOUNT_STATUS_ACTIVE,
+        ])->assertOk()
+            ->assertJsonPath('data.is_active', false)
+            ->assertJsonPath('data.account_status', User::ACCOUNT_STATUS_ACTIVE);
+
+        $this->getJson('/api/household-users?account_status=inactive')
+            ->assertOk()
+            ->assertJsonFragment(['id' => $household->id, 'role' => 'user', 'is_active' => false]);
+
+        $this->assertDatabaseMissing('personal_access_tokens', [
+            'tokenable_id' => $household->id,
         ]);
     }
 
@@ -228,8 +251,8 @@ class SmartWaterAdminApiTest extends TestCase
         $firstResponse->assertCreated();
         $secondResponse->assertCreated();
 
-        $this->assertSame('ACC-USER-1', $firstResponse->json('data.user.account_number'));
-        $this->assertSame('ACC-USER-2', $secondResponse->json('data.user.account_number'));
+        $this->assertSame('ACC-USER-0001', $firstResponse->json('data.user.account_number'));
+        $this->assertSame('ACC-USER-0002', $secondResponse->json('data.user.account_number'));
     }
 
     public function test_household_user_creation_returns_field_validation_errors(): void

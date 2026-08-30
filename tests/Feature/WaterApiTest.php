@@ -84,11 +84,8 @@ class WaterApiTest extends TestCase
             'is_possible_leak' => true,
         ]);
 
-        $this->assertDatabaseCount('notifications', 2);
-        $this->assertDatabaseHas('notifications', [
-            'type' => 'threshold_exceeded',
-            'user_id' => $user->id,
-        ]);
+        // No consumption-change notice is generated without a previous-month baseline.
+        $this->assertDatabaseCount('notifications', 1);
         $this->assertDatabaseHas('notifications', [
             'type' => 'possible_leak',
             'user_id' => $user->id,

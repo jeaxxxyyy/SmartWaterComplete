@@ -35,8 +35,8 @@ class WaterReading extends Model
     protected $casts = [
         'device_payload' => 'array',
         'flow_rate' => 'decimal:2',
-        'liters_used' => 'decimal:2',
-        'cubic_meter' => 'decimal:4',
+        'liters_used' => 'decimal:6',
+        'cubic_meter' => 'decimal:8',
         'estimated_bill' => 'decimal:2',
         'rate_per_cubic_meter' => 'decimal:2',
         'subsidy_deduction' => 'decimal:2',

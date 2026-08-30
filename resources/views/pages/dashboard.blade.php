@@ -96,83 +96,62 @@
         <section class="household-kpi-grid household-kpi-overview metric-overview-grid" aria-label="Household summary">
             <article class="metric-card metric-card-primary">
                 <div class="metric-card-top">
-                    <span class="metric-card-icon" aria-hidden="true">@include('components.ui-icon', ['name' => 'flow'])</span>
-                    <span class="metric-card-badge">Live</span>
+                    <div class="metric-card-heading">
+                        <span class="metric-card-icon" aria-hidden="true">@include('components.ui-icon', ['name' => 'flow'])</span>
+                        <h3 class="metric-card-label">Current flow rate</h3>
+                    </div>
+                    <span class="metric-card-badge" data-flow-badge>Checking</span>
                 </div>
-                <span class="metric-card-label">Current flow rate</span>
-                <strong class="mint" data-current-flow>Loading latest reading…</strong>
+                <strong data-current-flow>Loading latest reading…</strong>
                 <small data-flow-state>Reading the connected meter.</small>
             </article>
+            @include('components.household.consumption-card')
             <article class="metric-card metric-card-primary">
                 <div class="metric-card-top">
-                    <span class="metric-card-icon" aria-hidden="true">@include('components.ui-icon', ['name' => 'usage'])</span>
-                    <span class="metric-card-badge">This month</span>
+                    <div class="metric-card-heading">
+                        <span class="metric-card-icon" aria-hidden="true">@include('components.ui-icon', ['name' => 'billing'])</span>
+                        <h3 class="metric-card-label">Estimated bill</h3>
+                    </div>
+                    <span class="metric-card-badge" data-billing-badge>Estimated</span>
                 </div>
-                <span class="metric-card-label">Monthly consumption</span>
-                <strong data-total-consumed>Loading…</strong>
-                <small data-consumption-state>Calculating this month’s total.</small>
-            </article>
-            <article class="metric-card metric-card-primary">
-                <div class="metric-card-top">
-                    <span class="metric-card-icon" aria-hidden="true">@include('components.ui-icon', ['name' => 'billing'])</span>
-                    <span class="metric-card-badge">Estimated</span>
-                </div>
-                <span class="metric-card-label">Estimated bill</span>
                 <strong class="amber" data-estimated-bill>Loading…</strong>
                 <small data-billing-state>Using the active water rate.</small>
             </article>
             <article class="metric-card">
                 <div class="metric-card-top">
-                    <span class="metric-card-icon" aria-hidden="true">@include('components.ui-icon', ['name' => 'safety'])</span>
-                    <span class="metric-card-badge metric-card-badge-neutral">Safety</span>
+                    <div class="metric-card-heading">
+                        <span class="metric-card-icon" aria-hidden="true">@include('components.ui-icon', ['name' => 'safety'])</span>
+                        <h3 class="metric-card-label">Leak status</h3>
+                    </div>
                 </div>
-                <span class="metric-card-label">Leak status</span>
                 <strong class="mint" data-leak-summary>Loading…</strong>
                 <small data-leak-state>Checking the latest reading.</small>
             </article>
             <article class="metric-card">
                 <div class="metric-card-top">
-                    <span class="metric-card-icon" aria-hidden="true">@include('components.ui-icon', ['name' => 'connection'])</span>
-                    <span class="metric-card-badge metric-card-badge-neutral">Health</span>
+                    <div class="metric-card-heading">
+                        <span class="metric-card-icon" aria-hidden="true">@include('components.ui-icon', ['name' => 'connection'])</span>
+                        <h3 class="metric-card-label">Meter connection</h3>
+                    </div>
+                    <span class="metric-card-badge metric-card-badge-neutral" data-connection-badge>Checking</span>
                 </div>
-                <span class="metric-card-label">Connection status</span>
                 <strong data-connection-summary>Loading…</strong>
                 <small data-connection-state>Checking meter and server connectivity.</small>
             </article>
             <article class="metric-card">
                 <div class="metric-card-top">
-                    <span class="metric-card-icon" aria-hidden="true">@include('components.ui-icon', ['name' => 'notifications'])</span>
-                    <span class="metric-card-badge metric-card-badge-neutral">Inbox</span>
+                    <div class="metric-card-heading">
+                        <span class="metric-card-icon" aria-hidden="true">@include('components.ui-icon', ['name' => 'notifications'])</span>
+                        <h3 class="metric-card-label">Notifications</h3>
+                    </div>
                 </div>
-                <span class="metric-card-label">Unread notifications</span>
                 <strong class="rose" data-stat-alerts>Loading…</strong>
                 <small data-notification-state>Checking your notification inbox.</small>
             </article>
         </section>
 
         <section class="household-dashboard-grid">
-            <article class="panel chart-panel household-usage-panel">
-                <div class="panel-head">
-                    <div>
-                        <p class="eyebrow">Usage overview</p>
-                        <h2>Monthly water consumption</h2>
-                    </div>
-                    <span class="panel-context">12-month trend</span>
-                </div>
-                <div class="household-usage-content is-loading" data-household-usage-content>
-                    <div class="chart-legend">
-                        <span><i class="legend-dot usage-dot"></i>Consumption</span>
-                    </div>
-                    <div class="usage-chart" data-household-monthly-chart>
-                        <div class="loading-skeleton-card" aria-hidden="true">
-                            <span class="loading-skeleton-line loading-skeleton-line-lg"></span>
-                            <span class="loading-skeleton-line"></span>
-                            <span class="loading-skeleton-line"></span>
-                            <span class="loading-skeleton-line"></span>
-                        </div>
-                    </div>
-                </div>
-            </article>
+            @include('components.household.consumption-trend')
 
             <article class="panel system-status-panel">
                 <div class="panel-head">
@@ -351,13 +330,20 @@
                     <p class="eyebrow">Monitoring Graph</p>
                     <h2>Real-time consumption trend</h2>
                 </div>
-                <span class="status-pill">Monitoring graph</span>
+                <span class="status-pill" data-live-chart-status>Offline</span>
             </div>
+            <div class="live-chart-summary" aria-label="Latest live reading information">
+                <div><span>Latest flow rate</span><strong data-live-latest-flow>--</strong></div>
+                <div><span>Latest interval consumption</span><strong data-live-latest-interval>--</strong></div>
+                <div><span>Total recorded consumption</span><strong data-live-total-consumption>--</strong></div>
+                <div><span>Last reading</span><strong data-live-last-reading>--</strong></div>
+            </div>
+            <p class="live-chart-feedback" data-live-chart-feedback role="status" aria-live="polite" hidden></p>
             <div class="chart-legend">
-                <span><i class="legend-dot usage-dot"></i>Consumption</span>
+                <span><i class="legend-dot usage-dot"></i>Interval consumption (L)</span>
             </div>
-            <div class="usage-chart" data-household-monthly-chart>
-                <div class="empty-state">No usage data yet.</div>
+            <div class="usage-chart live-consumption-chart" data-live-consumption-chart>
+                <div class="empty-state">No live consumption data received yet.</div>
             </div>
         </article>
     </section>
@@ -705,7 +691,7 @@
                     </label>
                     <div class="account-settings-form-footer">
                         <div class="form-feedback" data-password-feedback hidden role="status" aria-live="polite"></div>
-                        <button class="button button-secondary" type="submit" data-password-submit disabled>Update password</button>
+                        <button class="button button-secondary" type="submit" data-password-submit>Update password</button>
                     </div>
                 </form>
             </article>

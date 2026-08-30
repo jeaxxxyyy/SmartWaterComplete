@@ -12,9 +12,11 @@ use App\Http\Controllers\Api\ConsumptionMonitoringController;
 use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\HouseholdBillingController;
+use App\Http\Controllers\Api\HouseholdConsumptionController;
 use App\Http\Controllers\Api\LeakAlertController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\SystemHealthController;
 use App\Http\Controllers\Api\UserManagementController;
 use App\Http\Controllers\Api\WaterController;
 use Illuminate\Support\Facades\Route;
@@ -30,10 +32,10 @@ Route::get('/ping', function () {
 
 // Public authentication and device commissioning -------------
 Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
 Route::post('/device-activate', [DeviceController::class, 'activate'])->middleware('throttle:6,1');
-Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
-Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
+Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:5,1');
 
 // Authenticated household and device endpoints ----------------
 Route::middleware('auth:sanctum')->group(function () {
@@ -44,16 +46,18 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('signed')
         ->name('verification.verify');
     Route::get('/readings', [WaterController::class, 'index']);
+    Route::get('/live-readings', [WaterController::class, 'liveReadings']);
     Route::get('/consumption-history', [WaterController::class, 'history']);
     Route::get('/summary', [ReportController::class, 'summary']);
     Route::get('/analytics/household', [AnalyticsController::class, 'household']);
     Route::get('/live-state', [WaterController::class, 'liveState']);
     Route::get('/account', [AccountController::class, 'show']);
     Route::patch('/account', [AccountController::class, 'update']);
-    Route::patch('/account/password', [AccountController::class, 'password']);
+    Route::patch('/account/password', [AccountController::class, 'password'])->middleware('throttle:6,1');
 
     Route::get('/billing-settings', [BillingController::class, 'index']);
     Route::get('/household-billing', [HouseholdBillingController::class, 'index']);
+    Route::get('/household-consumption', [HouseholdConsumptionController::class, 'show']);
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
     Route::delete('/notifications/received/all', [NotificationController::class, 'destroyAllReceived']);
@@ -66,6 +70,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->post('/water-data', [Wate
 
 // Administrator endpoints --------------------------------------
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
+    Route::get('/system-health', SystemHealthController::class);
     Route::get('/analytics/admin', [AnalyticsController::class, 'admin']);
     Route::post('/billing-settings', [BillingController::class, 'store']);
     Route::post('/billing-settings/rates', [BillingController::class, 'storeRates']);

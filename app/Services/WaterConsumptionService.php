@@ -17,8 +17,10 @@ class WaterConsumptionService
 {
     public function __construct(protected BillingStatementService $audit) {}
 
-    public function resolveSettingsForUser(?int $userId): Billing
+    public function resolveSettingsForUser(?int $userId, ?Carbon $effectiveOn = null): Billing
     {
+        $effectiveOn ??= now();
+        $effectiveDate = $effectiveOn->copy()->timezone(config('app.timezone'))->toDateString();
         $settings = Billing::query()
             ->where('is_active', true)
             ->where(function ($query) use ($userId): void {
@@ -28,9 +30,9 @@ class WaterConsumptionService
                     $query->orWhere('user_id', $userId);
                 }
             })
-            ->where(function ($query): void {
+            ->where(function ($query) use ($effectiveDate): void {
                 $query->whereNull('effective_date')
-                    ->orWhereDate('effective_date', '<=', now()->toDateString());
+                    ->orWhereDate('effective_date', '<=', $effectiveDate);
             })
             ->orderByRaw('CASE WHEN user_id IS NULL THEN 1 ELSE 0 END')
             ->orderByRaw('CASE WHEN effective_date IS NULL THEN 0 ELSE 1 END DESC')
@@ -50,7 +52,8 @@ class WaterConsumptionService
             'effective_date' => now()->toDateString(),
             'threshold_liters' => 0,
             'consumption_alert_enabled' => true,
-            'consumption_alert_unit' => 'liters',
+            'consumption_change_threshold_percent' => 100,
+            'consumption_alert_unit' => 'percentage',
             'consumption_alert_behavior' => 'household',
             'leak_flow_rate_threshold' => 0,
             'leak_alert_enabled' => true,
@@ -62,11 +65,64 @@ class WaterConsumptionService
         ]);
     }
 
+    /**
+     * Return the current billing period using the application's configured timezone.
+     *
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    public function currentBillingPeriod(?Carbon $reference = null): array
+    {
+        $start = ($reference?->copy() ?? now())
+            ->timezone(config('app.timezone'))
+            ->startOfMonth();
+
+        return [$start, $start->copy()->endOfMonth()];
+    }
+
     public function calculateEstimatedBill(float $cubicMeters, Billing $settings): float
     {
         $estimatedBill = ($cubicMeters * (float) $settings->water_rate) - (float) $settings->subsidy_deduction;
 
         return max($estimatedBill, 0);
+    }
+
+    /**
+     * Compare actual month-to-date consumption with the equivalent period of
+     * the previous month. A previous-period baseline is required so a new
+     * household is not shown a misleading percentage.
+     *
+     * @return array<string, float|string>|null
+     */
+    private function monthToDateConsumptionComparison(
+        int $userId,
+        Carbon $recordedAt,
+        float $currentMonthToDateLiters
+    ): ?array {
+        $previousPeriodStart = $recordedAt->copy()->subMonthNoOverflow()->startOfMonth();
+        $previousPeriodEnd = $recordedAt->copy()->subMonthNoOverflow();
+        $previousMonthToDateLiters = (float) WaterReading::query()
+            ->where('user_id', $userId)
+            ->whereBetween('recorded_at', [$previousPeriodStart, $previousPeriodEnd])
+            ->sum('liters_used');
+
+        if ($previousMonthToDateLiters <= 0) {
+            return null;
+        }
+
+        $percentageChange = (($currentMonthToDateLiters - $previousMonthToDateLiters) / $previousMonthToDateLiters) * 100;
+
+        return [
+            'comparison_month' => $recordedAt->format('Y-m'),
+            'current_period_start' => $recordedAt->copy()->startOfMonth()->toDateString(),
+            'current_period_end' => $recordedAt->toDateString(),
+            'previous_period_start' => $previousPeriodStart->toDateString(),
+            'previous_period_end' => $previousPeriodEnd->toDateString(),
+            'current_liters' => round($currentMonthToDateLiters, 4),
+            'previous_liters' => round($previousMonthToDateLiters, 4),
+            'percentage_change' => round($percentageChange, 2),
+            'absolute_percentage_change' => round(abs($percentageChange), 2),
+            'change_direction' => $percentageChange >= 0 ? 'increase' : 'decrease',
+        ];
     }
 
     public function isNightTime(?Carbon $recordedAt, Billing $settings): bool
@@ -172,6 +228,15 @@ class WaterConsumptionService
                 ->where('user_id', $household->id)
                 ->whereBetween('recorded_at', [$recordedAt->copy()->startOfMonth(), $recordedAt->copy()->endOfMonth()])
                 ->sum('liters_used');
+            $currentMonthToDateLiters = (float) WaterReading::query()
+                ->where('user_id', $household->id)
+                ->whereBetween('recorded_at', [$recordedAt->copy()->startOfMonth(), $recordedAt])
+                ->sum('liters_used') + $litersUsed;
+            $consumptionComparison = $this->monthToDateConsumptionComparison(
+                $household->id,
+                $recordedAt,
+                $currentMonthToDateLiters,
+            );
             $payload = Arr::only($data, [
                 'reading_id',
                 'device_name',
@@ -236,24 +301,39 @@ class WaterConsumptionService
             $notifications = collect();
             $leakNotification = null;
 
-            if ($isThresholdExceeded && ! $previousReading?->is_threshold_exceeded
+            $percentageThreshold = (float) ($settings->consumption_change_threshold_percent ?? 100);
+            $isRelevantConsumptionChange = $consumptionComparison !== null
+                && (float) $consumptionComparison['absolute_percentage_change'] >= $percentageThreshold;
+            $comparisonNoticeAlreadySent = $isRelevantConsumptionChange && Notification::query()
+                ->where('user_id', $household->id)
+                ->where('type', 'consumption_change')
+                ->where('metadata->comparison_month', $consumptionComparison['comparison_month'])
+                ->where('metadata->change_direction', $consumptionComparison['change_direction'])
+                ->exists();
+
+            if ($isRelevantConsumptionChange && ! $comparisonNoticeAlreadySent
                 && ($settings->consumption_alert_enabled ?? true)
                 && ($settings->consumption_alert_behavior ?? 'household') !== 'disabled') {
-                $thresholdNotification = Notification::create([
+                $direction = (string) $consumptionComparison['change_direction'];
+                $percentage = number_format((float) $consumptionComparison['absolute_percentage_change'], 2);
+                $consumptionNotification = Notification::create([
                     'user_id' => $household->id,
                     'water_reading_id' => $reading->id,
-                    'type' => 'threshold_exceeded',
-                    'title' => 'Water usage threshold reached',
-                    'message' => 'Your water consumption has reached the configured threshold.',
-                    'metadata' => [
-                        'liters_used' => $periodLiters + $litersUsed,
-                        'threshold_liters' => $waterLimitLiters,
-                    ],
+                    'type' => 'consumption_change',
+                    'title' => 'Relevant water consumption '.$direction,
+                    'message' => 'Your actual current month-to-date water consumption '.$direction.'d by '.$percentage.'% compared with the same period last month. Review your usage and notify the local waterworks if the change is unexpected or requires verification.',
+                    'metadata' => array_merge($consumptionComparison, [
+                        'percentage_threshold' => $percentageThreshold,
+                        'contact_waterworks_recommended' => true,
+                    ]),
                     'sent_at' => now(),
                 ]);
-                $notifications->push($thresholdNotification);
+                $notifications->push($consumptionNotification);
                 if (($settings->consumption_alert_behavior ?? 'household') === 'household_admin') {
-                    $this->notifyAdministrators($thresholdNotification, 'Consumption threshold reached for '.$household->name.'.');
+                    $this->notifyAdministrators(
+                        $consumptionNotification,
+                        $household->name.' recorded a relevant '.$percentage.'% consumption '.$direction.'.',
+                    );
                 }
             }
 
@@ -273,8 +353,8 @@ class WaterConsumptionService
                     'type' => 'possible_leak',
                     'title' => $isReminder ? 'Unresolved water leak reminder' : 'Possible water leak detected',
                     'message' => $isReminder
-                        ? 'The possible water leak remains unresolved. This is the daily reminder.'
-                        : 'Water flow reached the configured municipal leak threshold.',
+                        ? 'The possible water leak remains unresolved. Inspect the property and notify the local waterworks for verification.'
+                        : 'Possible abnormal water flow was detected. Inspect the meter and pipes, and notify the local waterworks for verification.',
                     'metadata' => [
                         'flow_rate' => $data['flow_rate'],
                         'leak_flow_rate_threshold' => $settings->leak_flow_rate_threshold,
@@ -363,7 +443,7 @@ class WaterConsumptionService
         $settings = $this->resolveSettingsForUser($userId);
         $device = $userId === null
             ? null
-            : Device::query()->where('household_id', $userId)->latest('id')->first();
+            : Device::query()->where('household_id', $userId)->where('status', '!=', 'decommissioned')->latest('id')->first();
 
         $readingQuery = WaterReading::query()
             ->when($userId !== null, fn ($query) => $query->where('user_id', $userId))
@@ -382,12 +462,13 @@ class WaterConsumptionService
         }
 
         return [
-            'latest_reading' => $latestReading,
-            'active_billing' => $settings,
-            'device_state' => [
-                'device_id' => $device?->id,
-                'device_name' => $device?->name ?? $latestReading?->device_name,
-                'water_limit_liters' => (float) $waterLimitLiters,
+                'latest_reading' => $latestReading,
+                'active_billing' => $settings,
+                'device_state' => [
+                    'device_id' => $device?->id,
+                    'device_name' => $device?->name ?? $latestReading?->device_name,
+                    'status' => $device?->status,
+                    'water_limit_liters' => (float) $waterLimitLiters,
                 'monitoring_status' => $latestReading?->monitoring_status ?? ($isLive ? 'online' : 'offline'),
                 'wifi_signal_strength' => $latestReading?->wifi_signal_strength,
                 'device_connection_status' => $isLive ? 'connected' : 'offline',

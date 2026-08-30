@@ -1736,7 +1736,13 @@ a {
     border: 0;
 }
 
+html {
+    max-width: 100%;
+    overflow-x: clip;
+}
+
 .page {
+    max-width: 100%;
     overflow-x: hidden;
 }
 
@@ -2723,6 +2729,12 @@ body[data-page="admin"] .admin-notification-actions {
     color: var(--success);
     border-color: #b7e3d0;
     background: #eefbf5;
+}
+
+.status-pill-warning {
+    color: #9a6700;
+    border-color: #f0d58a;
+    background: #fff8df;
 }
 
 body[data-page="admin"] .admin-form-field {
@@ -4768,6 +4780,12 @@ html.dark .status-pill-soft {
     background: #173f34;
 }
 
+html.dark .status-pill-warning {
+    color: #f8d77d;
+    border-color: #8d7030;
+    background: #4a3b1d;
+}
+
 html.dark .status-chip,
 html.dark .status-pill,
 html.dark .auth-status {
@@ -6346,6 +6364,60 @@ body[data-page="household"] [data-household-monthly-chart]::after {
     white-space: nowrap;
 }
 
+.live-chart-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.65rem;
+    margin: 0.25rem 0 0.75rem;
+}
+
+.live-chart-summary > div {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: 0.65rem;
+    background: color-mix(in srgb, var(--surface) 88%, var(--primary) 12%);
+}
+
+.live-chart-summary span {
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.live-chart-summary strong {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 0.9rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.live-chart-feedback {
+    margin: 0 0 0.55rem;
+    color: var(--muted);
+    font-size: 0.78rem;
+}
+
+.live-chart-feedback.is-error {
+    color: var(--danger, #b42318);
+}
+
+.live-chart-note {
+    margin: -0.25rem 0 0.8rem;
+    color: var(--muted);
+    font-size: 0.78rem;
+    text-align: center;
+}
+
+@media (max-width: 760px) {
+    .live-chart-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
 .household-usage-content.is-loading .area-chart-shell {
     display: none;
 }
@@ -6405,6 +6477,249 @@ body[data-page="household"] .household-usage-content.is-empty .usage-chart::afte
 body[data-page="household"] .household-usage-content.is-empty [data-household-monthly-chart] {
     min-height: 13rem;
     padding: 0;
+}
+
+/* Household consumption trend ---------------------------------------- */
+body[data-page="household"] .household-trend-card {
+    min-width: 0;
+    overflow: hidden;
+}
+
+body[data-page="household"] .household-trend-head {
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+body[data-page="household"] .household-trend-heading,
+body[data-page="household"] .household-trend-actions {
+    min-width: 0;
+}
+
+body[data-page="household"] .household-trend-description {
+    margin: 0.35rem 0 0;
+    color: var(--muted);
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+
+body[data-page="household"] .household-trend-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+body[data-page="household"] .household-trend-selector {
+    display: inline-flex;
+    flex: 0 0 auto;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 0.55rem;
+    background: var(--surface-soft);
+}
+
+body[data-page="household"] .household-trend-selector button {
+    min-width: 4.6rem;
+    min-height: 2.2rem;
+    padding: 0.35rem 0.65rem;
+    border: 0;
+    border-right: 1px solid var(--line);
+    color: var(--muted);
+    background: transparent;
+    font-size: 0.72rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+body[data-page="household"] .household-trend-selector button:last-child {
+    border-right: 0;
+}
+
+body[data-page="household"] .household-trend-selector button:hover:not(:disabled),
+body[data-page="household"] .household-trend-selector button:focus-visible,
+body[data-page="household"] .household-trend-selector button.is-active {
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 15%, var(--surface));
+}
+
+body[data-page="household"] .household-trend-selector button:disabled {
+    cursor: wait;
+    opacity: 0.65;
+}
+
+body[data-page="household"] .household-trend-history-link {
+    color: var(--primary-dark);
+    font-size: 0.74rem;
+    font-weight: 800;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+body[data-page="household"] .household-trend-history-link:hover,
+body[data-page="household"] .household-trend-history-link:focus-visible {
+    color: var(--primary);
+    text-decoration: underline;
+}
+
+body[data-page="household"] .household-trend-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.6rem;
+    margin-top: 1rem;
+}
+
+body[data-page="household"] .household-trend-summary > div {
+    display: grid;
+    min-width: 0;
+    gap: 0.18rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: 0.65rem;
+    background: color-mix(in srgb, var(--surface) 88%, var(--primary) 12%);
+}
+
+body[data-page="household"] .household-trend-summary span {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-weight: 750;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body[data-page="household"] .household-trend-summary strong {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 0.84rem;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body[data-page="household"] .household-trend-text {
+    margin: 0.65rem 0 0;
+    color: var(--muted);
+    font-size: 0.76rem;
+}
+
+body[data-page="household"] .household-trend-state {
+    display: grid;
+    place-items: center;
+    gap: 0.65rem;
+    padding: 1.15rem 1rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+    line-height: 1.5;
+    text-align: center;
+    white-space: normal;
+}
+
+body[data-page="household"] .household-trend-state.is-loading {
+    color: var(--primary-dark);
+}
+
+body[data-page="household"] .household-trend-state.is-error {
+    color: var(--danger, #b42318);
+}
+
+body[data-page="household"] .household-trend-retry {
+    min-height: 2.15rem;
+    padding-inline: 0.85rem;
+}
+
+body[data-page="household"] .household-trend-card .household-usage-content.is-empty .usage-chart {
+    display: none;
+    min-height: 0;
+}
+
+body[data-page="household"] .household-trend-card .usage-chart.is-single-point {
+    min-height: 14rem;
+}
+
+body[data-page="household"] .household-trend-card .area-chart-tooltip {
+    display: grid;
+    gap: 0.18rem;
+    white-space: normal;
+}
+
+body[data-page="household"] .household-trend-card .area-chart-tooltip strong {
+    color: var(--text);
+}
+
+body[data-page="household"] .household-trend-card .area-chart-tooltip span {
+    color: var(--muted);
+    font-size: 0.72rem;
+}
+
+html.dark body[data-page="household"] .household-trend-selector {
+    border-color: var(--line-strong);
+    background: var(--surface-soft);
+}
+
+html.dark body[data-page="household"] .household-trend-selector button {
+    border-color: var(--line-strong);
+    color: var(--muted);
+}
+
+html.dark body[data-page="household"] .household-trend-selector button:hover:not(:disabled),
+html.dark body[data-page="household"] .household-trend-selector button:focus-visible,
+html.dark body[data-page="household"] .household-trend-selector button.is-active {
+    color: var(--text);
+    background: color-mix(in srgb, var(--primary) 24%, var(--surface));
+}
+
+@media (max-width: 900px) {
+    body[data-page="household"] .household-trend-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body[data-page="household"] .household-trend-head {
+        flex-direction: column;
+    }
+
+    body[data-page="household"] .household-trend-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
+
+@media (max-width: 520px) {
+    body[data-page="household"] .household-trend-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    body[data-page="household"] .household-trend-selector {
+        display: grid;
+        width: 100%;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    body[data-page="household"] .household-trend-selector button {
+        min-width: 0;
+        width: 100%;
+    }
+
+    body[data-page="household"] .household-trend-history-link {
+        align-self: flex-start;
+    }
+
+    body[data-page="household"] .household-trend-summary {
+        gap: 0.45rem;
+    }
+
+    body[data-page="household"] .household-trend-summary > div {
+        padding-inline: 0.6rem;
+    }
+
+    body[data-page="household"] .household-trend-summary strong {
+        font-size: 0.76rem;
+    }
+
+    body[data-page="household"] .household-trend-card .area-chart-x-label:nth-of-type(2) {
+        display: none;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -8437,6 +8752,396 @@ html.dark body[data-page="household"] .metric-overview-grid > .metric-card,
 html.dark body[data-page="household"] .metric-overview-grid > .metric-card-primary {
     background: var(--surface);
     box-shadow: none;
+}
+
+/* Switchable household consumption metric ----------------------------- */
+body[data-page="household"] .household-consumption-card {
+    grid-template-areas:
+        "top top"
+        "label label"
+        "value value"
+        "state state";
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto;
+    row-gap: 0.35rem;
+}
+
+body[data-page="household"] .household-consumption-card .metric-card-top {
+    display: flex;
+    grid-area: top;
+    min-width: 0;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+}
+
+body[data-page="household"] .household-consumption-card .metric-card-badge {
+    flex: 0 0 auto;
+}
+
+body[data-page="household"] .household-consumption-selector {
+    display: inline-flex;
+    min-width: 0;
+    margin-left: auto;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 0.5rem;
+    background: var(--surface-soft);
+}
+
+body[data-page="household"] .household-consumption-selector button {
+    min-width: 0;
+    padding: 0.25rem 0.38rem;
+    border: 0;
+    border-right: 1px solid var(--line);
+    color: var(--muted);
+    background: transparent;
+    font-size: 0.61rem;
+    font-weight: 800;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+body[data-page="household"] .household-consumption-selector button:last-child {
+    border-right: 0;
+}
+
+body[data-page="household"] .household-consumption-selector button:hover,
+body[data-page="household"] .household-consumption-selector button:focus-visible,
+body[data-page="household"] .household-consumption-selector button.is-active {
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 14%, var(--surface));
+}
+
+body[data-page="household"] .household-consumption-card .metric-card-label {
+    grid-area: label;
+}
+
+body[data-page="household"] .household-consumption-card > strong {
+    grid-area: value;
+}
+
+body[data-page="household"] .household-consumption-card > small {
+    position: static;
+    width: auto;
+    height: auto;
+    grid-area: state;
+    min-height: 1.1rem;
+    overflow: visible;
+    clip: auto;
+    color: var(--muted);
+    font-size: 0.68rem;
+    line-height: 1.25;
+    text-overflow: clip;
+    white-space: normal;
+}
+
+html.dark body[data-page="household"] .household-consumption-selector {
+    border-color: var(--line-strong);
+    background: var(--surface-soft);
+}
+
+html.dark body[data-page="household"] .household-consumption-selector button {
+    border-color: var(--line-strong);
+    color: var(--muted);
+}
+
+html.dark body[data-page="household"] .household-consumption-selector button:hover,
+html.dark body[data-page="household"] .household-consumption-selector button:focus-visible,
+html.dark body[data-page="household"] .household-consumption-selector button.is-active {
+    color: var(--text);
+    background: color-mix(in srgb, var(--primary) 24%, var(--surface));
+}
+
+@media (min-width: 768px) and (max-width: 1100px) {
+    body[data-page="household"] .household-consumption-card .metric-card-top {
+        flex-wrap: wrap;
+    }
+
+    body[data-page="household"] .household-consumption-selector {
+        flex: 1 0 100%;
+        margin-left: 0;
+    }
+
+    body[data-page="household"] .household-consumption-selector button {
+        flex: 1 1 0;
+    }
+}
+
+@media (max-width: 767px) {
+    body[data-page="household"] .household-consumption-card .metric-card-top {
+        flex-wrap: wrap;
+    }
+
+    body[data-page="household"] .household-consumption-selector {
+        flex: 1 0 100%;
+        margin-left: 0;
+    }
+
+    body[data-page="household"] .household-consumption-selector button {
+        flex: 1 1 0;
+        padding-inline: 0.45rem;
+    }
+}
+
+/* Keep the switchable household card independent from the compact KPI grid. */
+body[data-page="household"] .metric-overview-grid > .metric-card.household-consumption-card {
+    display: flex;
+    container: household-consumption-card / inline-size;
+    min-width: 0;
+    min-height: 12rem;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 1rem;
+    overflow: visible;
+    padding: 1.25rem;
+    border: 1px solid var(--line);
+    border-top: 2px solid var(--primary);
+    border-radius: 1rem;
+    background: var(--surface);
+    box-shadow: 0 12px 24px rgb(8 115 151 / 6%);
+}
+
+body[data-page="household"] .household-consumption-card__top {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+body[data-page="household"] .household-consumption-card__identity {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 10rem;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+body[data-page="household"] .household-consumption-card__icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    flex: 0 0 2.5rem;
+    border-radius: 0.75rem;
+    font-size: 1rem;
+}
+
+body[data-page="household"] .household-consumption-card__label,
+body[data-page="household"] .household-consumption-card__value,
+body[data-page="household"] .household-consumption-card__state {
+    margin-block: 0;
+}
+
+body[data-page="household"] .household-consumption-card__label {
+    overflow: visible;
+    color: var(--primary-dark);
+    font-size: 0.75rem;
+    line-height: 1.25;
+    text-overflow: clip;
+    white-space: nowrap;
+}
+
+body[data-page="household"] .household-consumption-card__value {
+    display: block;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--text);
+    font-size: clamp(1.65rem, 3vw, 2.15rem);
+    line-height: 1.1;
+    letter-spacing: -0.035em;
+}
+
+body[data-page="household"] .household-consumption-card__unit {
+    letter-spacing: normal;
+}
+
+body[data-page="household"] .household-consumption-card [data-household-consumption-value][hidden],
+body[data-page="household"] .household-consumption-card [data-household-consumption-unit][hidden],
+body[data-page="household"] .household-consumption-card [data-household-consumption-skeleton][hidden] {
+    display: none !important;
+}
+
+body[data-page="household"] .household-consumption-card__state {
+    min-height: 1.25rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+body[data-page="household"] .household-consumption-selector {
+    display: inline-flex;
+    width: 100%;
+    min-width: 0;
+    flex: 0 0 auto;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 0.75rem;
+    background: var(--surface-soft);
+}
+
+body[data-page="household"] .household-consumption-selector button {
+    min-width: 0;
+    flex: 1 1 0;
+    padding: 0.5rem 0.65rem;
+    border: 0;
+    border-right: 1px solid var(--line);
+    color: var(--muted);
+    background: transparent;
+    font-size: 0.7rem;
+    font-weight: 800;
+    line-height: 1.25;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+body[data-page="household"] .household-consumption-selector button:last-child {
+    border-right: 0;
+}
+
+body[data-page="household"] .household-consumption-selector button:hover,
+body[data-page="household"] .household-consumption-selector button:focus-visible,
+body[data-page="household"] .household-consumption-selector button.is-active {
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 14%, var(--surface));
+}
+
+html.dark body[data-page="household"] .household-consumption-card {
+    border-color: var(--line-strong);
+    background: var(--surface);
+}
+
+html.dark body[data-page="household"] .household-consumption-card__label,
+html.dark body[data-page="household"] .household-consumption-selector button:hover,
+html.dark body[data-page="household"] .household-consumption-selector button:focus-visible,
+html.dark body[data-page="household"] .household-consumption-selector button.is-active {
+    color: #bff5ef;
+}
+
+html.dark body[data-page="household"] .household-consumption-selector {
+    border-color: var(--line-strong);
+    background: var(--surface-soft);
+}
+
+html.dark body[data-page="household"] .household-consumption-selector button {
+    border-color: var(--line-strong);
+    color: var(--muted);
+}
+
+/* Standardize the six dashboard KPIs without the legacy compact-grid clipping. */
+body[data-page="household"] .household-kpi-overview {
+    gap: 1rem;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+body[data-page="household"] .household-kpi-overview > .metric-card {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0.75rem;
+    padding: 1.25rem;
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    background: var(--surface);
+    box-shadow: 0 12px 24px rgb(8 115 151 / 6%);
+}
+
+body[data-page="household"] .household-kpi-overview > .metric-card.metric-card-primary {
+    border-top: 2px solid var(--primary);
+}
+
+body[data-page="household"] .household-kpi-overview > .metric-card .metric-card-top {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+body[data-page="household"] .household-kpi-overview > .metric-card .metric-card-heading {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+body[data-page="household"] .household-kpi-overview > .metric-card .metric-card-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    flex: 0 0 2.5rem;
+    border-radius: 0.75rem;
+    font-size: 1rem;
+}
+
+body[data-page="household"] .household-kpi-overview > .metric-card .metric-card-label {
+    align-self: center;
+    margin: 0;
+    overflow: visible;
+    color: var(--text);
+    font-size: 0.75rem;
+    line-height: 1.25;
+    text-overflow: clip;
+    white-space: normal;
+}
+
+body[data-page="household"] .household-kpi-overview > .metric-card .metric-card-badge {
+    flex: 0 0 auto;
+    grid-area: auto;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.65rem;
+    line-height: 1.2;
+}
+
+body[data-page="household"] .household-kpi-overview > .metric-card > strong {
+    min-width: 0;
+    min-height: 0;
+    align-self: flex-start;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    grid-area: auto;
+    font-size: clamp(1.35rem, 2.4vw, 1.85rem);
+    line-height: 1.2;
+    text-overflow: clip;
+    white-space: normal;
+}
+
+body[data-page="household"] .household-kpi-overview > .metric-card > small {
+    position: static;
+    width: auto;
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    overflow: visible;
+    clip: auto;
+    grid-area: auto;
+    line-height: 1.4;
+    text-overflow: clip;
+    white-space: normal;
+}
+
+html.dark body[data-page="household"] .household-kpi-overview > .metric-card {
+    border-color: var(--line-strong);
+    background: var(--surface);
+    box-shadow: 0 12px 30px rgb(3 15 24 / 18%);
+}
+
+@media (min-width: 768px) and (max-width: 1100px) {
+    body[data-page="household"] .household-kpi-overview > .household-consumption-card {
+        grid-column: span 2;
+    }
+}
+
+@media (max-width: 767px) {
+    body[data-page="household"] .household-kpi-overview > .metric-card {
+        padding: 1rem;
+    }
 }
 
 @media (min-width: 576px) and (max-width: 767px) {

@@ -7,6 +7,7 @@ use App\Models\Device;
 use App\Models\LeakAlert;
 use App\Models\Notification;
 use App\Models\User;
+use App\Models\WaterReading;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -162,5 +163,46 @@ class LeakAlertMonitoringTest extends TestCase
             ->assertJsonPath('data.data.0.notification.id', $notification->id);
 
         $this->assertDatabaseHas('leak_alerts', ['user_id' => $household->id]);
+    }
+
+    public function test_legacy_import_ignores_administrator_notification_copies(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $household = User::factory()->create(['role' => 'user']);
+        $reading = WaterReading::create([
+            'user_id' => $household->id,
+            'flow_rate' => 9,
+            'liters_used' => 1,
+            'cubic_meter' => 0.001,
+            'estimated_bill' => 0,
+            'rate_per_cubic_meter' => 0,
+            'subsidy_deduction' => 0,
+            'is_threshold_exceeded' => false,
+            'is_possible_leak' => true,
+            'recorded_at' => now(),
+        ]);
+        $householdNotification = Notification::create([
+            'user_id' => $household->id,
+            'water_reading_id' => $reading->id,
+            'type' => 'possible_leak',
+            'title' => 'Possible water leak detected',
+            'message' => 'Leak notice',
+            'sent_at' => now(),
+        ]);
+        Notification::create([
+            'user_id' => $admin->id,
+            'water_reading_id' => $reading->id,
+            'type' => 'possible_leak',
+            'title' => 'Administrator alert: Possible water leak detected',
+            'message' => 'Possible water leak detected for a household.',
+            'metadata' => ['household_notification_id' => $householdNotification->id],
+            'sent_at' => now(),
+        ]);
+        Sanctum::actingAs($admin);
+
+        $this->getJson('/api/leak-alerts')->assertOk();
+
+        $this->assertDatabaseHas('leak_alerts', ['user_id' => $household->id]);
+        $this->assertDatabaseMissing('leak_alerts', ['user_id' => $admin->id]);
     }
 }

@@ -105,6 +105,21 @@ class ThemeToggleTest extends TestCase
         $this->assertCount(6, $dashboardIcons);
     }
 
+    public function test_household_dashboard_renders_the_accessible_consumption_trend_contract(): void
+    {
+        $this->get('/household')
+            ->assertOk()
+            ->assertSee('Water Consumption Trend')
+            ->assertSee('Track how your household water usage changes over time.')
+            ->assertSee('View full consumption history', false)
+            ->assertSee('/household#history', false)
+            ->assertSee('data-household-trend-period="daily"', false)
+            ->assertSee('data-household-trend-period="weekly"', false)
+            ->assertSee('data-household-trend-period="monthly"', false)
+            ->assertSee('data-household-trend-period="monthly" aria-pressed="true"', false)
+            ->assertSee('data-household-trend-summary', false);
+    }
+
     public function test_authenticated_workspace_shells_identify_the_account_role(): void
     {
         $this->get('/household')

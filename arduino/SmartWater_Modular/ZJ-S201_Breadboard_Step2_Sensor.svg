@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <style>
+      .title{font:700 38px Arial,sans-serif;fill:#0b2b50}.subtitle{font:600 21px Arial,sans-serif;fill:#34516e}
+      .label{font:700 19px Arial,sans-serif;fill:#142638}.small{font:600 16px Arial,sans-serif;fill:#26394b}
+      .tiny{font:600 13px Arial,sans-serif;fill:#435466}.hole{fill:#d4d8dc;stroke:#8d969f;stroke-width:1}
+      .board{fill:#fafafa;stroke:#aeb8c1;stroke-width:3}.wire{fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-width:10}
+      .lead{fill:none;stroke:#59636c;stroke-width:4}.callout{fill:#fff;stroke-width:3;rx:12}.row{font:700 16px Arial,sans-serif;fill:#34495e}
+    </style>
+    <pattern id="upperHoles2" width="28" height="40" patternUnits="userSpaceOnUse"><circle class="hole" cx="14" cy="20" r="5"/></pattern>
+    <pattern id="railHoles2" width="28" height="28" patternUnits="userSpaceOnUse"><circle class="hole" cx="14" cy="14" r="5"/></pattern>
+  </defs>
+
+  <rect width="1600" height="900" fill="#f3f6fa"/>
+  <text x="800" y="58" text-anchor="middle" class="title">STEP 2 — CONNECT THE ZJ-S201 FROM THE LEFT</text>
+  <text x="800" y="91" text-anchor="middle" class="subtitle">Sensor wires enter from the left; CoreS3 wires remain on the right, so nothing intertwines</text>
+
+  <!-- breadboard -->
+  <rect x="370" y="145" width="900" height="565" rx="18" class="board"/>
+  <text x="397" y="178" class="label" fill="#1874c9">−</text><line x1="425" y1="174" x2="1190" y2="174" stroke="#1f8ed4" stroke-width="5"/>
+  <rect x="410" y="183" width="784" height="28" fill="url(#railHoles2)"/>
+  <text x="397" y="237" class="label" fill="#e33b3b">+</text><line x1="425" y1="233" x2="1190" y2="233" stroke="#e84646" stroke-width="5"/>
+  <rect x="410" y="242" width="784" height="28" fill="url(#railHoles2)"/>
+  <rect x="410" y="315" width="784" height="200" fill="url(#upperHoles2)"/>
+  <rect x="410" y="555" width="784" height="120" fill="url(#upperHoles2)" opacity=".5"/>
+  <rect x="397" y="520" width="810" height="28" rx="12" fill="#e8edf2"/>
+
+  <g class="row"><text x="386" y="340">A</text><text x="386" y="380">B</text><text x="386" y="420">C</text><text x="386" y="460">D</text><text x="386" y="500">E</text>
+  <text x="386" y="580">F</text><text x="386" y="620">G</text><text x="386" y="660">H</text></g>
+  <!-- x(n)=424+28(n-1) -->
+  <g class="small" text-anchor="middle"><text x="424" y="302">1</text><text x="536" y="302">5</text><text x="676" y="302">10</text><text x="816" y="302">15</text><text x="956" y="302">20</text><text x="1096" y="302">25</text><text x="1236" y="302">30</text></g>
+  <line x1="1210" y1="145" x2="1210" y2="710" stroke="#e02035" stroke-width="4" stroke-dasharray="12 9"/>
+
+  <!-- highlights -->
+  <rect x="662" y="313" width="28" height="202" rx="12" fill="#1aa56b" opacity=".19" stroke="#078957" stroke-width="3"/>
+  <rect x="802" y="313" width="28" height="202" rx="12" fill="#7749d9" opacity=".20" stroke="#6534ca" stroke-width="3"/>
+
+  <!-- resistor network -->
+  <line x1="676" y1="335" x2="705" y2="335" class="lead"/><path d="M705 335 l12 -12 14 24 14 -24 14 24 14 -24 14 24 12 -12" fill="none" stroke="#9b5f22" stroke-width="7"/><line x1="799" y1="335" x2="816" y2="335" class="lead"/>
+  <circle cx="676" cy="335" r="7" fill="#9b5f22"/><circle cx="816" cy="335" r="7" fill="#9b5f22"/>
+  <line x1="816" y1="455" x2="845" y2="455" class="lead"/><path d="M845 455 l12 -12 14 24 14 -24 14 24 14 -24 14 24 12 -12" fill="none" stroke="#287eb7" stroke-width="7"/><line x1="939" y1="455" x2="956" y2="455" class="lead"/>
+  <circle cx="816" cy="455" r="7" fill="#287eb7"/><circle cx="956" cy="455" r="7" fill="#287eb7"/>
+  <path d="M956 495 C1005 430 1000 260 956 197" class="wire" stroke="#15191d"/><circle cx="956" cy="495" r="7" fill="#111"/><circle cx="956" cy="197" r="7" fill="#111"/>
+
+  <!-- Core wires from right, already installed -->
+  <rect x="1340" y="270" width="195" height="250" rx="28" fill="#f7f7f4" stroke="#9da9b3" stroke-width="5"/>
+  <rect x="1360" y="295" width="155" height="165" rx="14" fill="#17202a"/>
+  <text x="1437" y="345" text-anchor="middle" font-family="Arial" font-size="25" font-weight="700" fill="#fff">M5Stack</text><text x="1437" y="385" text-anchor="middle" font-family="Arial" font-size="31" font-weight="800" fill="#ffb52b">CoreS3</text>
+  <path d="M1340 375 C1260 370 1180 270 1012 255" class="wire" stroke="#e52b2f"/><circle cx="1012" cy="255" r="7" fill="#e52b2f"/>
+  <path d="M1340 335 C1245 320 1160 195 1012 197" class="wire" stroke="#15191d"/><circle cx="1012" cy="197" r="7" fill="#15191d"/>
+  <path d="M1340 415 C1210 420 1100 375 816 375" class="wire" stroke="#f9f9f4" style="filter:drop-shadow(0 0 2px #64717d)"/><circle cx="816" cy="375" r="8" fill="#fff" stroke="#5c6974" stroke-width="3"/>
+  <path d="M1340 455 C1380 475 1400 490 1430 505" class="wire" stroke="#f2c21e"/><rect x="1420" y="495" width="68" height="29" rx="5" fill="#f6d953" stroke="#b98a00" stroke-width="2"/>
+  <text x="1435" y="548" text-anchor="middle" class="tiny">YELLOW GPIO1 — NOT USED</text>
+
+  <!-- Sensor on left -->
+  <rect x="35" y="270" width="225" height="250" rx="38" fill="#1d2329" stroke="#737f89" stroke-width="5"/>
+  <circle cx="147" cy="365" r="72" fill="#303941" stroke="#c6cdd3" stroke-width="4"/>
+  <text x="147" y="354" text-anchor="middle" font-family="Arial" font-size="27" font-weight="800" fill="#fff">ZJ-S201</text><text x="147" y="385" text-anchor="middle" class="small" fill="#dce5ec">FLOW SENSOR</text>
+  <!-- Sensor wires: left side to left rail and B10 -->
+  <path d="M260 375 C350 350 430 270 536 255" class="wire" stroke="#e52b2f"/><circle cx="536" cy="255" r="7" fill="#e52b2f"/>
+  <path d="M260 335 C340 280 400 197 536 197" class="wire" stroke="#15191d"/><circle cx="536" cy="197" r="7" fill="#15191d"/>
+  <path d="M260 415 C390 435 500 375 676 375" class="wire" stroke="#f1c51b"/><circle cx="676" cy="375" r="8" fill="#f1c51b" stroke="#8d7600" stroke-width="2"/>
+
+  <!-- callouts -->
+  <rect x="25" y="105" width="310" height="130" class="callout" stroke="#078957"/>
+  <text x="45" y="137" class="label" fill="#078957">SENSOR — LEFT SIDE</text><text x="45" y="168" class="small" fill="#d51f28">RED → top red rail near column 5</text><text x="45" y="196" class="small">BLACK → top blue rail near column 5</text><text x="45" y="224" class="small" fill="#9b8000">YELLOW pulse → B10</text>
+  <rect x="498" y="724" width="620" height="132" class="callout" stroke="#7749d9"/>
+  <text x="518" y="755" class="label">Final exact signal path</text>
+  <text x="518" y="785" class="small">Sensor YELLOW B10 → 10k A10–A15 → shared column 15 → Core WHITE GPIO2 B15</text>
+  <text x="518" y="815" class="small">20k D15–D20 → black jumper E20 → blue GND rail</text>
+  <text x="518" y="844" class="tiny">Sensor enters from the left. CoreS3 enters from the right. Power rails connect both sides without crossing signal wires.</text>
+  <rect x="1140" y="730" width="390" height="120" class="callout" stroke="#e02035"/>
+  <text x="1335" y="770" text-anchor="middle" class="label" fill="#c5162e">Power OFF while wiring</text><text x="1335" y="803" text-anchor="middle" class="small">Use only the rail section left of 30/31</text><text x="1335" y="830" text-anchor="middle" class="small">Firmware input remains GPIO2</text>
+</svg>

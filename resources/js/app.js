@@ -106,9 +106,6 @@ const passwordCriteria = $('[data-password-criteria]');
 let accountFormInitial = {};
 let passwordValidationState = {
     length: false,
-    uppercase: false,
-    number: false,
-    special: false,
 };
 const consumptionDialog = $('[data-consumption-dialog]');
 const adminAnalyticsRange = $('[data-admin-analytics-range]');
@@ -247,11 +244,46 @@ let householdProfile = null;
 let accountProfileLoaded = false;
 let accountProfileLoading = false;
 let householdBillingLoaded = false;
-let householdBillingLoading = false;
+let householdBillingRequest = null;
 let notificationRefreshInFlight = false;
+let notificationMutationInFlight = false;
+let notificationMutationVersion = 0;
+let householdNotifications = [];
 let historyRefreshInFlight = false;
 let householdAnalyticsLoadedRange = '';
 let householdAnalytics = null;
+let householdDeviceState = null;
+let householdSummaryData = null;
+const householdConsumptionPeriods = {
+    daily: { label: "TODAY'S CONSUMPTION", caption: 'Today', description: 'Consumption recorded today.' },
+    weekly: { label: "THIS WEEK'S CONSUMPTION", caption: 'This Week', description: 'Consumption recorded this week.' },
+    monthly: { label: "THIS MONTH'S CONSUMPTION", caption: 'This Month', description: 'Consumption recorded this month.' },
+};
+const householdConsumptionAvailability = {
+    no_meter: { value: 'No meter assigned', state: 'Assign a meter to begin tracking consumption.' },
+    pending_activation: { value: 'Waiting for meter activation', state: 'The assigned meter is awaiting activation.' },
+    waiting_for_first_reading: { value: 'Waiting for first reading', state: 'Consumption will appear after the meter submits a reading.' },
+    no_valid_readings: { value: 'No data', state: 'No valid readings are available for this period.' },
+    no_period_data: { value: 'No data', state: 'No water consumption recorded for this period.' },
+};
+let householdConsumptionPeriod = 'daily';
+let householdConsumptionRequestController = null;
+let householdConsumptionRequestId = 0;
+const householdTrendPeriods = {
+    daily: { label: 'day', title: 'Daily water consumption', empty: 'No usage data is available for this period. Try selecting a wider time range.' },
+    weekly: { label: 'week', title: 'Weekly water consumption', empty: 'No usage data is available for this period. Try selecting a wider time range.' },
+    monthly: { label: 'month', title: 'Monthly water consumption', empty: 'No usage data is available for this period. Try selecting a wider time range.' },
+};
+let householdTrendPeriod = 'monthly';
+let householdTrendRequestController = null;
+let householdTrendRequestId = 0;
+let householdTrendHasValidChart = false;
+const liveChartState = {
+    readings: [],
+    timezone: 'UTC',
+    chart: null,
+    error: false,
+};
 
 const adminState = {
     page: 1,
@@ -331,8 +363,11 @@ const updateAdminPageTitle = (target) => {
 };
 
 const DASHBOARD_REFRESH_MS = 3000;
+const FULL_DASHBOARD_REFRESH_MS = 60000;
 let dashboardRefreshTimer = null;
 let dashboardRefreshInFlight = false;
+let lastFullDashboardRefreshAt = 0;
+let householdActiveView = 'dashboard';
 const ADMIN_DEVICE_REFRESH_MS = 10000;
 let adminDeviceRefreshTimer = null;
 let adminDeviceRefreshInFlight = false;
@@ -347,12 +382,16 @@ const stopDashboardPolling = () => {
 const scheduleDashboardPolling = () => {
     stopDashboardPolling();
 
-    if (page !== 'household' || !readToken()) {
+    if (page !== 'household' || householdActiveView !== 'dashboard' || !readToken()) {
         return;
     }
 
     dashboardRefreshTimer = window.setTimeout(() => {
-        loadDashboard({ reschedule: true });
+        if (Date.now() - lastFullDashboardRefreshAt >= FULL_DASHBOARD_REFRESH_MS) {
+            loadDashboard({ reschedule: true });
+        } else {
+            refreshLiveDashboard();
+        }
     }, DASHBOARD_REFRESH_MS);
 };
 
@@ -438,28 +477,67 @@ const setAdminUserFormFeedback = (form, message = '', type = '') => {
     feedback.classList.toggle('is-loading', type === 'loading');
 };
 
+const splitCalapeAddress = (address, barangaySelect) => {
+    const fullAddress = String(address ?? '').trim();
+    const barangays = [...(barangaySelect?.options ?? [])]
+        .map((option) => option.value.trim())
+        .filter(Boolean)
+        .sort((first, second) => second.length - first.length);
+    const normalizedAddress = fullAddress.toLocaleLowerCase();
+
+    for (const barangay of barangays) {
+        const suffixes = [`barangay ${barangay}`, barangay];
+        const suffix = suffixes.find((candidate) => {
+            const normalizedCandidate = candidate.toLocaleLowerCase();
+            return normalizedAddress === normalizedCandidate || normalizedAddress.endsWith(`, ${normalizedCandidate}`);
+        });
+        if (!suffix) continue;
+
+        return {
+            addressLine: fullAddress.slice(0, fullAddress.length - suffix.length).replace(/,\s*$/, '').trim(),
+            barangay,
+        };
+    }
+
+    return { addressLine: fullAddress, barangay: '' };
+};
+
+const composeCalapeAddress = (addressLine, barangay) => {
+    const detail = String(addressLine ?? '').trim().replace(/,\s*$/, '');
+    const selectedBarangay = String(barangay ?? '').trim();
+    return `${detail}, Barangay ${selectedBarangay}`;
+};
+
 const openAdminHouseholdDialog = (user) => {
     if (!adminHouseholdDialog || !adminHouseholdEditForm) return;
 
     adminHouseholdEditForm.elements.user_id.value = user.id;
     adminHouseholdEditForm.elements.name.value = user.name ?? '';
     adminHouseholdEditForm.elements.email.value = user.email ?? '';
-    adminHouseholdEditForm.elements.address.value = user.address ?? '';
+    const parsedAddress = splitCalapeAddress(user.address, adminHouseholdEditForm.elements.barangay);
+    adminHouseholdEditForm.elements.address.value = parsedAddress.addressLine;
+    adminHouseholdEditForm.elements.barangay.value = parsedAddress.barangay;
     adminHouseholdEditForm.elements.phone.value = user.phone ?? '';
-    adminHouseholdEditForm.elements.is_active.checked = Boolean(user.is_active && (user.account_status ?? 'active') === 'active');
-    adminHouseholdEditForm.dataset.wasActive = adminHouseholdEditForm.elements.is_active.checked ? '1' : '0';
+    adminHouseholdEditForm.elements.password.value = '';
+    adminHouseholdEditForm.elements.password_confirmation.value = '';
+    const accountStatus = String(user.account_status ?? 'active');
+    const displayedAccountStatus = ['suspended', 'archived'].includes(accountStatus)
+        ? accountStatus
+        : user.is_active ? 'active' : 'inactive';
+    adminHouseholdEditForm.elements.account_status.value = displayedAccountStatus;
+    adminHouseholdEditForm.dataset.previousAccountStatus = displayedAccountStatus;
 
     const deviceSelect = adminHouseholdEditForm.elements.device_id;
     const assignedDevice = adminMunicipalDevices.find((device) => Number(device.household_id) === Number(user.id))
         ?? (Array.isArray(user.devices) ? user.devices[0] : null);
     adminHouseholdEditForm.dataset.currentDeviceId = assignedDevice?.id ?? '';
     const assignmentOptions = assignedDevice
-        ? `<option value="__unassign">Unassign ${escapeHtml(formatPersonalDisplay(assignedDevice.name, 'current meter'))}</option>`
+        ? `<option value="">Keep current: ${escapeHtml(formatPersonalDisplay(assignedDevice.name, 'current meter'))} · ${escapeHtml(assignedDevice.asset_number ?? 'Meter')}</option><option value="__unassign">Unassign current meter</option>`
         : '<option value="">No meter currently assigned</option>';
-    deviceSelect.innerHTML = assignmentOptions + '<option value="">Keep current assignment</option>' +
+    deviceSelect.innerHTML = assignmentOptions +
         adminMunicipalDevices
-            .filter((device) => device.status !== 'decommissioned')
-            .map((device) => `<option value="${device.id}"${Number(device.id) === Number(assignedDevice?.id) ? ' selected' : ''}>${escapeHtml(formatPersonalDisplay(device.name))} · ${escapeHtml(device.asset_number)}${device.household_id && Number(device.household_id) !== Number(user.id) ? ' · assigned' : ''}</option>`)
+            .filter((device) => device.status !== 'decommissioned' && Number(device.id) !== Number(assignedDevice?.id))
+            .map((device) => `<option value="${device.id}">${escapeHtml(formatPersonalDisplay(device.name))} · ${escapeHtml(device.asset_number)}${device.household_id && Number(device.household_id) !== Number(user.id) ? ' · assigned' : ''}</option>`)
             .join('');
 
     setAdminUserFormFeedback(adminHouseholdEditForm);
@@ -494,17 +572,33 @@ const bindAdminHouseholdEditForm = () => {
 
         const submitButton = $('[data-admin-household-edit-submit]', adminHouseholdEditForm);
         const userId = adminHouseholdEditForm.elements.user_id.value;
+        const selectedAccountStatus = adminHouseholdEditForm.elements.account_status.value;
         const payload = {
             name: adminHouseholdEditForm.elements.name.value.trim(),
             email: adminHouseholdEditForm.elements.email.value.trim(),
-            address: adminHouseholdEditForm.elements.address.value.trim(),
+            address: composeCalapeAddress(
+                adminHouseholdEditForm.elements.address.value,
+                adminHouseholdEditForm.elements.barangay.value,
+            ),
             phone: adminHouseholdEditForm.elements.phone.value.trim(),
-            is_active: adminHouseholdEditForm.elements.is_active.checked,
-            account_status: adminHouseholdEditForm.elements.is_active.checked ? 'active' : 'suspended',
+            is_active: selectedAccountStatus !== 'inactive',
+            account_status: selectedAccountStatus === 'inactive' ? 'active' : selectedAccountStatus,
         };
+        const password = adminHouseholdEditForm.elements.password.value;
+        const passwordConfirmation = adminHouseholdEditForm.elements.password_confirmation.value;
+        if (password || passwordConfirmation) {
+            payload.password = password;
+            payload.password_confirmation = passwordConfirmation;
+        }
 
-        if (adminHouseholdEditForm.dataset.wasActive === '1' && !payload.is_active
-            && !window.confirm('Deactivate this household account? The user will no longer be able to sign in.')) {
+        const statusActions = {
+            inactive: 'Deactivate',
+            suspended: 'Suspend',
+            archived: 'Archive',
+        };
+        if (adminHouseholdEditForm.dataset.previousAccountStatus === 'active'
+            && selectedAccountStatus !== 'active'
+            && !window.confirm(`${statusActions[selectedAccountStatus]} this household account? The user will no longer be able to sign in and existing sessions will be revoked.`)) {
             return;
         }
 
@@ -512,7 +606,12 @@ const bindAdminHouseholdEditForm = () => {
         if (!payload.name) editErrors.name = ['Full name is required.'];
         if (!payload.email) editErrors.email = ['Email address is required.'];
         else if (!/^\S+@\S+\.\S+$/.test(payload.email)) editErrors.email = ['Enter a valid email address.'];
-        if (!payload.address) editErrors.address = ['Address is required.'];
+        if (!adminHouseholdEditForm.elements.address.value.trim()) editErrors.address = ['House, street, or purok is required.'];
+        if (!adminHouseholdEditForm.elements.barangay.value) editErrors.barangay = ['Select a barangay.'];
+        if (password && password.length < 8) editErrors.password = ['Password must be at least 8 characters.'];
+        if ((password || passwordConfirmation) && password !== passwordConfirmation) {
+            editErrors.password_confirmation = ['Passwords do not match.'];
+        }
 
         if (Object.keys(editErrors).length) {
             setAdminUserFieldErrors(adminHouseholdEditForm, editErrors);
@@ -592,7 +691,11 @@ const validateAdminUserForm = (form) => {
     }
 
     if (!String(values.address ?? '').trim()) {
-        errors.address = ['Address is required.'];
+        errors.address = ['House, street, or purok is required.'];
+    }
+
+    if (!String(values.barangay ?? '').trim()) {
+        errors.barangay = ['Select a barangay.'];
     }
 
     return errors;
@@ -624,6 +727,8 @@ const bindAdminUserForm = (form) => {
         }
 
         const payload = Object.fromEntries(new FormData(form).entries());
+        payload.address = composeCalapeAddress(payload.address, payload.barangay);
+        delete payload.barangay;
         Object.keys(payload).forEach((key) => {
             if (payload[key] === '') delete payload[key];
         });
@@ -695,14 +800,38 @@ const authHeaders = () => {
           };
 };
 
+const REQUEST_TIMEOUT_MS = 15000;
+
 const requestJson = async (url, options = {}) => {
-    const response = await fetch(url, {
-        ...options,
-        headers: {
-            ...authHeaders(),
-            ...(options.headers ?? {}),
-        },
-    });
+    const requestOptions = { ...options };
+    const timeoutMs = Number(requestOptions.timeout ?? REQUEST_TIMEOUT_MS);
+    delete requestOptions.timeout;
+    const timeoutController = requestOptions.signal ? null : new AbortController();
+    if (timeoutController) requestOptions.signal = timeoutController.signal;
+    const timeoutId = timeoutController && timeoutMs > 0
+        ? window.setTimeout(() => timeoutController.abort(), timeoutMs)
+        : null;
+    let response;
+
+    try {
+        response = await fetch(url, {
+            ...requestOptions,
+            headers: {
+                ...authHeaders(),
+                ...(requestOptions.headers ?? {}),
+            },
+        });
+    } catch (error) {
+        if (error?.name === 'AbortError' && timeoutController?.signal.aborted) {
+            const timeoutError = new Error('The server took too long to respond. Please try again.');
+            timeoutError.status = 408;
+            timeoutError.code = 'request_timeout';
+            throw timeoutError;
+        }
+        throw error;
+    } finally {
+        if (timeoutId) window.clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
         const text = await response.text();
@@ -968,13 +1097,340 @@ const renderHouseholdAreaChart = (container, series, options = {}) => {
     }
 };
 
+const renderHouseholdTrendAreaChart = (container, series, options = {}) => {
+    if (!container) return;
+
+    const rows = (Array.isArray(series) ? series : []).map((row) => {
+        const rawValue = row.cubic_meters ?? row.total_cubic_meter ?? row.consumption ?? null;
+        const value = rawValue === null || rawValue === undefined ? null : Number(rawValue);
+        const hasReading = row.has_data === undefined
+            ? (row.reading_count === undefined ? Number.isFinite(value) : Number(row.reading_count) > 0)
+            : row.has_data === true;
+
+        return {
+            label: String(row.short_label ?? row.label ?? row.period ?? ''),
+            tooltipLabel: String(row.label ?? row.period ?? ''),
+            value: Number.isFinite(value) ? value : 0,
+            liters: row.liters === null || row.liters === undefined ? (Number.isFinite(value) ? value * 1000 : 0) : Number(row.liters),
+            hasReading,
+        };
+    });
+    const actualIndexes = rows.reduce((indexes, row, index) => {
+        if (row.hasReading) indexes.push(index);
+        return indexes;
+    }, []);
+    const hasData = options.dataAvailable ?? actualIndexes.length > 0;
+    const emptyMarkup = options.emptyMessage ?? '<div class="chart-empty-state"><strong>No consumption history available yet.</strong></div>';
+
+    if (!hasData || !actualIndexes.length) {
+        container.classList.add('is-empty');
+        container.classList.remove('is-single-point');
+        container.dataset.chartSignature = JSON.stringify({ rows, state: 'empty' });
+        container.innerHTML = emptyMarkup;
+        return;
+    }
+
+    container.classList.remove('is-empty');
+    container.classList.toggle('is-single-point', actualIndexes.length === 1);
+    const signature = JSON.stringify({ rows, state: 'area', period: options.period ?? '' });
+    if (container.dataset.chartSignature === signature) return;
+    container.dataset.chartSignature = signature;
+
+    const width = 760;
+    const height = actualIndexes.length === 1 ? 260 : 320;
+    const padding = { top: 28, right: 20, bottom: 52, left: 70 };
+    const plotWidth = width - padding.left - padding.right;
+    const plotHeight = height - padding.top - padding.bottom;
+    const maxValue = Math.max(...actualIndexes.map((index) => rows[index].value), 0);
+    const domainMax = maxValue > 0 ? maxValue * 1.15 : 1;
+    const xFor = (index) => rows.length === 1
+        ? padding.left + plotWidth / 2
+        : padding.left + (index / (rows.length - 1)) * plotWidth;
+    const yFor = (value) => padding.top + plotHeight - (value / domainMax) * plotHeight;
+    const points = rows.map((row, index) => row.hasReading ? { x: xFor(index), y: yFor(row.value), row } : null);
+    const segments = [];
+    let segment = [];
+    points.forEach((point) => {
+        if (point) segment.push(point);
+        else if (segment.length) {
+            segments.push(segment);
+            segment = [];
+        }
+    });
+    if (segment.length) segments.push(segment);
+    const linePath = segments.map((items) => items.map((point, index) => `${index ? 'L' : 'M'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ')).join(' ');
+    const areaPath = segments.map((items) => {
+        const first = items[0];
+        const last = items.at(-1);
+        return `M ${first.x.toFixed(2)} ${(padding.top + plotHeight).toFixed(2)} ${items.map((point) => `L ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ')} L ${last.x.toFixed(2)} ${(padding.top + plotHeight).toFixed(2)} Z`;
+    }).join(' ');
+    const grid = [0, 0.5, 1].map((ratio) => {
+        const y = padding.top + plotHeight - ratio * plotHeight;
+        return `<line class="area-chart-grid-line" x1="${padding.left}" x2="${width - padding.right}" y1="${y}" y2="${y}"></line><text class="area-chart-y-label" x="${padding.left - 10}" y="${y + 4}" text-anchor="end">${escapeHtml(formatNumber(domainMax * ratio))}</text>`;
+    }).join('');
+    const xLabelIndexes = [...new Set([0, Math.floor((rows.length - 1) / 2), rows.length - 1])];
+    const xLabels = xLabelIndexes.map((index) => `<text class="area-chart-x-label" x="${xFor(index)}" y="${height - 17}" text-anchor="middle">${escapeHtml(rows[index].label)}</text>`).join('');
+    const pointMarkup = points.filter(Boolean).map((point) => {
+        const valueText = `${formatNumber(point.row.value)} m³`;
+        const litersText = `${formatNumber(point.row.liters, 2)} L`;
+        return `<circle class="area-chart-point" cx="${point.x}" cy="${point.y}" r="4" tabindex="0" role="button" data-chart-label="${escapeHtml(point.row.tooltipLabel)}" data-chart-value="${escapeHtml(valueText)}" data-chart-liters="${escapeHtml(litersText)}" aria-label="${escapeHtml(`${point.row.tooltipLabel}: ${valueText}, equivalent ${litersText}`)}"></circle>`;
+    }).join('');
+    const wasAnimated = container.classList.contains('is-animated');
+    container.classList.remove('is-animated');
+    container.innerHTML = `<div class="area-chart-shell"><svg class="area-line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(options.title ?? 'Household water consumption trend')}"><g class="area-chart-grid">${grid}</g><text class="area-chart-axis-unit" x="${padding.left}" y="18">Consumption (m³)</text><path class="area-chart-area" d="${areaPath}"></path><path class="area-chart-line" d="${linePath}"></path><g class="area-chart-points">${pointMarkup}</g><g class="area-chart-x-labels">${xLabels}</g></svg><div class="area-chart-tooltip" data-chart-tooltip role="status" hidden></div></div>`;
+
+    const shell = $('.area-chart-shell', container);
+    const tooltip = $('[data-chart-tooltip]', container);
+    const showTooltip = (point) => {
+        if (!tooltip || !shell) return;
+        tooltip.innerHTML = `<strong>${escapeHtml(point.dataset.chartLabel)}</strong><span>Consumption: ${escapeHtml(point.dataset.chartValue)}</span><span>Equivalent: ${escapeHtml(point.dataset.chartLiters)}</span>`;
+        tooltip.hidden = false;
+        const shellRect = shell.getBoundingClientRect();
+        const chartRect = $('.area-line-chart', shell).getBoundingClientRect();
+        const x = ((Number(point.getAttribute('cx')) / width) * chartRect.width) + (chartRect.left - shellRect.left);
+        const y = ((Number(point.getAttribute('cy')) / height) * chartRect.height) + (chartRect.top - shellRect.top);
+        tooltip.style.left = `${Math.max(8, Math.min(shellRect.width - tooltip.offsetWidth - 8, x - tooltip.offsetWidth / 2))}px`;
+        tooltip.style.top = `${Math.max(8, y - tooltip.offsetHeight - 12)}px`;
+    };
+    $$('.area-chart-point', container).forEach((point) => {
+        point.addEventListener('pointerenter', () => showTooltip(point));
+        point.addEventListener('focus', () => showTooltip(point));
+        point.addEventListener('click', () => showTooltip(point));
+        point.addEventListener('pointerleave', (event) => {
+            if (event.pointerType !== 'touch' && tooltip) tooltip.hidden = true;
+        });
+    });
+
+    if (wasAnimated) container.classList.add('is-animated');
+    else if (container.closest('.dashboard-view')?.classList.contains('is-active')) observeHouseholdChart(container);
+};
+
+const liveChartTimestamp = (value, timezone = liveChartState.timezone) => {
+    if (!value) return '--';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '--';
+
+    const time = date.toLocaleTimeString(undefined, {
+        timeZone: timezone,
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+    });
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: timezone });
+    const readingDay = date.toLocaleDateString('en-CA', { timeZone: timezone });
+
+    return readingDay === today
+        ? time
+        : `${date.toLocaleDateString(undefined, { timeZone: timezone, month: 'short', day: 'numeric' })} ${time}`;
+};
+
+const liveChartReadingKey = (reading) => String(reading?.id ?? reading?.reading_id ?? reading?.recorded_at ?? '');
+
+const liveChartTooltip = (reading) => {
+    const total = reading?.total_liters === null || reading?.total_liters === undefined
+        ? ''
+        : `<div>Total: ${formatNumber(reading.total_liters, 4)} L</div>`;
+
+    return `<strong>${escapeHtml(liveChartTimestamp(reading?.recorded_at))}</strong>
+        <div>Flow: ${formatNumber(reading?.flow_rate, 2)} L/min</div>
+        <div>Interval: ${formatNumber(reading?.liters_used, 4)} L</div>${total}`;
+};
+
+const ensureLiveChart = (container) => {
+    if (liveChartState.chart?.container === container) return liveChartState.chart;
+
+    const width = 760;
+    const height = 320;
+    const padding = { top: 28, right: 20, bottom: 54, left: 74 };
+    container.innerHTML = `
+        <div class="area-chart-shell live-chart-shell">
+            <svg class="area-line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Real-time interval water consumption trend">
+                <g class="area-chart-grid"></g>
+                <text class="area-chart-axis-unit" x="${padding.left}" y="18">Interval consumption (L)</text>
+                <g class="area-chart-y-labels"></g>
+                <path class="area-chart-area"></path>
+                <path class="area-chart-line"></path>
+                <g class="area-chart-points"></g>
+                <g class="area-chart-x-labels"></g>
+            </svg>
+            <div class="area-chart-tooltip" data-live-chart-tooltip role="status" hidden></div>
+        </div>
+        <div class="live-chart-note" data-live-chart-note hidden>Waiting for more readings to generate a trend.</div>
+        <div class="chart-empty-state" data-live-chart-empty hidden><strong>No live consumption data received yet.</strong></div>
+    `;
+
+    const svg = $('.area-line-chart', container);
+    const chart = {
+        container,
+        svg,
+        shell: $('.live-chart-shell', container),
+        grid: $('.area-chart-grid', container),
+        yLabels: $('.area-chart-y-labels', container),
+        xLabels: $('.area-chart-x-labels', container),
+        area: $('.area-chart-area', container),
+        line: $('.area-chart-line', container),
+        points: $('.area-chart-points', container),
+        tooltip: $('[data-live-chart-tooltip]', container),
+        empty: $('[data-live-chart-empty]', container),
+        note: $('[data-live-chart-note]', container),
+        width,
+        height,
+        padding,
+        tooltipReadings: new Map(),
+    };
+
+    const showTooltip = (point) => {
+        const reading = chart.tooltipReadings.get(point.dataset.key);
+        if (!reading || !chart.tooltip) return;
+        chart.tooltip.innerHTML = liveChartTooltip(reading);
+        chart.tooltip.hidden = false;
+        const shellRect = chart.shell.getBoundingClientRect();
+        const chartRect = chart.svg.getBoundingClientRect();
+        const x = (Number(point.getAttribute('cx')) / width) * chartRect.width + (chartRect.left - shellRect.left);
+        const y = (Number(point.getAttribute('cy')) / height) * chartRect.height + (chartRect.top - shellRect.top);
+        chart.tooltip.style.left = `${Math.max(8, Math.min(shellRect.width - chart.tooltip.offsetWidth - 8, x - chart.tooltip.offsetWidth / 2))}px`;
+        chart.tooltip.style.top = `${Math.max(8, y - chart.tooltip.offsetHeight - 12)}px`;
+    };
+
+    svg.addEventListener('pointerover', (event) => {
+        const point = event.target.closest?.('.area-chart-point');
+        if (point) showTooltip(point);
+    });
+    svg.addEventListener('focusin', (event) => {
+        const point = event.target.closest?.('.area-chart-point');
+        if (point) showTooltip(point);
+    });
+    svg.addEventListener('click', (event) => {
+        const point = event.target.closest?.('.area-chart-point');
+        if (point) showTooltip(point);
+    });
+    svg.addEventListener('pointerout', (event) => {
+        if (!event.relatedTarget?.closest?.('.area-chart-point')) chart.tooltip.hidden = true;
+    });
+
+    liveChartState.chart = chart;
+    return chart;
+};
+
+const renderLiveConsumptionChart = (readings = []) => {
+    const container = $('[data-live-consumption-chart]');
+    if (!container) return;
+
+    const chart = ensureLiveChart(container);
+    const rows = Array.isArray(readings) ? readings : [];
+    const plotWidth = chart.width - chart.padding.left - chart.padding.right;
+    const plotHeight = chart.height - chart.padding.top - chart.padding.bottom;
+    const maxValue = Math.max(...rows.map((reading) => Number(reading.liters_used ?? 0)), 0);
+    const domainMax = maxValue > 0 ? maxValue * 1.15 : 1;
+    const xFor = (index) => rows.length === 1
+        ? chart.padding.left + plotWidth / 2
+        : chart.padding.left + (index / (rows.length - 1)) * plotWidth;
+    const yFor = (value) => chart.padding.top + plotHeight - (Number(value || 0) / domainMax) * plotHeight;
+    const points = rows.map((reading, index) => ({
+        reading,
+        x: xFor(index),
+        y: yFor(reading.liters_used),
+    }));
+
+    chart.grid.innerHTML = [0, 1 / 3, 2 / 3, 1].map((ratio) => {
+        const y = chart.padding.top + plotHeight - ratio * plotHeight;
+        return `<line class="area-chart-grid-line" x1="${chart.padding.left}" x2="${chart.width - chart.padding.right}" y1="${y}" y2="${y}"></line>`;
+    }).join('');
+    chart.yLabels.innerHTML = [0, 1 / 3, 2 / 3, 1].map((ratio) => {
+        const y = chart.padding.top + plotHeight - ratio * plotHeight;
+        return `<text class="area-chart-y-label" x="${chart.padding.left - 10}" y="${y + 4}" text-anchor="end">${escapeHtml(formatNumber(domainMax * ratio, 4))}</text>`;
+    }).join('');
+
+    const linePath = points.length > 1
+        ? points.map((point, index) => `${index ? 'L' : 'M'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ')
+        : '';
+    const areaPath = points.length > 1
+        ? `M ${points[0].x.toFixed(2)} ${(chart.padding.top + plotHeight).toFixed(2)} ${points.map((point) => `L ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ')} L ${points.at(-1).x.toFixed(2)} ${(chart.padding.top + plotHeight).toFixed(2)} Z`
+        : '';
+    chart.line.setAttribute('d', linePath);
+    chart.area.setAttribute('d', areaPath);
+    chart.tooltipReadings = new Map(points.map((point) => [liveChartReadingKey(point.reading), point.reading]));
+
+    chart.points.replaceChildren(...points.map((point) => {
+        const marker = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        marker.setAttribute('class', 'area-chart-point');
+        marker.setAttribute('cx', point.x.toFixed(2));
+        marker.setAttribute('cy', point.y.toFixed(2));
+        marker.setAttribute('r', '3.5');
+        marker.setAttribute('tabindex', '0');
+        marker.setAttribute('role', 'button');
+        marker.setAttribute('aria-label', `${liveChartTimestamp(point.reading.recorded_at)}: ${formatNumber(point.reading.liters_used, 4)} L interval consumption`);
+        marker.dataset.key = liveChartReadingKey(point.reading);
+        return marker;
+    }));
+
+    const labelIndexes = [...new Set([0, Math.floor((rows.length - 1) / 2), rows.length - 1])];
+    chart.xLabels.innerHTML = labelIndexes.map((index) => `<text class="area-chart-x-label" x="${xFor(index)}" y="${chart.height - 17}" text-anchor="middle">${escapeHtml(liveChartTimestamp(rows[index]?.recorded_at))}</text>`).join('');
+    chart.shell.hidden = rows.length === 0;
+    chart.empty.hidden = rows.length !== 0;
+    chart.note.hidden = rows.length !== 1;
+    container.classList.toggle('is-empty', rows.length === 0);
+};
+
+const renderLiveConsumptionSummary = (response) => {
+    const latest = response?.latest;
+    const status = response?.status?.value ?? 'offline';
+    const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+    setText('[data-live-latest-flow]', latest ? `${formatNumber(latest.flow_rate, 2)} L/min` : '--');
+    setText('[data-live-latest-interval]', latest ? `${formatNumber(latest.liters_used, 4)} L` : '--');
+    setText('[data-live-total-consumption]', latest ? `${formatNumber(response.total_recorded_liters, 4)} L` : '--');
+    setText('[data-live-last-reading]', latest ? liveChartTimestamp(latest.recorded_at) : '--');
+    setText('[data-live-chart-status]', statusLabel);
+    setText('[data-current-flow]', latest ? `${formatNumber(latest.flow_rate, 2)} L/min` : '--');
+    setText('[data-flow-state]', latest && Number(latest.flow_rate) > 0
+        ? 'Active water flow detected.'
+        : 'No active water flow detected.');
+    $$('[data-live-chart-status]').forEach((node) => {
+        node.classList.toggle('status-pill-live', status === 'live');
+        node.classList.toggle('status-pill-soft', status === 'live');
+        node.classList.toggle('status-pill-warning', status === 'delayed');
+        node.classList.toggle('status-pill-inactive', status === 'offline');
+    });
+};
+
+const applyLiveConsumptionResponse = (response) => {
+    liveChartState.timezone = response?.timezone || liveChartState.timezone;
+    const incoming = Array.isArray(response?.readings) ? response.readings : [];
+    const readingsByKey = new Map();
+    [...liveChartState.readings, ...incoming].forEach((reading) => {
+        const key = liveChartReadingKey(reading);
+        if (key) readingsByKey.set(key, reading);
+    });
+    liveChartState.readings = [...readingsByKey.values()]
+        .sort((a, b) => new Date(a.recorded_at) - new Date(b.recorded_at) || Number(a.id || 0) - Number(b.id || 0))
+        .slice(-30);
+    renderLiveConsumptionSummary(response);
+    renderLiveConsumptionChart(liveChartState.readings);
+    liveChartState.error = false;
+    const feedback = $('[data-live-chart-feedback]');
+    if (feedback) {
+        feedback.hidden = true;
+        feedback.textContent = '';
+        feedback.classList.remove('is-error');
+    }
+};
+
+const markLiveConsumptionUnavailable = () => {
+    liveChartState.error = true;
+    const feedback = $('[data-live-chart-feedback]');
+    if (!feedback) return;
+    feedback.hidden = false;
+    feedback.textContent = 'Unable to retrieve the latest reading. Retrying…';
+    feedback.classList.add('is-error');
+};
+
 const renderMonthlyChart = (container, series, options = {}) => {
     if (!container) {
         return;
     }
 
     if (container.matches('[data-household-monthly-chart]')) {
-        renderHouseholdAreaChart(container, series, options);
+        renderHouseholdTrendAreaChart(container, series, options);
         return;
     }
 
@@ -1186,6 +1642,7 @@ const setTokenInput = () => {
 };
 
 const showHouseholdView = (target) => {
+    householdActiveView = target;
     $$('[data-household-view]').forEach((view) => {
         view.classList.toggle('is-active', view.dataset.householdView === target);
     });
@@ -1205,6 +1662,11 @@ const showHouseholdView = (target) => {
     if (householdSidebar?.classList.contains('is-open')) {
         householdSidebar.classList.remove('is-open');
         householdSidebarToggle?.setAttribute('aria-expanded', 'false');
+    }
+    if (target === 'dashboard') {
+        loadDashboard();
+    } else {
+        stopDashboardPolling();
     }
     if (target === 'notifications') loadNotifications();
     if (target === 'history') loadConsumptionHistory();
@@ -1528,6 +1990,7 @@ const notificationTypeLabel = (type) => ({
     device_system: 'Device or system notice',
     possible_leak: 'Leak alert',
     threshold_exceeded: 'Usage threshold alert',
+    consumption_change: 'Consumption change alert',
 }[type] ?? 'System notification');
 
 const renderNotificationDropdown = (items) => {
@@ -1606,25 +2069,42 @@ const renderNotifications = (items, selector = '[data-notifications-list]') => {
     });
 };
 
+const applyHouseholdNotifications = (items) => {
+    householdNotifications = Array.isArray(items) ? items : [];
+    const unreadCount = householdNotifications.filter((item) => !item.is_read).length;
+
+    renderNotifications(householdNotifications);
+    renderNotifications(householdNotifications, '[data-dashboard-notifications-list]');
+    renderNotificationDropdown(householdNotifications);
+    setHouseholdAlertCount(unreadCount);
+    setText('[data-stat-alerts]', unreadCount > 0
+        ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`
+        : 'No unread notifications');
+    setText('[data-notification-state]', unreadCount > 0 ? 'Unread alerts need your attention.' : "You're all caught up.");
+};
+
 const loadNotifications = async () => {
-    if (notificationRefreshInFlight || !readToken()) return;
+    if (notificationRefreshInFlight || notificationMutationInFlight || !readToken()) return false;
     notificationRefreshInFlight = true;
+    const requestedMutationVersion = notificationMutationVersion;
 
     try {
         const response = await requestJson('/api/notifications?per_page=100');
-        const items = responseItems(response);
-        renderNotifications(items);
-        renderNotifications(items, '[data-dashboard-notifications-list]');
-        renderNotificationDropdown(items);
-        setHouseholdAlertCount(items.filter((item) => !item.is_read).length);
+        if (requestedMutationVersion !== notificationMutationVersion) return true;
+        applyHouseholdNotifications(responseItems(response));
+        return true;
     } catch (error) {
-        if (handleAuthFailure(error)) return;
+        console.error('Dashboard request failed: /api/notifications?per_page=100', error);
+        if (handleAuthFailure(error)) return false;
         $$('[data-notifications-list], [data-dashboard-notifications-list]').forEach((container) => {
-            container.innerHTML = '<div class="empty-state is-error">Unable to retrieve notifications. Try again.</div>';
+            container.innerHTML = '<div class="empty-state is-error">Unable to load notifications.</div>';
         });
         if (notificationDropdownList) {
             notificationDropdownList.innerHTML = '<div class="notification-dropdown-empty is-error">Unable to load notifications.</div>';
         }
+        setText('[data-stat-alerts]', 'Unable to load notifications.');
+        setText('[data-notification-state]', '');
+        return false;
     } finally {
         notificationRefreshInFlight = false;
     }
@@ -1690,6 +2170,8 @@ const markNotificationRead = async (card) => {
     notificationReadInFlight.add(id);
     try {
         await requestJson(`/api/notifications/${id}/read`, { method: 'PATCH' });
+        const notification = householdNotifications.find((item) => String(item.id) === String(id));
+        if (notification) notification.is_read = true;
         card.dataset.notificationRead = '1';
         const badge = $('.status-chip', card);
         if (badge) {
@@ -1716,13 +2198,22 @@ const bindNotificationReadTracking = (container) => {
             const deleteButton = event.target.closest('[data-delete-received-notification]');
             if (deleteButton) {
                 event.stopPropagation();
+                if (notificationMutationInFlight) return;
+
+                const notificationId = String(deleteButton.dataset.deleteReceivedNotification);
+                const previousNotifications = householdNotifications;
+                notificationMutationInFlight = true;
+                notificationMutationVersion++;
+                applyHouseholdNotifications(previousNotifications.filter((item) => String(item.id) !== notificationId));
+
                 try {
-                    await requestJson(`/api/notifications/received/${deleteButton.dataset.deleteReceivedNotification}`, { method: 'DELETE' });
-                    deleteButton.closest('[data-notification-id]')?.remove();
+                    await requestJson(`/api/notifications/received/${notificationId}`, { method: 'DELETE' });
                     showToast('Notification deleted successfully.');
-                    loadDashboard();
                 } catch (error) {
+                    applyHouseholdNotifications(previousNotifications);
                     if (!handleAuthFailure(error)) showToast(errorMessage(error, 'Could not delete the notification.'), 'error');
+                } finally {
+                    notificationMutationInFlight = false;
                 }
                 return;
             }
@@ -1848,35 +2339,31 @@ const updateAccountFormState = () => {
 };
 
 const updatePasswordCriteria = (value) => {
-    if (!passwordCriteria) return;
     passwordValidationState.length = value.length >= 8;
-    passwordValidationState.uppercase = /[A-Z]/.test(value);
-    passwordValidationState.number = /[0-9]/.test(value);
-    passwordValidationState.special = /[^A-Za-z0-9]/.test(value);
 
-    Object.entries(passwordValidationState).forEach(([key, isValid]) => {
-        const item = passwordCriteria.querySelector(`[data-criteria="${key}"]`);
-        if (!item) return;
-        item.classList.toggle('is-valid', isValid);
-        item.classList.toggle('is-invalid', !isValid);
-    });
-    if (passwordSubmitButton) {
-        const confirmation = passwordForm?.elements.password_confirmation?.value ?? '';
-        const match = confirmation.length > 0 && confirmation === (passwordForm?.elements.password?.value ?? '');
-        passwordSubmitButton.disabled = !Object.values(passwordValidationState).every(Boolean) || !match;
+    if (passwordCriteria) {
+        Object.entries(passwordValidationState).forEach(([key, isValid]) => {
+            const item = passwordCriteria.querySelector(`[data-criteria="${key}"]`);
+            if (!item) return;
+            item.classList.toggle('is-valid', isValid);
+            item.classList.toggle('is-invalid', !isValid);
+        });
     }
 };
 
 const updatePasswordFormState = () => {
     if (!passwordForm || !passwordSubmitButton) return;
+    const currentPassword = passwordForm.elements.current_password?.value ?? '';
     const password = passwordForm.elements.password?.value ?? '';
     const confirmation = passwordForm.elements.password_confirmation?.value ?? '';
     updatePasswordCriteria(password);
     const confirmationError = confirmation && password !== confirmation ? 'Passwords do not match.' : '';
     setFieldError('password_confirmation', confirmationError);
-    if (passwordSubmitButton) {
-        passwordSubmitButton.disabled = !Object.values(passwordValidationState).every(Boolean) || Boolean(confirmationError);
-    }
+    const isValid = Boolean(currentPassword)
+        && passwordValidationState.length
+        && confirmation.length > 0
+        && password === confirmation;
+    passwordSubmitButton.disabled = !isValid;
 };
 
 const renderAccountActivity = (user) => {
@@ -1925,17 +2412,19 @@ const renderHouseholdBilling = (billing) => {
     const currency = calculation.currency ?? 'PHP';
     activeCurrency = currency;
     const unavailableReason = !hasReadings
-        ? 'No meter readings are available for this billing period yet.'
+        ? 'No water readings are available for this billing period.'
         : !hasRate
             ? 'An active water rate has not been configured yet. Billing will appear after the administrator publishes a rate.'
             : 'This amount is based on the recorded readings and the effective billing configuration for this period.';
 
     setText('[data-household-billing-period]', billing?.period?.label ?? 'Current billing period');
     setText('[data-billing-current-charge]', type === 'unavailable' ? 'Unavailable' : formatCurrency(calculation.current_charge, currency));
-    setText('[data-billing-consumption]', type === 'unavailable' ? 'Unavailable' : formatCubicMeterValue(calculation.total_cubic_meter));
+    setText('[data-billing-consumption]', type === 'unavailable' && !hasReadings ? 'No readings' : type === 'unavailable' ? 'Unavailable' : formatCubicMeterValue(calculation.total_cubic_meter));
     setText('[data-billing-reading-count]', `${formatNumber(billing?.reading_count ?? 0, 0)} reading${Number(billing?.reading_count ?? 0) === 1 ? '' : 's'} in this period`);
     setText('[data-billing-rate]', hasRate || type === 'finalized' ? formatCurrency(calculation.water_rate, currency) + ' / m³' : 'Unavailable');
-    setText('[data-billing-rate-effective]', billing?.rate_effective_date ? `Effective ${billing.rate_effective_date}` : 'No active rate configured');
+    setText('[data-billing-rate-effective]', billing?.has_rate_configuration
+        ? (billing.rate_effective_date ? `Effective ${billing.rate_effective_date}` : 'Effective for this billing period')
+        : 'No active rate configured');
     setText('[data-billing-balance]', calculation.remaining_balance === null || calculation.remaining_balance === undefined ? 'Not finalized' : formatCurrency(calculation.remaining_balance, currency));
     setText('[data-billing-record-type]', `${billingRecordTypeLabel(type)} · ${billing?.period?.label ?? 'Current period'}`);
     setText(
@@ -1972,12 +2461,24 @@ const renderHouseholdBilling = (billing) => {
             : '<div class="billing-empty-state"><span class="billing-empty-icon" aria-hidden="true"><i class="bi bi-cpu"></i></span><div><strong>No meter assigned</strong><span>Contact the administrator to connect a household meter.</span></div></div>';
     }
 
+    const meterForMeta = billing?.meter;
+    if (meterForMeta?.last_seen_at) {
+        $('[data-billing-meter] > div:last-child')?.insertAdjacentHTML('beforeend', `<small>Last seen ${escapeHtml(formatDateTime(meterForMeta.last_seen_at))}</small>`);
+    }
+
     const latest = billing?.latest_reading;
     const latestContainer = $('[data-billing-latest-reading]');
     if (latestContainer) {
         latestContainer.innerHTML = latest
             ? `<div><dt>Recorded</dt><dd>${escapeHtml(formatDateTime(latest.recorded_at))}</dd></div><div><dt>Flow rate</dt><dd>${formatNumber(latest.flow_rate)} L/min</dd></div><div><dt>Reading volume</dt><dd>${formatNumber(latest.liters_used, 2)} L · ${formatCubicMeterValue(latest.cubic_meter)}</dd></div><div><dt>Meter connection</dt><dd>${escapeHtml(normalizeConnectionStatus(latest.device_connection_status))}</dd></div>`
             : '<div class="billing-reading-empty"><i class="bi bi-activity" aria-hidden="true"></i><div><strong>No recent meter reading</strong><span>The latest billing-period reading will appear here automatically.</span></div></div>';
+    }
+
+    if (latest && latestContainer) {
+        const latestTotal = latest.total_liters === null || latest.total_liters === undefined
+            ? 'Not reported'
+            : `${formatNumber(latest.total_liters, 2)} L`;
+        latestContainer.insertAdjacentHTML('beforeend', `<div><dt>Total recorded</dt><dd>${escapeHtml(latestTotal)}</dd></div><div><dt>Leak status</dt><dd>${escapeHtml(latest.leak_detection_status ?? (latest.is_possible_leak ? 'Leak detected' : 'Normal'))}</dd></div>`);
     }
 
     const history = Array.isArray(billing?.history) ? billing.history : [];
@@ -1989,29 +2490,77 @@ const renderHouseholdBilling = (billing) => {
     }
 };
 
-const loadHouseholdBilling = async ({ force = false } = {}) => {
-    if (!householdBillingState || householdBillingLoading || (householdBillingLoaded && !force)) return;
-    householdBillingLoading = true;
+const loadHouseholdBilling = ({ force = false } = {}) => {
+    if (!householdBillingState) return Promise.resolve(false);
+    if (householdBillingRequest) return householdBillingRequest;
+    if (householdBillingLoaded && !force) return Promise.resolve(true);
+
     setHouseholdBillingState('Loading billing details...', 'loading');
-    try {
-        const response = await requestJson('/api/household-billing');
-        const billing = response?.data ?? {};
-        renderHouseholdBilling(billing);
-        householdBillingLoaded = true;
-        setHouseholdBillingState(
-            billing.record_type === 'unavailable' ? 'Billing needs attention' : `${billingRecordTypeLabel(billing.record_type)} ready`,
-            billing.record_type === 'unavailable' ? 'empty' : 'ready',
-        );
-    } catch (error) {
-        if (handleAuthFailure(error)) return;
-        const message = errorMessage(error, 'Billing details could not be loaded.');
-        setHouseholdBillingState(message, 'error');
-        const calculationContainer = $('[data-billing-calculation]');
-        if (calculationContainer) calculationContainer.innerHTML = `<div class="empty-state is-error"><strong>Billing details unavailable</strong><span>${escapeHtml(message)}</span><button class="button button-ghost" type="button" data-billing-retry>Retry</button></div>`;
-        $('[data-billing-retry]')?.addEventListener('click', () => loadHouseholdBilling({ force: true }));
-    } finally {
-        householdBillingLoading = false;
-    }
+    householdBillingRequest = (async () => {
+        try {
+            const response = await requestJson('/api/household-billing');
+            const billing = response?.data ?? {};
+            renderHouseholdBilling(billing);
+            householdBillingLoaded = true;
+            const currentCharge = billing?.calculation?.current_charge;
+            setText('[data-estimated-bill]', currentCharge === null || currentCharge === undefined ? 'No data' : formatCurrency(currentCharge, billing?.calculation?.currency));
+            setText('[data-billing-state]', billing.record_type === 'unavailable' ? 'No billable readings this period.' : 'Current billing-period estimate.');
+            setText('[data-billing-badge]', billing.record_type === 'finalized' ? 'Finalized' : billing.record_type === 'estimated' ? 'Estimated' : 'Unavailable');
+            setHouseholdBillingState(
+                billing.record_type === 'unavailable' ? 'Billing needs attention' : `${billingRecordTypeLabel(billing.record_type)} ready`,
+                billing.record_type === 'unavailable' ? 'empty' : 'ready',
+            );
+            return true;
+        } catch (error) {
+            console.error('Dashboard request failed: /api/household-billing', error);
+            householdBillingLoaded = false;
+            if (handleAuthFailure(error)) return false;
+            const payload = errorPayload(error);
+            const message = error?.status === 404
+                ? (payload.message ?? 'No active water meter is assigned to this household.')
+                : error?.status === 422
+                    ? (payload.message ?? 'No active water rate is configured for this billing period.')
+                    : (payload.message ?? 'Billing estimate is temporarily unavailable. Please try again.');
+            const rateStatus = error?.status === 422 ? 'No active rate configured' : 'Rate data unavailable';
+            setHouseholdBillingState(message, 'error');
+            setText('[data-estimated-bill]', message);
+            setText('[data-billing-state]', '');
+            setText('[data-billing-current-charge]', 'Unavailable');
+            setText('[data-billing-consumption]', 'Unavailable');
+            setText('[data-billing-rate]', 'Unavailable');
+            setText('[data-billing-balance]', 'Not finalized');
+            setText('[data-billing-reading-count]', 'Billing data unavailable');
+            setText('[data-billing-record-type]', 'Unavailable');
+            setText('[data-billing-rate-effective]', rateStatus);
+            setText('[data-billing-explanation]', message);
+            const typeChip = $('[data-billing-type-chip]');
+            if (typeChip) {
+                typeChip.textContent = 'Unavailable';
+                typeChip.classList.remove('status-chip-soft', 'status-chip-muted');
+                typeChip.classList.add('status-chip-alert');
+            }
+            const calculationContainer = $('[data-billing-calculation]');
+            if (calculationContainer) calculationContainer.innerHTML = `<div class="empty-state is-error"><strong>${escapeHtml(message)}</strong><button class="button button-ghost" type="button" data-billing-retry>Retry</button></div>`;
+            if (error?.status === 404) {
+                const meterContainer = $('[data-billing-meter]');
+                if (meterContainer) meterContainer.innerHTML = '<div class="billing-empty-state"><span class="billing-empty-icon" aria-hidden="true"><i class="bi bi-cpu"></i></span><div><strong>No meter assigned</strong><span>Contact the administrator to connect a household meter.</span></div></div>';
+            }
+            const latestContainer = $('[data-billing-latest-reading]');
+            if (latestContainer) latestContainer.innerHTML = '<div class="billing-reading-empty"><i class="bi bi-activity" aria-hidden="true"></i><div><strong>No recent meter reading</strong><span>Latest telemetry is unavailable.</span></div></div>';
+            const retryButton = $('[data-billing-retry]');
+            retryButton?.addEventListener('click', async () => {
+                retryButton.disabled = true;
+                retryButton.setAttribute('aria-busy', 'true');
+                retryButton.textContent = 'Retrying...';
+                await loadHouseholdBilling({ force: true });
+            });
+            return false;
+        } finally {
+            householdBillingRequest = null;
+        }
+    })();
+
+    return householdBillingRequest;
 };
 
 const renderLegacyAdminAlerts = (items) => {
@@ -2333,13 +2882,6 @@ const bindAdminNotificationFilters = () => {
     });
 };
 
-const normalizeConnectionStatus = (value, unavailable = 'Unavailable') => {
-    const normalized = String(value ?? '').trim().toLowerCase();
-    if (!normalized) return unavailable;
-    if (['connected', 'online', 'active', 'ok', 'normal'].includes(normalized)) return 'Connected';
-    return 'Disconnected';
-};
-
 const normalizeMonitoringStatus = (value, unavailable = 'Unavailable') => {
     const normalized = String(value ?? '').trim().toLowerCase();
     if (!normalized) return unavailable;
@@ -2347,15 +2889,63 @@ const normalizeMonitoringStatus = (value, unavailable = 'Unavailable') => {
     return 'Inactive';
 };
 
+const resolveHouseholdConnection = (deviceState, latestReading) => {
+    if (deviceState === null || deviceState === undefined) {
+        return {
+            label: 'Unavailable',
+            description: 'Connection health is temporarily unavailable. Refresh the dashboard to try again.',
+            isLive: false,
+        };
+    }
+    const status = String(deviceState?.status ?? '').trim().toLowerCase();
+    if (!deviceState?.device_id) {
+        return {
+            label: 'No meter assigned',
+            description: 'Assign a meter to view connection health.',
+            isLive: false,
+        };
+    }
+    if (status === 'pending') {
+        return {
+            label: 'Pending activation',
+            description: 'The assigned meter is awaiting activation.',
+            isLive: false,
+        };
+    }
+    if (['disabled', 'decommissioned', 'maintenance'].includes(status)) {
+        return {
+            label: 'Disabled',
+            description: 'The assigned meter is not currently active.',
+            isLive: false,
+        };
+    }
+    if (!latestReading) {
+        return {
+            label: 'Waiting for first reading',
+            description: 'No meter reading has been received yet.',
+            isLive: false,
+        };
+    }
+
+    const isLive = deviceState.is_live === true;
+    return {
+        label: isLive ? 'Online' : 'Offline',
+        description: deviceState.last_seen_at
+            ? `Last reading received ${formatDateTime(deviceState.last_seen_at)}.`
+            : 'No recent meter communication is available.',
+        isLive,
+    };
+};
+
 const applyStatusTone = (selector, value) => {
     $$(selector).forEach((node) => {
         node.classList.remove('is-good', 'is-warning', 'is-unavailable', 'is-error');
         const normalized = String(value ?? '').toLowerCase();
-        node.classList.add(normalized.includes('unavailable') ? 'is-unavailable' : normalized.includes('disconnected') || normalized.includes('critical') || normalized.includes('leak') ? 'is-error' : normalized.includes('inactive') || normalized.includes('warning') ? 'is-warning' : 'is-good');
+        node.classList.add(normalized.includes('unavailable') || normalized.includes('no meter') ? 'is-unavailable' : normalized.includes('disconnected') || normalized.includes('offline') || normalized.includes('disabled') || normalized.includes('critical') || normalized.includes('leak') ? 'is-error' : normalized.includes('inactive') || normalized.includes('pending') || normalized.includes('waiting') || normalized.includes('warning') ? 'is-warning' : 'is-good');
     });
 };
 
-const applySummary = (summary) => {
+const applySummary = (summary, deviceState = householdDeviceState) => {
     const current = summary?.current_month ?? {};
     const notifications = summary?.notifications ?? {};
     const billingStatement = summary?.billing_statement ?? null;
@@ -2364,9 +2954,9 @@ const applySummary = (summary) => {
 
     const summaryData = {
         ...current,
-        reading_count: current.reading_count ?? 0,
-        total_liters: current.total_liters ?? 0,
-        estimated_bill: current.estimated_bill ?? 0,
+        reading_count: current.reading_count ?? null,
+        total_liters: current.total_liters ?? null,
+        estimated_bill: current.estimated_bill ?? null,
         monthly_usage: summary?.monthly_usage ?? [],
     };
     const latestReading = current.latest_reading ?? null;
@@ -2380,7 +2970,8 @@ const applySummary = (summary) => {
         : '--');
     setText('[data-leak-details]', !latestReading ? 'No recent device reading available.' : Boolean(latestReading?.is_possible_leak) ? 'Possible leak detected from the latest reading.' : 'No leak has been detected yet.');
 
-    renderHouseholdSummaryCards(summaryData, latestReading, notifications);
+    householdDeviceState = deviceState ?? householdDeviceState;
+    renderHouseholdSummaryCards(summaryData, latestReading, notifications, activeBilling, householdDeviceState);
 };
 
 const setHouseholdAnalyticsValue = (selector, value, isEmpty = false) => {
@@ -2445,71 +3036,330 @@ const setDashboardFeedback = (message = '', type = 'info') => {
     feedback.classList.toggle('is-loading', type === 'loading');
 };
 
-const renderHouseholdSummaryCards = (summaryData, latestReading, notifications) => {
+const renderDashboardSummaryUnavailable = () => {
+    setText('[data-current-flow]', 'Unable to load current flow.');
+    setText('[data-flow-state]', 'Refresh the dashboard to try again.');
+    setText('[data-leak-summary]', 'Unable to load leak status.');
+    setText('[data-leak-state]', 'Refresh the dashboard to try again.');
+    setText('[data-connection-summary]', 'Unable to load meter connection.');
+    setText('[data-connection-state]', 'Refresh the dashboard to try again.');
+    setText('[data-flow-badge]', 'Unavailable');
+    setText('[data-connection-badge]', 'Unavailable');
+    setText('[data-billing-badge]', 'Unavailable');
+};
+
+const renderDashboardReadingsUnavailable = () => {
+    $$('[data-live-readings-list], [data-recent-readings-list]').forEach((container) => {
+        container.innerHTML = '<div class="empty-state is-error">Unable to load recent readings.</div>';
+    });
+};
+
+const setHouseholdConsumptionPeriod = (period) => {
+    const labels = householdConsumptionPeriods[period] ?? householdConsumptionPeriods.daily;
+    setText('[data-household-consumption-label]', labels.label);
+    setText('[data-household-consumption-state]', labels.description);
+    $$('[data-household-consumption-period]').forEach((button) => {
+        const isActive = button.dataset.householdConsumptionPeriod === period;
+        button.classList.toggle('is-active', isActive);
+        button.setAttribute('aria-pressed', String(isActive));
+    });
+};
+
+const renderHouseholdConsumptionState = ({ value = '', description = '', hasUnit = false, loading = false } = {}) => {
+    const valueNode = $('[data-household-consumption-value]');
+    const unitNode = $('[data-household-consumption-unit]');
+    const skeletonNode = $('[data-household-consumption-skeleton]');
+    const stateNode = $('[data-household-consumption-state]');
+    const cardNode = $('[data-household-consumption-card]');
+
+    if (valueNode) {
+        valueNode.textContent = value;
+        valueNode.hidden = loading;
+    }
+    if (stateNode) stateNode.textContent = description;
+    if (unitNode) unitNode.hidden = !hasUnit;
+    if (skeletonNode) skeletonNode.hidden = !loading;
+    if (cardNode) cardNode.setAttribute('aria-busy', String(loading));
+};
+
+const renderHouseholdConsumption = (data) => {
+    const value = Number(data?.cubic_meters);
+    const period = data?.period ?? householdConsumptionPeriod;
+    setHouseholdConsumptionPeriod(period);
+
+    if (data?.has_data === true && Number.isFinite(value)) {
+        const description = value === 0
+            ? 'No water consumption recorded for this period.'
+            : householdConsumptionPeriods[period]?.description ?? 'Consumption recorded for this period.';
+        renderHouseholdConsumptionState({ value: formatNumber(value), description, hasUnit: true });
+        return;
+    }
+
+    const unavailable = householdConsumptionAvailability[data?.availability] ?? householdConsumptionAvailability.no_valid_readings;
+    renderHouseholdConsumptionState({ value: unavailable.value, description: unavailable.state });
+};
+
+const loadHouseholdConsumption = async (period = householdConsumptionPeriod) => {
+    const card = $('[data-household-consumption-card]');
+    if (!card || !householdConsumptionPeriods[period]) return false;
+
+    householdConsumptionPeriod = period;
+    const requestId = ++householdConsumptionRequestId;
+    householdConsumptionRequestController?.abort();
+    householdConsumptionRequestController = new AbortController();
+    setHouseholdConsumptionPeriod(period);
+    renderHouseholdConsumptionState({ description: 'Loading consumption…', loading: true });
+
+    try {
+        const response = await requestJson(`/api/household-consumption?period=${encodeURIComponent(period)}`, {
+            signal: householdConsumptionRequestController.signal,
+        });
+        if (requestId !== householdConsumptionRequestId) return;
+        renderHouseholdConsumption(response?.data);
+        return true;
+    } catch (error) {
+        if (error?.name === 'AbortError' || requestId !== householdConsumptionRequestId) return;
+        console.error(`Dashboard request failed: /api/household-consumption?period=${encodeURIComponent(period)}`, error);
+        if (handleAuthFailure(error)) {
+            renderHouseholdConsumptionState({ value: 'Unable to load consumption.', description: '' });
+            return false;
+        }
+        renderHouseholdConsumptionState({ value: 'Unable to load consumption.', description: '' });
+        return false;
+    } finally {
+        if (requestId === householdConsumptionRequestId) {
+            householdConsumptionRequestController = null;
+        }
+    }
+};
+
+const setHouseholdTrendSelector = (period, disabled = false) => {
+    $$('[data-household-trend-period]').forEach((button) => {
+        const isActive = button.dataset.householdTrendPeriod === period;
+        button.classList.toggle('is-active', isActive);
+        button.setAttribute('aria-pressed', String(isActive));
+        button.disabled = disabled;
+    });
+};
+
+const householdTrendMessage = (availability) => ({
+    no_meter: 'No water meter assigned.\nContact the administrator to assign a meter before consumption trends can be displayed.',
+    pending_activation: 'Meter awaiting activation.\nConsumption trends will appear after the assigned meter is activated.',
+    no_valid_readings: 'No consumption history yet.\nYour usage trend will appear after the meter submits valid readings.',
+    no_period_data: 'No usage data is available for this period.\nTry selecting a wider time range.',
+}[availability] ?? 'No usage data is available for this period.\nTry selecting a wider time range.');
+
+const renderHouseholdTrendSummary = (summary) => {
+    const summaryCard = $('[data-household-trend-summary]');
+    if (!summaryCard) return;
+    const hasCurrent = summary?.current?.cubic_meters !== null && summary?.current?.cubic_meters !== undefined;
+    const hasAverage = summary?.average_cubic_meters !== null && summary?.average_cubic_meters !== undefined;
+    summaryCard.hidden = !hasCurrent && !hasAverage;
+    setText('[data-household-trend-current-label]', `Current ${summary?.period_label ?? 'period'}`);
+    setText('[data-household-trend-previous-label]', `Previous ${summary?.period_label ?? 'period'}`);
+    setText('[data-household-trend-current]', hasCurrent ? `${formatNumber(summary.current.cubic_meters)} m³` : 'No data');
+    setText('[data-household-trend-previous]', summary?.previous?.cubic_meters === null || summary?.previous?.cubic_meters === undefined
+        ? 'Not enough history for comparison.'
+        : `${formatNumber(summary.previous.cubic_meters)} m³`);
+    setText('[data-household-trend-change]', summary?.change_percent === null || summary?.change_percent === undefined
+        ? 'Not enough history for comparison.'
+        : `${summary.change_percent > 0 ? '+' : ''}${formatNumber(summary.change_percent, 1)}%`);
+    setText('[data-household-trend-average]', hasAverage ? `${formatNumber(summary.average_cubic_meters)} m³` : 'No data');
+};
+
+const setHouseholdTrendState = (message = '', type = 'info', retry = false) => {
+    const state = $('[data-household-trend-state]');
+    if (!state) return;
+    state.hidden = !message;
+    state.classList.toggle('is-error', type === 'error');
+    state.classList.toggle('is-loading', type === 'loading');
+    state.innerHTML = message
+        ? `<span>${escapeHtml(message).replaceAll('\n', '<br>')}</span>${retry ? '<button type="button" class="button button-secondary household-trend-retry" data-household-trend-retry>Retry</button>' : ''}`
+        : '';
+    $('[data-household-trend-retry]', state)?.addEventListener('click', () => loadHouseholdTrend(householdTrendPeriod));
+};
+
+const renderHouseholdTrend = (data) => {
+    const usageContent = $('[data-household-usage-content]');
+    const chart = $('[data-household-monthly-chart]');
+    const trend = Array.isArray(data?.trend) ? data.trend : [];
+    const hasTrendData = trend.some((row) => row.has_data === true || Number(row.reading_count ?? 0) > 0);
+    const availability = data?.availability ?? 'no_valid_readings';
+    householdTrendHasValidChart = hasTrendData;
+    usageContent?.classList.remove('is-loading');
+    usageContent?.classList.toggle('is-empty', !hasTrendData);
+    setHouseholdTrendState('', 'info');
+
+    if (availability !== 'ready') {
+        setHouseholdTrendState(householdTrendMessage(availability));
+    }
+
+    renderHouseholdTrendSummary(data?.summary);
+    renderMonthlyChart(chart, trend, {
+        period: householdTrendPeriod,
+        title: householdTrendPeriods[householdTrendPeriod]?.title ?? 'Household water consumption trend',
+        dataAvailable: hasTrendData,
+        emptyMessage: '<div class="chart-empty-state" aria-hidden="true"></div>',
+    });
+    const text = $('[data-household-trend-text]');
+    if (text) {
+        text.hidden = !hasTrendData;
+        text.textContent = data?.summary?.direction
+            ? `Usage is ${data.summary.direction} compared with the previous ${data.summary.period_label}.`
+            : 'Not enough history for comparison.';
+    }
+};
+
+const loadHouseholdTrend = async (period = householdTrendPeriod) => {
+    const card = $('[data-household-trend-card]');
+    if (!card || !householdTrendPeriods[period]) return false;
+
+    householdTrendPeriod = period;
+    const requestId = ++householdTrendRequestId;
+    householdTrendRequestController?.abort();
+    householdTrendRequestController = new AbortController();
+    setHouseholdTrendSelector(period, true);
+    $('[data-household-usage-content]')?.classList.toggle('is-loading', !householdTrendHasValidChart);
+    setHouseholdTrendState('Loading consumption trend…', 'loading');
+
+    try {
+        const response = await requestJson(`/api/household-consumption?period=${encodeURIComponent(period)}`, {
+            signal: householdTrendRequestController.signal,
+        });
+        if (requestId !== householdTrendRequestId) return;
+        renderHouseholdTrend(response?.data);
+        return true;
+    } catch (error) {
+        if (error?.name === 'AbortError' || requestId !== householdTrendRequestId) return;
+        console.error(`Dashboard request failed: /api/household-consumption?period=${encodeURIComponent(period)}`, error);
+        if (handleAuthFailure(error)) return false;
+        setHouseholdTrendState('Unable to load the consumption trend. Check your connection and try again.', 'error', true);
+        return false;
+    } finally {
+        if (requestId === householdTrendRequestId) {
+            householdTrendRequestController = null;
+            setHouseholdTrendSelector(householdTrendPeriod, false);
+        }
+    }
+};
+
+const renderHouseholdSummaryCards = (summaryData, latestReading, notifications, activeBilling, deviceState) => {
     const readingCount = Number(summaryData?.reading_count ?? 0);
     const hasReadings = readingCount > 0;
-    const monthlyUsage = Array.isArray(summaryData?.monthly_usage) ? summaryData.monthly_usage : [];
-    const hasConsumptionHistory = monthlyUsage.some((row) => Number(row.reading_count ?? 0) > 0 || Number(row.total_cubic_meter ?? row.consumption ?? 0) > 0);
-    const usageContent = $('[data-household-usage-content]');
-    usageContent?.classList.remove('is-loading');
-    usageContent?.classList.toggle('is-empty', !hasConsumptionHistory);
     const totalConsumed = hasReadings ? formatCubicMeters(summaryData.total_liters) : 'No data yet';
-    const estimatedBill = hasReadings ? formatCurrency(summaryData.estimated_bill) : 'No data yet';
+    const hasRate = activeBilling?.water_rate !== null && activeBilling?.water_rate !== undefined;
+    const hasEstimatedBill = hasReadings && summaryData?.estimated_bill !== null && summaryData?.estimated_bill !== undefined;
+    const estimatedBill = !hasRate ? 'Rate unavailable' : hasEstimatedBill ? formatCurrency(summaryData.estimated_bill) : 'No data';
     const leakDetected = Boolean(latestReading?.is_possible_leak);
-    const leakStatus = !latestReading ? 'Unavailable' : leakDetected ? 'Leak detected' : 'Normal';
-    const meterStatus = normalizeConnectionStatus(latestReading?.device_connection_status);
-    const serverStatus = normalizeConnectionStatus(latestReading?.server_connection_status);
+    const leakStatus = !latestReading ? 'Unavailable' : leakDetected ? 'Possible leak' : 'Normal';
     const monitoringStatus = normalizeMonitoringStatus(latestReading?.monitoring_status);
     const wifiStatus = latestReading?.wifi_signal_strength === null || latestReading?.wifi_signal_strength === undefined
         ? 'Unavailable'
         : Number(latestReading.wifi_signal_strength) > 0 ? 'Connected' : 'Disconnected';
-    const overallConnection = meterStatus === 'Unavailable' || serverStatus === 'Unavailable'
-        ? 'Unavailable'
-        : meterStatus === 'Connected' && serverStatus === 'Connected' ? 'Connected' : 'Disconnected';
-    const lastUpdated = latestReading?.recorded_at ? formatDateTime(latestReading.recorded_at) : 'Waiting for data';
+    const connection = resolveHouseholdConnection(deviceState, latestReading);
+    const overallConnection = connection.label;
+    const lastUpdated = deviceState?.last_seen_at || latestReading?.recorded_at
+        ? formatDateTime(deviceState?.last_seen_at ?? latestReading.recorded_at)
+        : 'Waiting for first reading';
     const quickSummary = hasReadings ? `${readingCount} readings · ${totalConsumed}` : 'No readings yet';
 
     setText('[data-stat-readings]', readingCount);
     setText('[data-stat-liters]', totalConsumed);
     setText('[data-stat-bill]', estimatedBill);
-    setText('[data-stat-alerts]', Number(notifications.unread ?? 0));
+    const unreadCount = Number(notifications.unread ?? 0);
+    setText('[data-stat-alerts]', unreadCount > 0 ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}` : 'No unread notifications');
     setHouseholdAlertCount(notifications.unread ?? 0);
     setText('[data-today-total]', totalConsumed);
     setText('[data-total-consumed]', totalConsumed);
     setText('[data-estimated-bill]', estimatedBill);
     setText('[data-quick-summary]', quickSummary);
-    setText('[data-current-flow]', latestReading ? `${formatNumber(latestReading.flow_rate)} L/min` : 'No reading');
+    const flowValue = Number(latestReading?.flow_rate);
+    const hasFlowReading = latestReading && Number.isFinite(flowValue);
+    setText('[data-current-flow]', hasFlowReading ? `${formatNumber(flowValue)} L/min` : 'No reading');
     setText('[data-leak-summary]', leakStatus);
     setText('[data-connection-summary]', overallConnection);
-    setText('[data-connection-state]', overallConnection === 'Connected' ? 'Meter and server are connected.' : overallConnection === 'Disconnected' ? 'Check the meter or server connection.' : 'No recent device reading available.');
-    setText('[data-flow-state]', latestReading ? Number(latestReading.flow_rate) === 0 ? 'Currently no water flow detected.' : 'Latest reading from the connected meter.' : 'No reading received yet.');
-    setText('[data-consumption-state]', hasReadings ? `${readingCount} reading${readingCount === 1 ? '' : 's'} recorded this month.` : 'No consumption readings are available yet.');
-    setText('[data-billing-state]', hasReadings ? 'Calculated from this month’s readings.' : 'No billable readings this month.');
+    setText('[data-connection-state]', connection.description);
+    setText('[data-flow-state]', !hasFlowReading
+        ? 'No recent reading available.'
+        : flowValue === 0
+            ? 'No active water flow detected.'
+            : connection.isLive ? 'Water is currently flowing.' : `Last known reading. Last reading received ${formatDateTime(latestReading.recorded_at)}.`);
+    setText('[data-billing-state]', !hasRate ? 'No active water rate is configured.' : hasEstimatedBill ? 'Current billing-period estimate.' : 'No billable readings this period.');
     setText('[data-leak-state]', !latestReading ? 'No recent device reading available.' : leakDetected ? 'Possible leak detected from the latest reading.' : 'No leak detected in the latest reading.');
-    setText('[data-notification-state]', Number(notifications.unread ?? 0) > 0 ? 'Unread alerts need your attention.' : 'You have no unread notifications.');
-    setText('[data-system-water-meter]', meterStatus);
+    setText('[data-notification-state]', unreadCount > 0 ? 'Unread alerts need your attention.' : "You're all caught up.");
+    setText('[data-system-water-meter]', connection.label);
     setText('[data-system-monitoring]', monitoringStatus);
     setText('[data-system-wifi]', wifiStatus);
-    setText('[data-system-server]', serverStatus);
+    setText('[data-system-server]', connection.label);
     setText('[data-system-leak]', leakStatus === 'Normal' ? 'Normal' : leakStatus);
     setText('[data-last-updated-label]', `Last updated: ${lastUpdated}`);
     setText('[data-last-updated]', lastUpdated);
 
     applyStatusTone('[data-leak-summary], [data-system-leak]', leakStatus);
     applyStatusTone('[data-system-water-meter], [data-system-server], [data-connection-summary]', overallConnection);
+    applyStatusTone('[data-flow-badge], [data-connection-badge]', overallConnection);
     applyStatusTone('[data-system-monitoring]', monitoringStatus);
     applyStatusTone('[data-system-wifi]', wifiStatus);
     $$('[data-leak-summary]').forEach((node) => {
         node.classList.toggle('mint', leakStatus === 'Normal');
         node.classList.toggle('rose', leakDetected);
     });
+    setText('[data-flow-badge]', connection.isLive ? 'Live' : connection.label);
+    setText('[data-connection-badge]', connection.label);
+    setText('[data-billing-badge]', !hasRate ? 'Unavailable' : billingStatement ? 'Finalized' : 'Estimated');
+    applyStatusTone('[data-billing-badge]', !hasRate ? 'Unavailable' : billingStatement ? 'Finalized' : 'Estimated');
 
     renderNotifications(notifications.latest ?? [], '[data-dashboard-notifications-list]');
-    $$('[data-household-monthly-chart]').forEach((chart) => renderMonthlyChart(chart, monthlyUsage, {
-        dataAvailable: hasConsumptionHistory,
-        emptyMessage: '<div class="chart-empty-state"><strong>No consumption history yet</strong><span>Usage data will appear here after the connected water meter submits its first reading.</span></div>',
-    }));
-    setText('[data-live-label]', latestReading ? 'Live' : 'Offline');
+    setText('[data-live-label]', connection.isLive ? 'Live' : connection.label);
+};
+
+const refreshLiveDashboard = async () => {
+    if (!readToken() || page !== 'household' || householdActiveView !== 'dashboard') {
+        stopDashboardPolling();
+        return;
+    }
+
+    if (dashboardRefreshInFlight) {
+        scheduleDashboardPolling();
+        return;
+    }
+
+    dashboardRefreshInFlight = true;
+    try {
+        const [stateResult, readingsResult] = await Promise.allSettled([
+            requestJson('/api/live-state'),
+            requestJson('/api/live-readings?limit=30'),
+        ]);
+
+        for (const result of [stateResult, readingsResult]) {
+            if (result.status === 'rejected' && handleAuthFailure(result.reason)) {
+                stopDashboardPolling();
+                return;
+            }
+        }
+
+        if (stateResult.status === 'fulfilled') {
+            householdDeviceState = stateResult.value?.data?.device_state ?? householdDeviceState;
+            if (householdSummaryData) applySummary(householdSummaryData, householdDeviceState);
+        }
+
+        if (readingsResult.status === 'fulfilled') {
+            applyLiveConsumptionResponse(readingsResult.value);
+            setDashboardFeedback('');
+            setStatus('Connected');
+        } else {
+            markLiveConsumptionUnavailable();
+            setDashboardFeedback('Live readings are temporarily unavailable. Retrying…', 'error');
+        }
+    } catch (error) {
+        if (!handleAuthFailure(error)) {
+            markLiveConsumptionUnavailable();
+            setDashboardFeedback(errorMessage(error, 'Live readings are temporarily unavailable. Retrying…'), 'error');
+        }
+    } finally {
+        dashboardRefreshInFlight = false;
+        scheduleDashboardPolling();
+    }
 };
 
 const loadDashboard = async (options = {}) => {
@@ -2537,21 +3387,18 @@ const loadDashboard = async (options = {}) => {
         refreshButton.setAttribute('aria-label', 'Refreshing dashboard data');
     }
 
+    let dashboardHasUsableData = false;
+
     try {
         const me = householdProfile ? { data: householdProfile } : await requestJson('/api/me');
         householdProfile = me.data;
         renderProfile(me.data);
         renderAccountActivity(me.data);
         void loadAccountProfile();
-        void loadHouseholdBilling();
         if (redirectAwayFromWrongRole(me.data, 'household')) {
             stopDashboardPolling();
             return;
         }
-
-        // Notifications are an independent authenticated resource. Refresh
-        // them directly so a missing/offline meter cannot hide admin notices.
-        void loadNotifications();
 
         const readingsQuery = buildQuery({
             page: dashboardState.page,
@@ -2561,34 +3408,94 @@ const loadDashboard = async (options = {}) => {
         });
 
         const summaryUrl = `/api/summary?user_id=${me.data.id}`;
-
-        const [summaryResponse, readingsResponse] = await Promise.all([
-            requestJson(summaryUrl),
-            requestJson(`/api/readings${readingsQuery}`),
-        ]);
-
-        const readings = responseItems(readingsResponse);
-
-        applySummary(summaryResponse.data);
         const householdAnalyticsKey = `${householdAnalyticsRange?.value || 'last_30_days'}:${householdAnalyticsFrom?.value || ''}:${householdAnalyticsTo?.value || ''}`;
-        if (householdAnalyticsLoadedRange !== householdAnalyticsKey
-            && (householdAnalyticsRange?.value !== 'custom' || (householdAnalyticsFrom?.value && householdAnalyticsTo?.value))) {
-            try {
-                const analyticsResponse = await requestJson(`/api/analytics/household${analyticsQuery(householdAnalyticsRange, householdAnalyticsFrom, householdAnalyticsTo, 'last_30_days')}`);
-                householdAnalyticsLoadedRange = householdAnalyticsKey;
-                applyHouseholdAnalytics(analyticsResponse.data);
-            } catch (analyticsError) {
-                console.error(analyticsError);
-                applyHouseholdAnalytics(null);
+        const shouldLoadAnalytics = householdAnalyticsLoadedRange !== householdAnalyticsKey
+            && (householdAnalyticsRange?.value !== 'custom' || (householdAnalyticsFrom?.value && householdAnalyticsTo?.value));
+        const dashboardRequests = [
+            { name: 'summary', url: summaryUrl, promise: requestJson(summaryUrl) },
+            { name: 'readings', url: `/api/readings${readingsQuery}`, promise: requestJson(`/api/readings${readingsQuery}`) },
+            { name: 'live-state', url: '/api/live-state', promise: requestJson('/api/live-state') },
+            { name: 'live-readings', url: '/api/live-readings?limit=30', promise: requestJson('/api/live-readings?limit=30') },
+            {
+                name: 'analytics',
+                url: `/api/analytics/household${analyticsQuery(householdAnalyticsRange, householdAnalyticsFrom, householdAnalyticsTo, 'last_30_days')}`,
+                promise: shouldLoadAnalytics
+                    ? requestJson(`/api/analytics/household${analyticsQuery(householdAnalyticsRange, householdAnalyticsFrom, householdAnalyticsTo, 'last_30_days')}`)
+                    : Promise.resolve(null),
+            },
+            { name: 'billing', url: '/api/household-billing', promise: loadHouseholdBilling() },
+            { name: 'consumption', url: `/api/household-consumption?period=${encodeURIComponent(householdConsumptionPeriod)}`, promise: loadHouseholdConsumption() },
+            { name: 'consumption-trend', url: `/api/household-consumption?period=${encodeURIComponent(householdTrendPeriod)}`, promise: loadHouseholdTrend() },
+            { name: 'notifications', url: '/api/notifications?per_page=100', promise: loadNotifications() },
+        ];
+        const dashboardResults = await Promise.allSettled(dashboardRequests.map(({ promise }) => promise));
+        const resultFor = (name) => dashboardResults[dashboardRequests.findIndex((request) => request.name === name)];
+
+        for (const [index, result] of dashboardResults.entries()) {
+            if (result.status === 'rejected') {
+                console.error(`Dashboard request failed: ${dashboardRequests[index].url}`, result.reason);
+                if (handleAuthFailure(result.reason)) {
+                    stopDashboardPolling();
+                    return;
+                }
             }
         }
-        renderReadings(readings);
-        readingsPagers.forEach((readingsPager) => renderPager(readingsPager, responsePaginator(readingsResponse), (page) => {
-            dashboardState.page = page;
-            loadDashboard();
-        }));
-        setDashboardFeedback('');
-        setStatus('Connected');
+
+        const summaryResult = resultFor('summary');
+        if (summaryResult.status === 'fulfilled') {
+            dashboardHasUsableData = true;
+            householdSummaryData = summaryResult.value?.data ?? null;
+            householdDeviceState = resultFor('live-state').status === 'fulfilled'
+                ? resultFor('live-state').value?.data?.device_state ?? null
+                : householdDeviceState;
+            applySummary(householdSummaryData, householdDeviceState);
+        } else {
+            renderDashboardSummaryUnavailable();
+        }
+
+        const readingsResult = resultFor('readings');
+        if (readingsResult.status === 'fulfilled') {
+            dashboardHasUsableData = true;
+            const readingsResponse = readingsResult.value;
+            renderReadings(responseItems(readingsResponse));
+            readingsPagers.forEach((readingsPager) => renderPager(readingsPager, responsePaginator(readingsResponse), (page) => {
+                dashboardState.page = page;
+                loadDashboard();
+            }));
+        } else {
+            renderDashboardReadingsUnavailable();
+        }
+
+        const liveReadingsResult = resultFor('live-readings');
+        if (liveReadingsResult.status === 'fulfilled') {
+            dashboardHasUsableData = true;
+            applyLiveConsumptionResponse(liveReadingsResult.value);
+        } else {
+            markLiveConsumptionUnavailable();
+        }
+
+        const analyticsResult = resultFor('analytics');
+        if (shouldLoadAnalytics && analyticsResult.status === 'fulfilled') {
+            dashboardHasUsableData = true;
+            householdAnalyticsLoadedRange = householdAnalyticsKey;
+            applyHouseholdAnalytics(analyticsResult.value?.data);
+        } else if (shouldLoadAnalytics && analyticsResult.status === 'rejected') {
+            applyHouseholdAnalytics(null);
+        }
+
+        ['billing', 'consumption', 'consumption-trend', 'notifications'].forEach((name) => {
+            const result = resultFor(name);
+            if (result.status === 'fulfilled' && result.value === true) dashboardHasUsableData = true;
+        });
+
+        if (dashboardHasUsableData) {
+            lastFullDashboardRefreshAt = Date.now();
+            setDashboardFeedback('');
+            setStatus('Connected');
+        } else {
+            setStatus('Connection failed');
+            setDashboardFeedback('Unable to retrieve dashboard data. Try again.', 'error');
+        }
         if (reschedule) {
             scheduleDashboardPolling();
         }
@@ -2599,8 +3506,12 @@ const loadDashboard = async (options = {}) => {
         }
 
         console.error(error);
-        setStatus('Connection failed');
-        setDashboardFeedback('Unable to retrieve dashboard data. Try again.', 'error');
+        if (!dashboardHasUsableData) {
+            setStatus('Connection failed');
+            setDashboardFeedback('Unable to retrieve dashboard data. Try again.', 'error');
+        } else {
+            setStatus('Connected');
+        }
         if (!accountProfileLoaded) {
             setAccountProfileState('Account details are temporarily unavailable. Try again.', 'error');
             setText('[data-profile-name]', 'Account unavailable');
@@ -2610,13 +3521,7 @@ const loadDashboard = async (options = {}) => {
             setText('[data-profile-phone]', 'Unavailable');
             setText('[data-profile-status]', 'Unavailable');
         }
-        const usageContent = $('[data-household-usage-content]');
-        usageContent?.classList.remove('is-loading');
-        usageContent?.classList.add('is-empty');
-        $$('[data-household-monthly-chart]').forEach((chart) => renderHouseholdAreaChart(chart, [], {
-            dataAvailable: false,
-            emptyMessage: '<div class="chart-empty-state is-error"><strong>Usage data is temporarily unavailable</strong><span>Reconnect to load the household consumption trend.</span></div>',
-        }));
+        markLiveConsumptionUnavailable();
         $('[data-live-label]') && ($('[data-live-label]').textContent = 'Offline');
         if (reschedule) {
             scheduleDashboardPolling();
@@ -3704,6 +4609,43 @@ const bindAdminReports = () => {
     }));
 };
 
+const renderAdminSystemHealth = (response) => {
+    const health = response?.data;
+    if (!health) {
+        setText('[data-admin-system-health-status]', 'Unavailable');
+        setText('[data-admin-system-database]', 'Unavailable');
+        setText('[data-admin-system-telemetry]', 'Unavailable');
+        setText('[data-admin-system-telemetry-detail]', 'Diagnostics could not be loaded.');
+        setText('[data-admin-system-integrity]', 'Unavailable');
+        setText('[data-admin-system-failed-jobs]', 'Unavailable');
+        applyStatusTone('[data-admin-system-health-status]', 'unavailable');
+        return;
+    }
+
+    const isHealthy = health.status === 'healthy';
+    const ageSeconds = Number(health.telemetry?.age_seconds ?? 0);
+    const ageLabel = ageSeconds < 60
+        ? `${Math.max(0, Math.round(ageSeconds))}s ago`
+        : `${Math.round(ageSeconds / 60)}m ago`;
+    const integrityIssues = Number(health.integrity?.issue_count ?? 0);
+    const failedJobs = Number(health.queues?.failed_jobs ?? 0);
+
+    setText('[data-admin-system-health-status]', isHealthy ? 'Healthy' : 'Attention required');
+    setText('[data-admin-system-database]', health.database?.status === 'connected' && health.database?.foreign_keys_enforced
+        ? `Connected · ${String(health.database.driver ?? '').toUpperCase()} · FK on`
+        : 'Database check failed');
+    setText('[data-admin-system-telemetry]', health.telemetry?.latest_reading_id ? ageLabel : 'No readings');
+    setText('[data-admin-system-telemetry-detail]', health.telemetry?.latest_reading_at
+        ? `Latest reading ${formatDateTime(health.telemetry.latest_reading_at)}.`
+        : 'No telemetry has been received.');
+    setText('[data-admin-system-integrity]', integrityIssues === 0 ? 'No issues' : `${integrityIssues} issue${integrityIssues === 1 ? '' : 's'}`);
+    setText('[data-admin-system-failed-jobs]', String(failedJobs));
+    applyStatusTone('[data-admin-system-health-status]', isHealthy ? 'healthy' : 'critical');
+    applyStatusTone('[data-admin-system-database]', health.database?.foreign_keys_enforced ? 'healthy' : 'critical');
+    applyStatusTone('[data-admin-system-integrity]', integrityIssues === 0 ? 'healthy' : 'critical');
+    applyStatusTone('[data-admin-system-failed-jobs]', failedJobs === 0 ? 'healthy' : 'critical');
+};
+
 const loadAdmin = async () => {
     if (!hasTokenOrReport()) {
         return;
@@ -3779,12 +4721,16 @@ const loadAdmin = async () => {
         const municipalDevicesPromise = loadAdminDevices();
         const leakAlertsPromise = loadAdminLeakAlerts();
         const notificationHistoryPromise = loadAdminNotificationHistory();
-        const [summaryResponse, analyticsResponse, billingResponse, consumptionResponse, notificationsResponse] = await Promise.all([
+        const [summaryResponse, analyticsResponse, billingResponse, consumptionResponse, notificationsResponse, systemHealthResponse] = await Promise.all([
             requestJson('/api/summary'),
             requestJson(`/api/analytics/admin${analyticsQuery(adminAnalyticsRange, adminAnalyticsFrom, adminAnalyticsTo, 'last_12_months')}`),
             requestJson('/api/billing-settings'),
             requestJson('/api/reports/consumption'),
             requestJson('/api/reports/notifications'),
+            requestJson('/api/system-health').catch((error) => {
+                if (!handleAuthFailure(error)) console.error('System health request failed', error);
+                return null;
+            }),
         ]);
 
         const billingSettings = billingResponse.data ?? null;
@@ -3802,12 +4748,7 @@ const loadAdmin = async () => {
             setValue(billingRatesForm, 'effective_date', billingFormSettings.effective_date ? String(billingFormSettings.effective_date).slice(0, 10) : '');
             setValue(billingRatesForm, 'currency', billingFormSettings.currency ?? 'PHP');
 
-            const alertUnit = billingFormSettings.consumption_alert_unit ?? 'liters';
-            const thresholdValue = alertUnit === 'cubic_meters'
-                ? Number(billingFormSettings.threshold_liters ?? 0) / 1000
-                : Number(billingFormSettings.threshold_liters ?? 0);
-            setValue(consumptionAlertForm, 'threshold_value', thresholdValue);
-            setValue(consumptionAlertForm, 'threshold_unit', alertUnit);
+            setValue(consumptionAlertForm, 'percentage_threshold', billingFormSettings.consumption_change_threshold_percent ?? 100);
             setValue(consumptionAlertForm, 'notification_behavior', billingFormSettings.consumption_alert_behavior ?? 'household');
             if (consumptionAlertForm?.elements?.consumption_alert_enabled) consumptionAlertForm.elements.consumption_alert_enabled.checked = billingFormSettings.consumption_alert_enabled !== false;
 
@@ -3822,6 +4763,7 @@ const loadAdmin = async () => {
         const analytics = analyticsResponse.data ?? {};
         const consumption = consumptionResponse.data ?? {};
         const notificationReport = notificationsResponse.data ?? {};
+        renderAdminSystemHealth(systemHealthResponse);
         const leakHouseholds = await leakAlertsPromise;
         const municipalDevices = await municipalDevicesPromise;
         await consumptionPromise;
@@ -3893,7 +4835,7 @@ const loadAdmin = async () => {
             billingSummaryContainer.innerHTML = `
                 <div><dt>Water rate per m³</dt><dd>${billingSettings ? formatCurrency(billingSettings.water_rate) : '--'}</dd></div>
                 <div><dt>Fixed monthly charge</dt><dd>${billingSettings ? formatCurrency(billingSettings.fixed_monthly_charge ?? 0) : '--'}</dd></div>
-                <div><dt>Consumption threshold</dt><dd>${billingSettings ? `${formatNumber(billingSettings.threshold_liters ?? 0)} L` : '--'}</dd></div>
+                <div><dt>Consumption change alert</dt><dd>${billingSettings ? `${formatNumber(billingSettings.consumption_change_threshold_percent ?? 100)}%` : '--'}</dd></div>
                 <div><dt>Leak threshold</dt><dd>${billingSettings ? `${formatNumber(billingSettings.leak_flow_rate_threshold ?? 0)} L/min` : '--'}</dd></div>
                 <div><dt>Quiet hours</dt><dd>${billingSettings ? `${billingSettings.quiet_hours_start}:00 - ${billingSettings.quiet_hours_end}:00` : '--'}</dd></div>
                 <div><dt>Households</dt><dd>${overviewHouseholdUsers.length}</dd></div>
@@ -4191,13 +5133,15 @@ const bootCommon = () => {
 
     if (passwordForm && !passwordForm.dataset.validationBound) {
         passwordForm.dataset.validationBound = '1';
+        const currentPasswordField = passwordForm.elements.current_password;
         const passwordField = passwordForm.elements.password;
         const confirmationField = passwordForm.elements.password_confirmation;
-        [passwordField, confirmationField].forEach((field) => {
+        [currentPasswordField, passwordField, confirmationField].forEach((field) => {
             if (!field) return;
             field.addEventListener('input', updatePasswordFormState);
             field.addEventListener('blur', updatePasswordFormState);
         });
+        updatePasswordFormState();
     }
 
     passwordToggleButtons.forEach((button) => {
@@ -4235,7 +5179,7 @@ const bootCommon = () => {
                 }
             } finally {
                 passwordForm.dataset.saving = '0';
-                if (submitButton) submitButton.disabled = false;
+                updatePasswordFormState();
             }
         });
     }
@@ -4259,6 +5203,22 @@ const bootCommon = () => {
             });
             renderHistorySummary();
             loadConsumptionHistory();
+        });
+    });
+
+    $$('[data-household-consumption-period]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const period = button.dataset.householdConsumptionPeriod;
+            if (householdConsumptionPeriods[period]) {
+                loadHouseholdConsumption(period);
+            }
+        });
+    });
+
+    $$('[data-household-trend-period]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const period = button.dataset.householdTrendPeriod;
+            if (householdTrendPeriods[period]) loadHouseholdTrend(period);
         });
     });
 
@@ -4423,14 +5383,22 @@ const bootCommon = () => {
 
     const clearNotificationsButton = $('[data-clear-notifications]');
     clearNotificationsButton?.addEventListener('click', async () => {
+        if (notificationMutationInFlight) return;
         if (!window.confirm('Clear every notification from your inbox?')) return;
+
+        const previousNotifications = householdNotifications;
+        notificationMutationInFlight = true;
+        notificationMutationVersion++;
+        applyHouseholdNotifications([]);
+
         try {
             const response = await requestJson('/api/notifications/received/all', { method: 'DELETE' });
             showToast(response.message ?? 'All notifications cleared successfully.');
-            loadDashboard();
-            loadNotifications();
         } catch (error) {
+            applyHouseholdNotifications(previousNotifications);
             if (!handleAuthFailure(error)) showToast(errorMessage(error, 'Could not clear notifications.'), 'error');
+        } finally {
+            notificationMutationInFlight = false;
         }
     });
 };
@@ -4453,8 +5421,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        showHouseholdView('dashboard');
-        loadDashboard();
+        const initialHouseholdView = window.location.hash.replace('#', '') || 'dashboard';
+        const householdViewExists = Boolean($(`[data-household-view="${initialHouseholdView}"]`));
+        showHouseholdView(householdViewExists ? initialHouseholdView : 'dashboard');
         return;
     }
 
