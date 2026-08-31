@@ -89,20 +89,31 @@ class HouseholdBillingController extends Controller
             $rateAmount = (float) $calculation['water_rate'];
 
             $history = BillingStatement::query()
+                ->with(['payments' => fn ($query) => $query->latest('received_at')])
                 ->where('user_id', $user->id)
                 ->latest('billing_month')
                 ->latest('id')
                 ->limit(12)
                 ->get()
                 ->map(fn (BillingStatement $item): array => [
+                    'id' => $item->id,
+                    'statement_number' => $item->statement_number,
                     'billing_month' => optional($item->billing_month)->toDateString(),
+                    'due_date' => optional($item->due_date)->toDateString(),
                     'total_liters' => (float) $item->total_liters,
                     'total_cubic_meter' => (float) $item->total_cubic_meter,
                     'water_rate' => (float) $item->water_rate,
                     'current_charge' => (float) $item->current_charge,
+                    'amount_paid' => (float) $item->amount_paid,
                     'remaining_balance' => (float) $item->remaining_balance,
                     'currency' => $item->currency ?? 'PHP',
                     'status' => $item->status,
+                    'payments' => $item->payments->map(fn ($payment): array => [
+                        'id' => $payment->id,
+                        'receipt_number' => $payment->receipt_number,
+                        'amount' => (float) $payment->amount,
+                        'received_at' => $this->timestamp($payment->received_at),
+                    ])->values(),
                 ])
                 ->values();
 
@@ -151,6 +162,8 @@ class HouseholdBillingController extends Controller
                     'last_telemetry_at' => $this->timestamp($meter->last_telemetry_at),
                 ],
                 'statement_id' => $statement?->id,
+                'statement_number' => $statement?->statement_number,
+                'due_date' => optional($statement?->due_date)->toDateString(),
                 'statement_status' => $statement?->status,
                 'latest_reading' => $this->latestReadingPayload($latestReading),
                 'history' => $history,

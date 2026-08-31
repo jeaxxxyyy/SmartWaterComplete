@@ -29,7 +29,7 @@ Demo accounts:
 - Administrator: `admin@gmail.com` / `admin123`
 - Demo panel identity: managed internally; it has no interactive login
 
-Change all development credentials before deployment.
+Demo credentials are created only by the development seeder. Existing passwords are never reset when the seeder is rerun. Change all development credentials before deployment.
 
 ## Project map
 
@@ -80,10 +80,18 @@ npm run build
 php artisan test
 ```
 
-Configuration defaults are documented in `.env.example`, `config/smartwater.php`, and `config/devices.php`.
+Configuration defaults are documented in `.env.example`, `config/devices.php`, and `config/municipality.php`. Browser tokens expire after `SANCTUM_WEB_TOKEN_MINUTES` (eight hours by default); commissioned device credentials keep their separate lifecycle.
 
 ## Analytics, audit, and privacy controls
 
 Administrator analytics are available at `GET /api/analytics/admin`; household analytics are available at `GET /api/analytics/household`. Both endpoints accept `last_7_days`, `last_30_days`, `last_3_months`, `last_12_months`, or a validated `custom` range using `from` and `to`. Results include the configured `APP_TIMEZONE` and omit metrics when no valid readings exist.
 
 Administrative and security actions are stored in `audit_logs` and written to the rotating `audit` log channel. Credentials, passwords, activation codes, and access tokens are redacted from audit metadata. Household analytics, billing settings, statements, notifications, readings, and device information are scoped to the authenticated household.
+
+## Resident website services
+
+The household workspace includes finalized statement and receipt downloads, monthly usage goals with end-of-month forecasting, configurable in-app notification categories and quiet hours, English/Filipino navigation labels, a low-bandwidth mode, and a tracked municipal service-request center. The administrator workspace includes an action center, a request assignment/response workflow, and an offline-payment ledger that generates official PDF receipts.
+
+The website does not accept or process online payments. Authorized municipal staff record cash, check, bank-deposit, or other offline payments, and every entry is retained in the payment ledger and audit log.
+
+The site exposes `/manifest.webmanifest` and a service worker for installation and resilient app-shell loading. API responses are never stored by the service worker; authenticated dashboard snapshots remain user-scoped in session storage and live meter information always requires a current network response.

@@ -14,12 +14,14 @@
 /.zed
 /auth.json
 /node_modules
+/output
 /public/build
 /public/fonts-manifest.dev.json
 /public/hot
 /public/storage
 /storage/*.key
 /storage/pail
+/tmp
 /vendor
 /arduino/smartwater/secrets.h
 _ide_helper.php

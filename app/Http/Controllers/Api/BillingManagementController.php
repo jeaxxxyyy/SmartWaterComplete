@@ -59,7 +59,7 @@ class BillingManagementController extends Controller
         $records = collect();
         if ($billType !== 'estimated' && $status !== 'estimated' && $householdIds !== []) {
             $statements = BillingStatement::query()
-                ->with('user:id,name,email,account_number,address')
+                ->with(['user:id,name,email,account_number,address', 'payments'])
                 ->whereIn('user_id', $householdIds)
                 ->whereBetween('billing_month', [$from->toDateString(), $to->toDateString()])
                 ->get();
@@ -102,7 +102,7 @@ class BillingManagementController extends Controller
 
     public function show(BillingStatement $billingStatement)
     {
-        $billingStatement->load('user:id,name,email,account_number,address');
+        $billingStatement->load(['user:id,name,email,account_number,address', 'payments.recorder:id,name']);
         $from = Carbon::parse($billingStatement->billing_month)->startOfMonth();
         $to = $from->copy()->endOfMonth();
         $readings = WaterReading::query()
@@ -127,6 +127,7 @@ class BillingManagementController extends Controller
                     'remaining_balance' => (float) $billingStatement->remaining_balance,
                     'currency' => $billingStatement->currency ?? 'PHP',
                 ],
+                'payments' => $billingStatement->payments,
             ],
         ]);
     }
@@ -137,6 +138,8 @@ class BillingManagementController extends Controller
 
         return [
             'id' => $statement->id,
+            'statement_number' => $statement->statement_number,
+            'due_date' => optional($statement->due_date)->toDateString(),
             'record_type' => 'finalized',
             'status' => $statement->status,
             'household' => $user,
@@ -154,6 +157,7 @@ class BillingManagementController extends Controller
             'remaining_balance' => (float) $statement->remaining_balance,
             'currency' => $statement->currency ?? 'PHP',
             'generated_at' => $statement->generated_at,
+            'payments' => $statement->payments,
         ];
     }
 

@@ -102,6 +102,11 @@ class AnalyticsService
                     ->whereHas('user', fn ($query) => $query->where('role', 'user'))
                     ->count(),
                 'unresolved_leak_alerts' => $unresolvedLeakAlerts + $legacyLeakAlerts,
+                'consumption_change_count' => Notification::query()
+                    ->where('type', 'consumption_change')
+                    ->whereBetween('created_at', [$from, $to])
+                    ->count(),
+                'consumption_baselines' => $this->consumptionBaselineComparisons(),
             ],
             'device_sync' => [
                 'failed_attempts' => AuditLog::query()->where('action', 'device_sync_failed')->whereBetween('created_at', [$from, $to])->count(),
@@ -242,6 +247,69 @@ class AnalyticsService
             ->get(['id', 'user_id', 'action', 'description', 'outcome', 'created_at'])
             ->map(fn (AuditLog $log): array => $this->activityItem($log))
             ->values();
+    }
+
+    private function consumptionBaselineComparisons(): Collection
+    {
+        $driver = DB::connection()->getDriverName();
+        $monthExpression = $driver === 'sqlite'
+            ? "strftime('%Y-%m', water_readings.recorded_at)"
+            : "DATE_FORMAT(water_readings.recorded_at, '%Y-%m')";
+        $monthlyRows = WaterReading::query()
+            ->join('users', 'users.id', '=', 'water_readings.user_id')
+            ->where('users.role', 'user')
+            ->select('water_readings.user_id')
+            ->selectRaw($monthExpression.' as month')
+            ->selectRaw('SUM(water_readings.liters_used) as total_liters')
+            ->selectRaw('COUNT(*) as reading_count')
+            ->groupBy('water_readings.user_id')
+            ->groupBy(DB::raw($monthExpression))
+            ->orderBy('water_readings.user_id')
+            ->orderBy('month')
+            ->get();
+        $users = User::query()
+            ->whereIn('id', $monthlyRows->pluck('user_id')->unique())
+            ->get(['id', 'name', 'account_number'])
+            ->keyBy('id');
+
+        return $monthlyRows->groupBy('user_id')->map(function (Collection $rows, int|string $userId) use ($users): ?array {
+            $user = $users->get((int) $userId);
+            if (! $user || $rows->isEmpty()) {
+                return null;
+            }
+
+            $baseline = $rows->first();
+            $baselineLiters = (float) $baseline->total_liters;
+            $comparisons = $rows->map(function ($row, int $index) use ($baselineLiters): array {
+                $liters = (float) $row->total_liters;
+                $percentage = $index === 0 ? 100.0 : ($baselineLiters > 0 ? ($liters / $baselineLiters) * 100 : null);
+                $change = $percentage === null ? null : $percentage - 100;
+
+                return [
+                    'month' => $row->month,
+                    'liters' => round($liters, 4),
+                    'reading_count' => (int) $row->reading_count,
+                    'usage_percentage' => $percentage === null ? null : round($percentage, 2),
+                    'change_percent' => $change === null ? null : round($change, 2),
+                    'direction' => $index === 0 ? 'baseline' : ($change > 0 ? 'increase' : ($change < 0 ? 'decrease' : 'unchanged')),
+                    'is_baseline' => $index === 0,
+                ];
+            })->values();
+            $visibleComparisons = $comparisons->count() > 12
+                ? collect([$comparisons->first()])->concat($comparisons->slice(-11))->values()
+                : $comparisons;
+
+            return [
+                'household' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'account_number' => $user->account_number,
+                ],
+                'baseline' => $comparisons->first(),
+                'latest' => $comparisons->last(),
+                'months' => $visibleComparisons,
+            ];
+        })->filter()->sortBy(fn (array $item): string => strtolower($item['household']['name']))->values();
     }
 
     private function activityItem(AuditLog $log): array

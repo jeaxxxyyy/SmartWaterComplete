@@ -1,4 +1,18 @@
 const tokenKey = 'smart-water-token';
+const sessionUserKey = 'smart-water-session-user';
+const dashboardCachePrefix = 'smart-water-dashboard-cache';
+const localeKey = 'smart-water-locale';
+const lowBandwidthKey = 'smart-water-low-bandwidth';
+const DASHBOARD_CACHE_STALE_MS = 12 * 60 * 60 * 1000;
+const dashboardCacheRevalidations = new Map();
+let dashboardCacheForceNetwork = false;
+let installPromptEvent = null;
+let lowBandwidthMode = false;
+try {
+    lowBandwidthMode = localStorage.getItem(lowBandwidthKey) === '1';
+} catch {
+    lowBandwidthMode = false;
+}
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -57,8 +71,18 @@ const formatCompactDateTime = (value) => {
     });
 };
 
+const formatMonthLabel = (value) => {
+    if (!/^\d{4}-\d{2}$/.test(String(value ?? ''))) return '--';
+
+    return new Date(`${value}-01T00:00:00`).toLocaleDateString(undefined, {
+        month: 'short',
+        year: 'numeric',
+    });
+};
+
 const page = document.body.dataset.page ?? 'default';
 const logoutButtons = $$('[data-logout]');
+const logoutTransition = $('[data-logout-transition]');
 const statusLabel = $('[data-status]');
 const tokenInput = $('[data-token-input]');
 const saveTokenButton = $('[data-token-save]');
@@ -84,6 +108,11 @@ const adminNotificationFilterForm = $('[data-admin-notification-filters]');
 const billingManagementFilterForm = $('[data-billing-management-filters]');
 const reportManagementFilterForm = $('[data-report-management-filters]');
 const billingDetailDialog = $('[data-billing-detail-dialog]');
+const paymentDialog = $('[data-payment-dialog]');
+const paymentForm = $('[data-payment-form]');
+const serviceRequestForm = $('[data-service-request-form]');
+const notificationPreferencesForm = $('[data-notification-preferences-form]');
+const consumptionGoalForm = $('[data-consumption-goal-form]');
 const adminSearch = $('[data-admin-search]');
 const adminPageTitle = $('[data-admin-page-title]');
 const adminSidebar = $('#admin-sidebar');
@@ -128,6 +157,56 @@ const showToast = (message, type = 'success') => {
     toastStack.appendChild(toast);
     window.setTimeout(() => toast.remove(), type === 'error' ? 6000 : 4000);
 };
+
+const localeLabels = {
+    fil: {
+        Dashboard: 'Dashboard',
+        'Live Monitoring': 'Live na Pagsubaybay',
+        'Consumption History': 'Kasaysayan ng Konsumo',
+        'Estimated Billing': 'Tinatayang Singil',
+        'Goals & Forecast': 'Layunin at Pagtataya',
+        'Service Requests': 'Mga Kahilingan sa Serbisyo',
+        'Leak Detection': 'Pagtukoy ng Tagas',
+        Notifications: 'Mga Abiso',
+        'Account Settings': 'Mga Setting ng Account',
+    },
+};
+
+const applyLocale = (locale = 'en') => {
+    const normalized = locale === 'fil' ? 'fil' : 'en';
+    document.documentElement.lang = normalized;
+    try { localStorage.setItem(localeKey, normalized); } catch { /* Preferences still apply for this page. */ }
+    $$('.sidebar-nav-label').forEach((node) => {
+        node.dataset.englishLabel ||= node.textContent.trim();
+        node.textContent = localeLabels[normalized]?.[node.dataset.englishLabel] ?? node.dataset.englishLabel;
+    });
+};
+
+const applyLowBandwidthMode = (enabled, persist = true) => {
+    lowBandwidthMode = enabled === true;
+    document.body.classList.toggle('low-bandwidth-mode', lowBandwidthMode);
+    if (persist) {
+        try { localStorage.setItem(lowBandwidthKey, lowBandwidthMode ? '1' : '0'); } catch { /* Apply for this page only. */ }
+    }
+};
+
+const downloadAuthenticatedFile = async (url, fallbackName) => {
+    const response = await fetch(url, { headers: authHeaders() });
+    if (!response.ok) throw new Error('Document download failed.');
+    const blobUrl = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = fallbackName;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+};
+
+window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    installPromptEvent = event;
+    const button = $('[data-install-app]');
+    if (button) button.hidden = false;
+});
 
 const errorPayload = (error) => {
     try {
@@ -354,6 +433,7 @@ const adminViewTitles = {
     'leak-monitoring': 'Leak Monitoring',
     reports: 'Reports',
     notifications: 'Notifications',
+    'service-requests': 'Service Requests',
 };
 
 const updateAdminPageTitle = (target) => {
@@ -392,7 +472,7 @@ const scheduleDashboardPolling = () => {
         } else {
             refreshLiveDashboard();
         }
-    }, DASHBOARD_REFRESH_MS);
+    }, lowBandwidthMode ? 15000 : DASHBOARD_REFRESH_MS);
 };
 
 const stopAdminDevicePolling = () => {
@@ -409,7 +489,7 @@ const scheduleAdminDevicePolling = () => {
 
     adminDeviceRefreshTimer = window.setTimeout(() => {
         loadAdminDevices();
-    }, ADMIN_DEVICE_REFRESH_MS);
+    }, lowBandwidthMode ? 30000 : ADMIN_DEVICE_REFRESH_MS);
 };
 
 const bindAdminUserDeleteActions = (container) => {
@@ -785,6 +865,84 @@ const persistToken = (value) => {
     }
 };
 
+const readSessionUser = () => {
+    try {
+        const user = JSON.parse(sessionStorage.getItem(sessionUserKey) ?? 'null');
+        return user?.id ? user : null;
+    } catch {
+        return null;
+    }
+};
+
+const persistSessionUser = (user) => {
+    try {
+        if (user?.id) {
+            sessionStorage.setItem(sessionUserKey, JSON.stringify({
+                id: user.id,
+                role: user.role,
+                email: user.email,
+            }));
+        }
+    } catch {
+        // Storage can be unavailable in hardened/private browsing contexts.
+    }
+};
+
+const dashboardCacheKey = (url) => {
+    const user = readSessionUser();
+    return user?.id ? `${dashboardCachePrefix}:${user.id}:${url}` : '';
+};
+
+const readDashboardCache = (url, key = dashboardCacheKey(url)) => {
+    if (!key) return null;
+
+    try {
+        const entry = JSON.parse(sessionStorage.getItem(key) ?? 'null');
+        if (!entry || Date.now() - Number(entry.storedAt ?? 0) > DASHBOARD_CACHE_STALE_MS) {
+            sessionStorage.removeItem(key);
+            return null;
+        }
+        return entry.payload;
+    } catch {
+        return null;
+    }
+};
+
+const writeDashboardCache = (url, payload, key = dashboardCacheKey(url)) => {
+    if (!key || payload === undefined) return;
+
+    try {
+        sessionStorage.setItem(key, JSON.stringify({ storedAt: Date.now(), payload }));
+    } catch {
+        // A full storage quota should never prevent fresh dashboard rendering.
+    }
+};
+
+const clearDashboardCache = () => {
+    const user = readSessionUser();
+    if (!user?.id) return;
+    const prefix = `${dashboardCachePrefix}:${user.id}:`;
+
+    try {
+        Object.keys(sessionStorage)
+            .filter((key) => key.startsWith(prefix))
+            .forEach((key) => sessionStorage.removeItem(key));
+    } catch {
+        // Ignore unavailable session storage.
+    }
+};
+
+const isDashboardCacheable = (url, options = {}) => {
+    const method = String(options.method ?? 'GET').toUpperCase();
+    const dashboardContext = options.cacheScope === 'dashboard' || page === 'household' || page === 'admin';
+    const excluded = url === '/api/me'
+        || url.startsWith('/api/live-')
+        || url.startsWith('/api/system-health')
+        || url.startsWith('/api/exports/');
+
+    return method === 'GET' && dashboardContext && readToken() && url.startsWith('/api/') && !excluded;
+};
+
 const authHeaders = () => {
     const token = readToken();
 
@@ -802,10 +960,12 @@ const authHeaders = () => {
 
 const REQUEST_TIMEOUT_MS = 15000;
 
-const requestJson = async (url, options = {}) => {
+const requestJsonFromNetwork = async (url, options = {}) => {
     const requestOptions = { ...options };
     const timeoutMs = Number(requestOptions.timeout ?? REQUEST_TIMEOUT_MS);
     delete requestOptions.timeout;
+    delete requestOptions.cacheScope;
+    delete requestOptions.forceNetwork;
     const timeoutController = requestOptions.signal ? null : new AbortController();
     if (timeoutController) requestOptions.signal = timeoutController.signal;
     const timeoutId = timeoutController && timeoutMs > 0
@@ -846,6 +1006,32 @@ const requestJson = async (url, options = {}) => {
 
     const contentType = response.headers.get('content-type') ?? '';
     return contentType.includes('application/json') ? response.json() : response.text();
+};
+
+const requestJson = async (url, options = {}) => {
+    const method = String(options.method ?? 'GET').toUpperCase();
+    const cacheable = isDashboardCacheable(url, options);
+    const cacheKey = cacheable ? dashboardCacheKey(url) : '';
+    const forceNetwork = options.forceNetwork === true || dashboardCacheForceNetwork;
+    const cached = cacheable && !forceNetwork ? readDashboardCache(url, cacheKey) : null;
+
+    if (cached !== null) {
+        if (!dashboardCacheRevalidations.has(cacheKey)) {
+            const revalidation = requestJsonFromNetwork(url, options)
+                .then((payload) => writeDashboardCache(url, payload, cacheKey))
+                .catch(() => {})
+                .finally(() => dashboardCacheRevalidations.delete(cacheKey));
+            dashboardCacheRevalidations.set(cacheKey, revalidation);
+        }
+        return cached;
+    }
+
+    const payload = await requestJsonFromNetwork(url, options);
+    if (url === '/api/me' && payload?.data) persistSessionUser(payload.data);
+    if (cacheable) writeDashboardCache(url, payload, cacheKey);
+    if (method !== 'GET' && !['/api/login', '/api/logout', '/api/register'].includes(url)) clearDashboardCache();
+
+    return payload;
 };
 
 const buildQuery = (params) => {
@@ -1644,7 +1830,10 @@ const setTokenInput = () => {
 const showHouseholdView = (target) => {
     householdActiveView = target;
     $$('[data-household-view]').forEach((view) => {
-        view.classList.toggle('is-active', view.dataset.householdView === target);
+        const isActive = view.dataset.householdView === target;
+        view.classList.toggle('is-active', isActive);
+        view.hidden = !isActive;
+        view.inert = !isActive;
     });
 
     $$('[data-household-nav]').forEach((button) => {
@@ -1658,7 +1847,14 @@ const showHouseholdView = (target) => {
         }
     });
     const activeView = $(`[data-household-view="${target}"]`);
-    if (activeView) animateVisibleCharts(activeView);
+    if (activeView) {
+        animateVisibleCharts(activeView);
+        const heading = $('h1, h2', activeView);
+        if (heading) {
+            heading.setAttribute('tabindex', '-1');
+            heading.focus({ preventScroll: true });
+        }
+    }
     if (householdSidebar?.classList.contains('is-open')) {
         householdSidebar.classList.remove('is-open');
         householdSidebarToggle?.setAttribute('aria-expanded', 'false');
@@ -1671,11 +1867,17 @@ const showHouseholdView = (target) => {
     if (target === 'notifications') loadNotifications();
     if (target === 'history') loadConsumptionHistory();
     if (target === 'billing') loadHouseholdBilling({ force: true });
+    if (target === 'requests') loadHouseholdServiceRequests();
+    if (target === 'goals') loadConsumptionGoal();
+    if (target === 'settings') loadNotificationPreferences();
 };
 
 const showAdminView = (target, shouldUpdateHash = true) => {
     $$('[data-admin-view]').forEach((view) => {
-        view.classList.toggle('is-active', view.dataset.adminView === target);
+        const isActive = view.dataset.adminView === target;
+        view.classList.toggle('is-active', isActive);
+        view.hidden = !isActive;
+        view.inert = !isActive;
     });
 
     $$('[data-admin-nav]').forEach((button) => {
@@ -1687,7 +1889,15 @@ const showAdminView = (target, shouldUpdateHash = true) => {
     }
     updateAdminPageTitle(target);
     const activeView = $(`[data-admin-view="${target}"]`);
-    if (activeView) animateVisibleCharts(activeView);
+    if (activeView) {
+        animateVisibleCharts(activeView);
+        const heading = $('h1, h2', activeView);
+        if (heading) {
+            heading.setAttribute('tabindex', '-1');
+            heading.focus({ preventScroll: true });
+        }
+    }
+    if (target === 'service-requests') loadAdminServiceRequests();
 
     if (adminSidebar?.classList.contains('show')) {
         window.bootstrap?.Offcanvas.getInstance(adminSidebar)?.hide();
@@ -1709,12 +1919,22 @@ const hasTokenOrReport = () => {
 
 const bootLogout = () => {
     logoutButtons.forEach((logoutButton) => logoutButton.addEventListener('click', async () => {
+        if (logoutButton.dataset.signingOut === '1') return;
+        logoutButtons.forEach((button) => {
+            button.dataset.signingOut = '1';
+            button.disabled = true;
+            button.setAttribute('aria-busy', 'true');
+        });
+        document.body.classList.add('logout-is-transitioning');
+        if (logoutTransition) logoutTransition.hidden = false;
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const minimumAnimation = new Promise((resolve) => window.setTimeout(resolve, reducedMotion ? 180 : 800));
+
         try {
-            if (readToken()) {
-                await requestJson('/api/logout', { method: 'POST' });
-            }
-        } catch (error) {
-            handleAuthFailure(error);
+            await Promise.allSettled([
+                readToken() ? requestJson('/api/logout', { method: 'POST' }) : Promise.resolve(),
+                minimumAnimation,
+            ]);
         } finally {
             stopDashboardPolling();
             stopAdminDevicePolling();
@@ -1741,7 +1961,33 @@ const activeTab = (target) => {
     });
 };
 
-const completeLoginTransition = async (destination) => {
+const warmDashboardCache = (user) => {
+    persistSessionUser(user);
+    const urls = user?.role === 'admin'
+        ? [
+              '/api/summary',
+              '/api/analytics/admin?range=last_12_months',
+              '/api/billing-settings',
+              '/api/reports/consumption',
+              '/api/admin/action-center',
+          ]
+        : [
+              `/api/summary?user_id=${encodeURIComponent(user?.id ?? '')}`,
+              '/api/household-billing',
+              '/api/household-consumption?period=daily',
+              '/api/notifications?per_page=100',
+              '/api/notification-preferences',
+              '/api/consumption-goal',
+              '/api/service-requests?per_page=50',
+          ];
+
+    return Promise.allSettled(urls.map((url) => requestJson(url, {
+        cacheScope: 'dashboard',
+        timeout: 10000,
+    })));
+};
+
+const completeLoginTransition = async (destination, warmup = Promise.resolve()) => {
     const transition = $('[data-login-transition]');
     if (!transition) {
         safeRedirect(destination);
@@ -1752,7 +1998,8 @@ const completeLoginTransition = async (destination) => {
     transition.hidden = false;
 
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    await new Promise((resolve) => window.setTimeout(resolve, reducedMotion ? 250 : 850));
+    const minimumAnimation = new Promise((resolve) => window.setTimeout(resolve, reducedMotion ? 250 : 850));
+    await Promise.all([minimumAnimation, Promise.race([warmup, minimumAnimation])]);
     safeRedirect(destination);
 };
 
@@ -1793,8 +2040,9 @@ const bootLoginPage = () => {
                         return;
                     }
                     persistToken(response.data.token);
+                    persistSessionUser(response.data.user);
                     report('Login successful.');
-                    await completeLoginTransition(destination);
+                    await completeLoginTransition(destination, warmDashboardCache(response.data.user));
                     return;
                 }
 
@@ -2482,11 +2730,25 @@ const renderHouseholdBilling = (billing) => {
     }
 
     const history = Array.isArray(billing?.history) ? billing.history : [];
+    const latestStatement = history[0];
+    const latestDownload = $('[data-download-latest-statement]');
+    if (latestDownload) {
+        latestDownload.disabled = !latestStatement?.id;
+        latestDownload.dataset.statementId = latestStatement?.id ?? '';
+    }
+    const relatedStatement = $('[data-request-statement]');
+    if (relatedStatement) {
+        relatedStatement.innerHTML = '<option value="">Not related to a statement</option>' + history
+            .map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.statement_number ?? item.billing_month)} · ${formatCurrency(item.remaining_balance, item.currency)}</option>`).join('');
+    }
     const historyContainer = $('[data-billing-history]');
     if (historyContainer) {
         historyContainer.innerHTML = history.length
-            ? history.map((item) => `<tr><td>${escapeHtml(item.billing_month ? new Date(item.billing_month).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : '—')}</td><td>${formatCubicMeterValue(item.total_cubic_meter)}</td><td>${formatCurrency(item.current_charge, item.currency)}</td><td>${formatCurrency(item.remaining_balance, item.currency)}</td><td><span class="status-chip ${item.status === 'paid' ? 'status-chip-soft' : 'status-chip-alert'}">${escapeHtml(String(item.status ?? 'Unknown').replaceAll('_', ' '))}</span></td></tr>`).join('')
-            : '<tr><td colspan="5"><div class="empty-state">No finalized billing statements are available yet.</div></td></tr>';
+            ? history.map((item) => {
+                const receipts = (item.payments ?? []).map((payment) => `<button class="link-button" type="button" data-download-receipt="${escapeHtml(payment.id)}">${escapeHtml(payment.receipt_number)}</button>`).join('');
+                return `<tr><td><strong>${escapeHtml(item.statement_number ?? 'Statement')}</strong><small>${escapeHtml(item.billing_month ? new Date(item.billing_month).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : '—')}</small></td><td>${formatCubicMeterValue(item.total_cubic_meter)}</td><td>${formatCurrency(item.current_charge, item.currency)}</td><td>${formatCurrency(item.remaining_balance, item.currency)}</td><td><span class="status-chip ${item.status === 'paid' ? 'status-chip-soft' : 'status-chip-alert'}">${escapeHtml(String(item.status ?? 'Unknown').replaceAll('_', ' '))}</span><small>${item.due_date ? `Due ${escapeHtml(item.due_date)}` : ''}</small></td><td><button class="link-button" type="button" data-download-statement="${escapeHtml(item.id)}">Statement PDF</button>${receipts || '<small>No receipts</small>'}</td></tr>`;
+            }).join('')
+            : '<tr><td colspan="6"><div class="empty-state">No finalized billing statements are available yet.</div></td></tr>';
     }
 };
 
@@ -2561,6 +2823,76 @@ const loadHouseholdBilling = ({ force = false } = {}) => {
     })();
 
     return householdBillingRequest;
+};
+
+const renderGoalForecast = (goal = {}) => {
+    const container = $('[data-goal-progress]');
+    if (!container) return;
+    const progress = Math.max(0, Number(goal.progress_percent ?? 0));
+    const forecast = Number(goal.forecast_percent ?? 0);
+    const hasGoal = goal.target_liters !== null && goal.target_liters !== undefined;
+    setText('[data-goal-status]', !hasGoal ? 'Goal not set' : goal.status === 'at_risk' ? 'At risk of exceeding goal' : 'On track');
+    container.innerHTML = hasGoal
+        ? `<div class="goal-progress-summary"><span><small>Used</small><strong>${formatNumber(goal.used_liters, 0)} L</strong></span><span><small>Target</small><strong>${formatNumber(goal.target_liters, 0)} L</strong></span><span><small>Forecast</small><strong>${formatNumber(goal.forecast_liters, 0)} L</strong></span></div>
+            <div class="goal-progress-track" role="progressbar" aria-label="Monthly goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(progress, 100)}"><span style="width:${Math.min(progress, 100)}%"></span></div>
+            <p class="goal-forecast-message ${goal.status === 'at_risk' ? 'is-at-risk' : 'is-on-track'}">${goal.status === 'at_risk' ? `At the current pace, usage may reach ${formatNumber(forecast)}% of your target.` : `You have ${formatNumber(goal.remaining_liters, 0)} L remaining and are projected to stay within the target.`}</p>`
+        : '<div class="dashboard-empty-state"><strong>No monthly goal yet</strong><span>Enter a target to see progress and an end-of-month forecast.</span></div>';
+};
+
+const loadConsumptionGoal = async () => {
+    if (!consumptionGoalForm) return;
+    const monthInput = consumptionGoalForm.elements.month;
+    monthInput.value ||= new Date().toISOString().slice(0, 7);
+    try {
+        const response = await requestJson(`/api/consumption-goal?month=${encodeURIComponent(monthInput.value)}`);
+        const goal = response.data ?? {};
+        if (goal.target_liters !== null) consumptionGoalForm.elements.target_liters.value = goal.target_liters;
+        renderGoalForecast(goal);
+    } catch (error) {
+        if (!handleAuthFailure(error)) setText('[data-goal-status]', 'Forecast unavailable');
+    }
+};
+
+const renderHouseholdServiceRequestDetail = (item) => {
+    const container = $('[data-service-request-list]');
+    if (!container) return;
+    const messages = (item.messages ?? []).map((message) => `<div class="service-request-message ${message.author?.role === 'admin' ? 'is-staff' : 'is-household'}"><strong>${escapeHtml(message.author?.role === 'admin' ? 'Municipal staff' : 'You')}</strong><p>${escapeHtml(message.message)}</p><small>${escapeHtml(formatDateTime(message.created_at))}</small></div>`).join('');
+    container.innerHTML = `<button class="link-button" type="button" data-request-back>← Back to requests</button>
+        <article class="service-request-detail"><header><div><small>${escapeHtml(item.reference_number)}</small><h3>${escapeHtml(item.subject)}</h3></div><span class="status-chip">${escapeHtml(String(item.status).replaceAll('_', ' '))}</span></header>
+        <p>${escapeHtml(item.description)}</p><div class="service-request-thread">${messages}</div>
+        ${!['closed'].includes(item.status) ? `<form class="stack-form service-request-reply-form" data-household-request-reply="${escapeHtml(item.id)}"><label>Add a reply<textarea name="message" maxlength="5000" required></textarea></label><button class="button button-secondary" type="submit">Send reply</button></form>` : ''}</article>`;
+};
+
+const loadHouseholdServiceRequests = async () => {
+    const container = $('[data-service-request-list]');
+    if (!container) return;
+    try {
+        const response = await requestJson('/api/service-requests?per_page=50');
+        const items = responseItems(response);
+        setText('[data-request-summary]', `${items.length} request${items.length === 1 ? '' : 's'}`);
+        container.innerHTML = items.length ? items.map((item) => `<article class="service-request-item"><div><small>${escapeHtml(item.reference_number)} · ${escapeHtml(String(item.category).replaceAll('_', ' '))}</small><strong>${escapeHtml(item.subject)}</strong><span>Updated ${escapeHtml(formatCompactDateTime(item.updated_at))}</span></div><span class="status-chip">${escapeHtml(String(item.status).replaceAll('_', ' '))}</span><button class="link-button" type="button" data-request-open="${escapeHtml(item.id)}">View conversation</button></article>`).join('') : '<div class="dashboard-empty-state"><strong>No service requests</strong><span>New requests and staff responses will appear here.</span></div>';
+    } catch (error) {
+        if (!handleAuthFailure(error)) container.innerHTML = '<div class="dashboard-empty-state is-error"><strong>Requests unavailable</strong><span>Please try again.</span></div>';
+    }
+};
+
+const loadNotificationPreferences = async () => {
+    if (!notificationPreferencesForm || notificationPreferencesForm.dataset.loaded === '1') return;
+    try {
+        const response = await requestJson('/api/notification-preferences');
+        const preferences = response.data ?? {};
+        ['announcements', 'billing_updates', 'consumption_alerts', 'leak_alerts', 'service_request_updates', 'low_bandwidth_mode'].forEach((name) => {
+            if (notificationPreferencesForm.elements[name]) notificationPreferencesForm.elements[name].checked = preferences[name] !== false;
+        });
+        ['quiet_hours_start', 'quiet_hours_end', 'preferred_locale'].forEach((name) => {
+            if (notificationPreferencesForm.elements[name]) notificationPreferencesForm.elements[name].value = preferences[name] ?? (name === 'preferred_locale' ? 'en' : '');
+        });
+        notificationPreferencesForm.dataset.loaded = '1';
+        applyLocale(preferences.preferred_locale ?? 'en');
+        applyLowBandwidthMode(preferences.low_bandwidth_mode === true);
+    } catch (error) {
+        if (!handleAuthFailure(error)) showToast('Preferences could not be loaded.', 'error');
+    }
 };
 
 const renderLegacyAdminAlerts = (items) => {
@@ -2971,7 +3303,7 @@ const applySummary = (summary, deviceState = householdDeviceState) => {
     setText('[data-leak-details]', !latestReading ? 'No recent device reading available.' : Boolean(latestReading?.is_possible_leak) ? 'Possible leak detected from the latest reading.' : 'No leak has been detected yet.');
 
     householdDeviceState = deviceState ?? householdDeviceState;
-    renderHouseholdSummaryCards(summaryData, latestReading, notifications, activeBilling, householdDeviceState);
+    renderHouseholdSummaryCards(summaryData, latestReading, notifications, activeBilling, billingStatement, householdDeviceState);
 };
 
 const setHouseholdAnalyticsValue = (selector, value, isEmpty = false) => {
@@ -3243,7 +3575,7 @@ const loadHouseholdTrend = async (period = householdTrendPeriod) => {
     }
 };
 
-const renderHouseholdSummaryCards = (summaryData, latestReading, notifications, activeBilling, deviceState) => {
+const renderHouseholdSummaryCards = (summaryData, latestReading, notifications, activeBilling, billingStatement, deviceState) => {
     const readingCount = Number(summaryData?.reading_count ?? 0);
     const hasReadings = readingCount > 0;
     const totalConsumed = hasReadings ? formatCubicMeters(summaryData.total_liters) : 'No data yet';
@@ -3366,12 +3698,14 @@ const loadDashboard = async (options = {}) => {
     const { reschedule = true, manual = false } = options;
 
     if (!readToken()) {
+        if (manual) dashboardCacheForceNetwork = false;
         stopDashboardPolling();
         safeRedirect('/login');
         return;
     }
 
     if (dashboardRefreshInFlight) {
+        if (manual) dashboardCacheForceNetwork = false;
         if (reschedule) {
             scheduleDashboardPolling();
         }
@@ -3390,7 +3724,8 @@ const loadDashboard = async (options = {}) => {
     let dashboardHasUsableData = false;
 
     try {
-        const me = householdProfile ? { data: householdProfile } : await requestJson('/api/me');
+        const offlineUser = !navigator.onLine ? readSessionUser() : null;
+        const me = householdProfile ? { data: householdProfile } : offlineUser ? { data: offlineUser } : await requestJson('/api/me');
         householdProfile = me.data;
         renderProfile(me.data);
         renderAccountActivity(me.data);
@@ -3528,6 +3863,7 @@ const loadDashboard = async (options = {}) => {
         }
     } finally {
         dashboardRefreshInFlight = false;
+        if (manual) dashboardCacheForceNetwork = false;
         if (manual && refreshButton) {
             refreshButton.disabled = false;
             refreshButton.classList.remove('is-loading');
@@ -4121,6 +4457,174 @@ const renderAdminOverviewActivity = (analytics) => {
         : '<div class="empty-state">No recent administrative or device activity.</div>';
 };
 
+const renderAdminConsumptionBaselines = (items = [], threshold = 100) => {
+    const container = $('[data-admin-consumption-baselines]');
+    const summary = $('[data-admin-consumption-baseline-summary]');
+    if (!container) return;
+
+    const comparisons = Array.isArray(items) ? items : [];
+    const relevantCount = comparisons.filter((item) => {
+        const latest = item.latest ?? {};
+        return !latest.is_baseline
+            && latest.change_percent !== null
+            && Math.abs(Number(latest.change_percent)) >= threshold;
+    }).length;
+    if (summary) {
+        summary.textContent = comparisons.length
+            ? `${relevantCount} alert${relevantCount === 1 ? '' : 's'} · ${comparisons.length} household${comparisons.length === 1 ? '' : 's'}`
+            : 'No baseline data';
+        applyStatusTone('[data-admin-consumption-baseline-summary]', relevantCount > 0 ? 'Attention' : 'Normal');
+    }
+
+    if (!comparisons.length) {
+        container.innerHTML = '<div class="dashboard-empty-state"><strong>No consumption baseline yet</strong><span>A household appears here after its meter submits the first monthly reading.</span></div>';
+        return;
+    }
+
+    container.innerHTML = comparisons.map((item) => {
+        const household = item.household ?? {};
+        const baseline = item.baseline ?? {};
+        const latest = item.latest ?? baseline;
+        const percentage = latest.usage_percentage === null ? null : Number(latest.usage_percentage ?? 100);
+        const change = latest.change_percent === null ? null : Number(latest.change_percent ?? 0);
+        const relevant = !latest.is_baseline && change !== null && Math.abs(change) >= threshold;
+        const directionIcon = change > 0 ? 'bi-arrow-up-right' : (change < 0 ? 'bi-arrow-down-right' : 'bi-dash');
+        const directionLabel = latest.is_baseline
+            ? 'Baseline established'
+            : (change === null ? 'Baseline has no measurable usage' : `${change > 0 ? '+' : ''}${formatNumber(change)}% from baseline`);
+        const history = (item.months ?? []).slice(-6).map((month) => `
+            <span class="consumption-baseline-chip${month.is_baseline ? ' is-baseline' : ''}">
+                <small>${escapeHtml(formatMonthLabel(month.month))}</small>
+                <strong>${month.usage_percentage === null ? '--' : `${formatNumber(month.usage_percentage)}%`}</strong>
+            </span>
+        `).join('');
+
+        return `
+            <article class="consumption-baseline-item${relevant ? ' requires-attention' : ''}">
+                <header>
+                    <span class="consumption-baseline-icon" aria-hidden="true"><i class="bi bi-speedometer2"></i></span>
+                    <span class="consumption-baseline-household">
+                        <strong>${escapeHtml(household.name ?? 'Household')}</strong>
+                        <small>${escapeHtml(household.account_number ?? 'No account number')}</small>
+                    </span>
+                    <span class="status-pill">${relevant ? 'Alert' : (latest.is_baseline ? 'Baseline' : 'Normal')}</span>
+                </header>
+                <div class="consumption-baseline-metrics">
+                    <span><small>First month</small><strong>100%</strong><em>${escapeHtml(formatMonthLabel(baseline.month))} · ${formatNumber(baseline.liters ?? 0)} L</em></span>
+                    <span><small>${escapeHtml(formatMonthLabel(latest.month))}</small><strong>${percentage === null ? '--' : `${formatNumber(percentage)}%`}</strong><em>${formatNumber(latest.liters ?? 0)} L</em></span>
+                    <span class="${change > 0 ? 'is-increase' : (change < 0 ? 'is-decrease' : '')}"><small>Change</small><strong><i class="bi ${directionIcon}" aria-hidden="true"></i> ${escapeHtml(directionLabel)}</strong><em>Alert threshold: ±${formatNumber(threshold)}%</em></span>
+                </div>
+                <div class="consumption-baseline-history" aria-label="Recent monthly percentages">${history}</div>
+            </article>
+        `;
+    }).join('');
+};
+
+const loadAdminActionCenter = async () => {
+    const list = $('[data-action-center-list]');
+    const metrics = $('[data-action-center-metrics]');
+    if (!list || !metrics) return;
+    try {
+        const response = await requestJson('/api/admin/action-center');
+        const data = response.data ?? {};
+        const summary = data.summary ?? {};
+        setText('[data-action-center-summary]', `${formatNumber(summary.total_attention ?? 0, 0)} requiring attention`);
+        metrics.innerHTML = [
+            ['Open requests', summary.open_service_requests ?? 0, 'service-requests'],
+            ['Overdue bills', summary.overdue_statements ?? 0, 'billing-management'],
+            ['Active leaks', summary.active_leaks ?? 0, 'leak-monitoring'],
+            ['Failed notices', summary.failed_notifications ?? 0, 'notifications'],
+        ].map(([label, value, target]) => `<button type="button" data-admin-nav="${target}"><small>${label}</small><strong>${formatNumber(value, 0)}</strong></button>`).join('');
+        list.innerHTML = (data.items ?? []).length ? data.items.map((item) => `<article class="action-center-item is-${escapeHtml(item.severity)}"><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.description)}</small></span><span class="status-chip">${escapeHtml(String(item.status).replaceAll('_', ' '))}</span><button class="link-button" type="button" data-admin-nav="${escapeHtml(item.target)}">Open</button></article>`).join('') : '<div class="dashboard-empty-state"><strong>Action center clear</strong><span>No unresolved website workflow currently requires attention.</span></div>';
+        const panel = $('.admin-action-center');
+        if (panel && panel.dataset.bound !== '1') {
+            panel.dataset.bound = '1';
+            panel.addEventListener('click', (event) => {
+                const button = event.target.closest('[data-admin-nav]');
+                if (button) showAdminView(button.dataset.adminNav);
+            });
+        }
+    } catch (error) {
+        if (!handleAuthFailure(error)) list.innerHTML = '<div class="dashboard-empty-state is-error"><strong>Action center unavailable</strong></div>';
+    }
+};
+
+const renderAdminServiceRequestDetail = (item) => {
+    const dialog = $('[data-admin-service-request-dialog]');
+    const container = $('[data-admin-service-request-detail]');
+    if (!dialog || !container) return;
+    setText('[data-admin-service-request-title]', `${item.reference_number} · ${item.subject}`);
+    const messages = (item.messages ?? []).map((message) => `<div class="service-request-message ${message.is_internal ? 'is-internal' : (message.author?.role === 'admin' ? 'is-staff' : 'is-household')}"><strong>${escapeHtml(message.is_internal ? 'Internal staff note' : (message.author?.role === 'admin' ? message.author.name : item.household?.name))}</strong><p>${escapeHtml(message.message)}</p><small>${escapeHtml(formatDateTime(message.created_at))}</small></div>`).join('');
+    container.innerHTML = `<div class="summary-list"><div><dt>Household</dt><dd>${escapeHtml(item.household?.name)} · ${escapeHtml(item.household?.account_number)}</dd></div><div><dt>Category</dt><dd>${escapeHtml(String(item.category).replaceAll('_', ' '))}</dd></div><div><dt>Priority</dt><dd>${escapeHtml(item.priority)}</dd></div><div><dt>Status</dt><dd>${escapeHtml(String(item.status).replaceAll('_', ' '))}</dd></div></div>
+        <p class="service-request-description">${escapeHtml(item.description)}</p><div class="service-request-thread">${messages}</div>
+        <form class="stack-form" data-admin-request-workflow="${escapeHtml(item.id)}">
+            <div class="form-grid-two"><label>Status<select name="status">${['open','acknowledged','in_progress','waiting_for_household','resolved','closed'].map((value) => `<option value="${value}" ${item.status === value ? 'selected' : ''}>${value.replaceAll('_', ' ')}</option>`).join('')}</select></label><label>Priority<select name="priority">${['low','normal','high','urgent'].map((value) => `<option value="${value}" ${item.priority === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label></div>
+            <button class="button button-secondary" type="submit" name="workflow_action" value="update">Update workflow</button>
+            <label>Reply or staff note<textarea name="message" maxlength="5000"></textarea></label>
+            <label class="admin-checkbox-field"><span>Internal note</span><span><input type="checkbox" name="is_internal" value="1"> Hide from household</span></label>
+            <button class="button button-primary" type="submit" name="workflow_action" value="reply">Add response</button>
+        </form>`;
+    if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', '');
+};
+
+const loadAdminServiceRequests = async () => {
+    const container = $('[data-admin-service-request-list]');
+    if (!container) return;
+    const filter = $('[data-admin-service-request-filters]');
+    try {
+        const query = filter ? buildQuery(Object.fromEntries(new FormData(filter).entries())) : '';
+        const response = await requestJson(`/api/service-requests${query}`);
+        const items = responseItems(response);
+        setText('[data-admin-request-summary]', `${responsePaginator(response).total ?? items.length} request${items.length === 1 ? '' : 's'}`);
+        container.innerHTML = items.length ? items.map((item) => `<article class="admin-service-request-item"><span><strong>${escapeHtml(item.subject)}</strong><small>${escapeHtml(item.reference_number)} · ${escapeHtml(item.household?.name)} · ${escapeHtml(String(item.category).replaceAll('_', ' '))}</small></span><span class="status-chip">${escapeHtml(String(item.priority))}</span><span class="status-chip">${escapeHtml(String(item.status).replaceAll('_', ' '))}</span><button class="link-button" type="button" data-admin-request-open="${escapeHtml(item.id)}">Manage</button></article>`).join('') : '<div class="dashboard-empty-state"><strong>No matching service requests</strong></div>';
+    } catch (error) {
+        if (!handleAuthFailure(error)) container.innerHTML = '<div class="dashboard-empty-state is-error"><strong>Service requests unavailable</strong></div>';
+    }
+};
+
+const bindAdminServiceRequests = () => {
+    const filter = $('[data-admin-service-request-filters]');
+    if (filter && filter.dataset.bound !== '1') {
+        filter.dataset.bound = '1';
+        filter.addEventListener('submit', (event) => { event.preventDefault(); loadAdminServiceRequests(); });
+    }
+    const list = $('[data-admin-service-request-list]');
+    if (list && list.dataset.bound !== '1') {
+        list.dataset.bound = '1';
+        list.addEventListener('click', async (event) => {
+            const button = event.target.closest('[data-admin-request-open]');
+            if (!button) return;
+            const response = await requestJson(`/api/service-requests/${button.dataset.adminRequestOpen}`);
+            renderAdminServiceRequestDetail(response.data);
+        });
+    }
+    const detail = $('[data-admin-service-request-detail]');
+    if (detail && detail.dataset.bound !== '1') {
+        detail.dataset.bound = '1';
+        detail.addEventListener('submit', async (event) => {
+            const form = event.target.closest('[data-admin-request-workflow]');
+            if (!form) return;
+            event.preventDefault();
+            const action = event.submitter?.value;
+            const values = Object.fromEntries(new FormData(form).entries());
+            try {
+                const response = action === 'reply'
+                    ? await requestJson(`/api/service-requests/${form.dataset.adminRequestWorkflow}/messages`, { method: 'POST', body: JSON.stringify({ message: values.message, is_internal: values.is_internal === '1' }) })
+                    : await requestJson(`/api/service-requests/${form.dataset.adminRequestWorkflow}`, { method: 'PATCH', body: JSON.stringify({ status: values.status, priority: values.priority }) });
+                renderAdminServiceRequestDetail(response.data);
+                await Promise.all([loadAdminServiceRequests(), loadAdminActionCenter()]);
+                showToast(response.message);
+            } catch (error) {
+                if (!handleAuthFailure(error)) showToast(errorMessage(error, 'Could not update this request.'), 'error');
+            }
+        });
+    }
+    $('[data-admin-service-request-close]')?.addEventListener('click', () => {
+        const dialog = $('[data-admin-service-request-dialog]');
+        if (typeof dialog?.close === 'function') dialog.close(); else dialog?.removeAttribute('open');
+    }, { once: true });
+};
+
 const bindAdminSettingsForm = (form, endpoint, statusSelector, successMessage) => {
     if (!form || form.dataset.bound === '1') return;
 
@@ -4208,7 +4712,7 @@ const renderBillingRecords = (response) => {
             const statusClass = record.status === 'paid' ? 'status-chip-soft' : record.status === 'estimated' ? 'status-chip-muted' : 'status-chip-alert';
             const key = escapeHtml(String(record.id));
             const actions = record.record_type === 'finalized'
-                ? `<button type="button" class="link-button" data-billing-detail="${key}">Details</button>${['unpaid', 'partial'].includes(record.status) ? `<button type="button" class="link-button" data-billing-pay="${key}">Record payment</button>` : ''}`
+                ? `<button type="button" class="link-button" data-billing-detail="${key}">Details</button><button type="button" class="link-button" data-admin-download-statement="${key}">Statement PDF</button>${['unpaid', 'partial'].includes(record.status) ? `<button type="button" class="link-button" data-billing-pay="${key}">Record payment</button>` : ''}`
                 : `<button type="button" class="link-button" data-billing-detail="${key}">Details</button><button type="button" class="link-button" data-billing-generate="${key}">Finalize month</button>`;
 
             return `<div class="table-row billing-management-row">
@@ -4252,10 +4756,12 @@ const renderBillingDetail = (data) => {
     const household = record.household ?? {};
     const usageCharge = data.calculation?.usage_charge ?? Number(record.total_cubic_meter ?? 0) * Number(record.water_rate ?? 0);
     const readings = Array.isArray(data.readings) ? data.readings : [];
+    const payments = Array.isArray(data.payments) ? data.payments : [];
     const detailTitle = $('[data-billing-detail-title]');
     if (detailTitle) detailTitle.textContent = `${formatPersonalDisplay(household.name, 'Household')} · ${record.period?.label ?? 'Billing details'}`;
     container.innerHTML = `<div class="summary-list billing-detail-summary">
         <div><dt>Record type</dt><dd>${record.record_type === 'finalized' ? 'Finalized statement' : 'Estimated from readings'}</dd></div>
+        ${record.record_type === 'finalized' ? `<div><dt>Statement number</dt><dd>${escapeHtml(record.statement_number ?? 'Pending')}</dd></div><div><dt>Due date</dt><dd>${escapeHtml(record.due_date ?? 'Not specified')}</dd></div>` : ''}
         <div><dt>Household</dt><dd>${escapeHtml(formatPersonalDisplay(household.name))}</dd></div>
         <div><dt>Consumption</dt><dd>${formatCubicMeterValue(record.total_cubic_meter ?? 0)} · ${formatNumber(record.total_liters ?? 0, 2)} L</dd></div>
         <div><dt>Usage charge</dt><dd>${formatCurrency(usageCharge, record.currency)}</dd></div>
@@ -4265,7 +4771,7 @@ const renderBillingDetail = (data) => {
         <div><dt>Paid</dt><dd>${formatCurrency(record.amount_paid ?? 0, record.currency)}</dd></div>
         <div><dt>Remaining balance</dt><dd>${formatCurrency(record.remaining_balance ?? 0, record.currency)}</dd></div>
         <div><dt>Applicable rate</dt><dd>${formatCurrency(record.water_rate ?? 0, record.currency)} / m³</dd></div>
-    </div>${readings.length ? `<div class="billing-detail-readings"><p class="eyebrow">Source readings</p><div class="table"><div class="table-head"><span>Recorded</span><span>Flow</span><span>Liters</span><span>Estimated</span></div>${readings.slice(0, 20).map((reading) => `<div class="table-row"><span>${escapeHtml(formatDateTime(reading.recorded_at))}</span><span>${formatNumber(reading.flow_rate)} L/min</span><span>${formatNumber(reading.liters_used, 2)} L</span><span>${formatCurrency(reading.estimated_bill, record.currency)}</span></div>`).join('')}</div></div>` : '<div class="empty-state">No source readings are attached to this finalized statement.</div>'}`;
+    </div>${payments.length ? `<div class="billing-detail-readings"><p class="eyebrow">Payment receipts</p>${payments.map((payment) => `<button class="button button-ghost" type="button" data-admin-download-receipt="${escapeHtml(payment.id)}">${escapeHtml(payment.receipt_number)} · ${formatCurrency(payment.amount, record.currency)}</button>`).join('')}</div>` : ''}${readings.length ? `<div class="billing-detail-readings"><p class="eyebrow">Source readings</p><div class="table"><div class="table-head"><span>Recorded</span><span>Flow</span><span>Liters</span><span>Estimated</span></div>${readings.slice(0, 20).map((reading) => `<div class="table-row"><span>${escapeHtml(formatDateTime(reading.recorded_at))}</span><span>${formatNumber(reading.flow_rate)} L/min</span><span>${formatNumber(reading.liters_used, 2)} L</span><span>${formatCurrency(reading.estimated_bill, record.currency)}</span></div>`).join('')}</div></div>` : '<div class="empty-state">No source readings are attached to this finalized statement.</div>'}`;
 };
 
 const openBillingDetail = async (record) => {
@@ -4291,6 +4797,21 @@ const closeBillingDetail = () => {
     else billingDetailDialog.removeAttribute('open');
 };
 
+const openPaymentDialog = (record) => {
+    if (!paymentDialog || !paymentForm) return;
+    paymentForm.reset();
+    paymentForm.elements.billing_statement_id.value = record.id;
+    paymentForm.elements.amount.value = Number(record.remaining_balance ?? 0).toFixed(2);
+    paymentForm.elements.amount.max = Number(record.remaining_balance ?? 0).toFixed(2);
+    paymentForm.elements.received_at.value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    setText('[data-payment-dialog-summary]', `${formatPersonalDisplay(record.household?.name)} · ${record.statement_number ?? record.period?.label} · Balance ${formatCurrency(record.remaining_balance, record.currency)}`);
+    if (typeof paymentDialog.showModal === 'function') paymentDialog.showModal(); else paymentDialog.setAttribute('open', '');
+};
+
+const closePaymentDialog = () => {
+    if (typeof paymentDialog?.close === 'function') paymentDialog.close(); else paymentDialog?.removeAttribute('open');
+};
+
 const bindBillingManagementActions = () => {
     const container = $('[data-billing-management-records]');
     if (container && container.dataset.bound !== '1') {
@@ -4299,12 +4820,17 @@ const bindBillingManagementActions = () => {
             const detailButton = event.target.closest('[data-billing-detail]');
             const generateButton = event.target.closest('[data-billing-generate]');
             const payButton = event.target.closest('[data-billing-pay]');
-            const key = detailButton?.dataset.billingDetail ?? generateButton?.dataset.billingGenerate ?? payButton?.dataset.billingPay;
+            const statementButton = event.target.closest('[data-admin-download-statement]');
+            const key = detailButton?.dataset.billingDetail ?? generateButton?.dataset.billingGenerate ?? payButton?.dataset.billingPay ?? statementButton?.dataset.adminDownloadStatement;
             const record = key ? billingRecordsByKey.get(String(key)) : null;
             if (!record) return;
             try {
                 if (detailButton) {
                     await openBillingDetail(record);
+                    return;
+                }
+                if (statementButton) {
+                    await downloadAuthenticatedFile(`/api/billing-statements/${record.id}/document`, `${record.statement_number ?? 'billing-statement'}.pdf`);
                     return;
                 }
                 if (generateButton) {
@@ -4314,11 +4840,7 @@ const bindBillingManagementActions = () => {
                     await loadAdminBillingManagement();
                     return;
                 }
-                const amount = window.prompt('Enter the payment amount.', String(record.remaining_balance ?? 0));
-                if (amount === null) return;
-                await requestJson(`/api/billing-statements/${record.id}/paid`, { method: 'PATCH', body: JSON.stringify({ amount_paid: Number(amount) }) });
-                showToast('Billing payment recorded successfully.');
-                await loadAdminBillingManagement();
+                openPaymentDialog(record);
             } catch (error) {
                 if (!handleAuthFailure(error)) showToast(errorMessage(error, 'Could not update this billing record.'), 'error');
             }
@@ -4329,6 +4851,37 @@ const bindBillingManagementActions = () => {
         closeButton.dataset.bound = '1';
         closeButton.addEventListener('click', closeBillingDetail);
     }
+    if (billingDetailDialog && billingDetailDialog.dataset.receiptsBound !== '1') {
+        billingDetailDialog.dataset.receiptsBound = '1';
+        billingDetailDialog.addEventListener('click', async (event) => {
+            const button = event.target.closest('[data-admin-download-receipt]');
+            if (!button) return;
+            try { await downloadAuthenticatedFile(`/api/billing-payments/${button.dataset.adminDownloadReceipt}/receipt`, 'payment-receipt.pdf'); } catch { showToast('Could not download this receipt.', 'error'); }
+        });
+    }
+    if (paymentForm && paymentForm.dataset.bound !== '1') {
+        paymentForm.dataset.bound = '1';
+        paymentForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const feedback = $('[data-payment-feedback]');
+            const values = Object.fromEntries(new FormData(paymentForm).entries());
+            const statementId = values.billing_statement_id;
+            delete values.billing_statement_id;
+            if (!values.reference_number) delete values.reference_number;
+            if (!values.notes) delete values.notes;
+            try {
+                const response = await requestJson(`/api/billing-statements/${statementId}/payments`, { method: 'POST', body: JSON.stringify(values) });
+                if (feedback) { feedback.hidden = false; feedback.classList.remove('is-error'); feedback.textContent = `${response.message} ${response.data.receipt_number}`; }
+                showToast(response.message);
+                await Promise.all([loadAdminBillingManagement(), loadAdminActionCenter()]);
+                await downloadAuthenticatedFile(`/api/billing-payments/${response.data.id}/receipt`, `${response.data.receipt_number}.pdf`);
+                closePaymentDialog();
+            } catch (error) {
+                if (feedback) { feedback.hidden = false; feedback.classList.add('is-error'); feedback.textContent = errorMessage(error, 'Could not record this payment.'); }
+            }
+        });
+    }
+    $('[data-payment-dialog-close]')?.addEventListener('click', closePaymentDialog, { once: true });
 };
 
 const bindBillingManagementExports = () => {
@@ -4682,6 +5235,8 @@ const loadAdmin = async () => {
     loadAdminBillingManagement();
     bindAdminReports();
     loadAdminReports();
+    bindAdminServiceRequests();
+    void loadAdminActionCenter();
 
     if (consumptionFilterForm) {
         const fields = serializeForm(consumptionFilterForm);
@@ -4805,6 +5360,10 @@ const loadAdmin = async () => {
             : (overviewRangeLabels[analytics.range] ?? 'Selected period'));
         renderAdminOverviewAttention(analytics);
         renderAdminOverviewActivity(analytics);
+        renderAdminConsumptionBaselines(
+            analytics.alerts?.consumption_baselines ?? [],
+            Number(billingSettings?.consumption_change_threshold_percent ?? 100),
+        );
         renderMonthlyChart($('[data-admin-monthly-chart]'), summary.monthly_usage ?? [], {
             dataAvailable: summary.monthly_usage?.some((row) => Number(row.reading_count ?? 0) > 0) === true,
             emptyMessage: '<div class="chart-empty-state"><strong>No analytics data available yet</strong><span>Analytics will appear after the system receives valid water-meter readings.</span></div>',
@@ -4907,6 +5466,13 @@ const loadAdmin = async () => {
 const bootCommon = () => {
     setTokenInput();
     bootLogout();
+    let storedLocale = 'en';
+    try { storedLocale = localStorage.getItem(localeKey) ?? 'en'; } catch { storedLocale = 'en'; }
+    applyLocale(storedLocale);
+    applyLowBandwidthMode(lowBandwidthMode, false);
+    if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
 
     $$('[data-visibility-toggle]').forEach((button) => {
         button.addEventListener('click', () => {
@@ -5313,6 +5879,7 @@ const bootCommon = () => {
 
     refreshButton?.addEventListener('click', () => {
         if (page === 'household') {
+            dashboardCacheForceNetwork = true;
             loadDashboard({ manual: true });
         }
 
@@ -5323,7 +5890,9 @@ const bootCommon = () => {
                 refreshButton.setAttribute('aria-busy', 'true');
                 refreshButton.setAttribute('aria-label', 'Refreshing administrator overview');
             }
+            dashboardCacheForceNetwork = true;
             loadAdmin().finally(() => {
+                dashboardCacheForceNetwork = false;
                 if (refreshButton) {
                     refreshButton.disabled = false;
                     refreshButton.classList.remove('is-loading');
@@ -5380,6 +5949,104 @@ const bootCommon = () => {
         if (adminAnalyticsRange?.value === 'custom' && (!adminAnalyticsFrom?.value || !adminAnalyticsTo?.value)) return;
         loadAdmin();
     }));
+
+    consumptionGoalForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const feedback = $('[data-goal-feedback]');
+        try {
+            const values = Object.fromEntries(new FormData(consumptionGoalForm).entries());
+            const response = await requestJson('/api/consumption-goal', { method: 'PUT', body: JSON.stringify(values) });
+            renderGoalForecast(response.data);
+            if (feedback) { feedback.hidden = false; feedback.textContent = response.message; }
+            showToast(response.message);
+        } catch (error) {
+            if (feedback) { feedback.hidden = false; feedback.textContent = errorMessage(error, 'Could not save this goal.'); feedback.classList.add('is-error'); }
+        }
+    });
+    consumptionGoalForm?.elements?.month?.addEventListener('change', loadConsumptionGoal);
+
+    serviceRequestForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const feedback = $('[data-service-request-feedback]');
+        const submit = $('button[type="submit"]', serviceRequestForm);
+        submit && (submit.disabled = true);
+        try {
+            const values = Object.fromEntries(new FormData(serviceRequestForm).entries());
+            if (!values.billing_statement_id) delete values.billing_statement_id;
+            const response = await requestJson('/api/service-requests', { method: 'POST', body: JSON.stringify(values) });
+            serviceRequestForm.reset();
+            if (feedback) { feedback.hidden = false; feedback.classList.remove('is-error'); feedback.textContent = `${response.message} Reference: ${response.data.reference_number}`; }
+            showToast(response.message);
+            await loadHouseholdServiceRequests();
+        } catch (error) {
+            if (feedback) { feedback.hidden = false; feedback.classList.add('is-error'); feedback.textContent = errorMessage(error, 'Could not submit this request.'); }
+        } finally {
+            submit && (submit.disabled = false);
+        }
+    });
+    const householdRequestList = $('[data-service-request-list]');
+    householdRequestList?.addEventListener('click', async (event) => {
+        if (event.target.closest('[data-request-back]')) return loadHouseholdServiceRequests();
+        const button = event.target.closest('[data-request-open]');
+        if (!button) return;
+        try {
+            const response = await requestJson(`/api/service-requests/${button.dataset.requestOpen}`);
+            renderHouseholdServiceRequestDetail(response.data);
+        } catch (error) {
+            if (!handleAuthFailure(error)) showToast('Could not open this request.', 'error');
+        }
+    });
+    householdRequestList?.addEventListener('submit', async (event) => {
+        const form = event.target.closest('[data-household-request-reply]');
+        if (!form) return;
+        event.preventDefault();
+        try {
+            const response = await requestJson(`/api/service-requests/${form.dataset.householdRequestReply}/messages`, { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(form).entries())) });
+            renderHouseholdServiceRequestDetail(response.data);
+            showToast(response.message);
+        } catch (error) {
+            if (!handleAuthFailure(error)) showToast(errorMessage(error, 'Could not send your reply.'), 'error');
+        }
+    });
+    $('[data-refresh-service-requests]')?.addEventListener('click', loadHouseholdServiceRequests);
+
+    notificationPreferencesForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const feedback = $('[data-preferences-feedback]');
+        const values = Object.fromEntries(new FormData(notificationPreferencesForm).entries());
+        ['announcements', 'billing_updates', 'consumption_alerts', 'leak_alerts', 'service_request_updates', 'low_bandwidth_mode'].forEach((name) => { values[name] = notificationPreferencesForm.elements[name].checked; });
+        try {
+            const response = await requestJson('/api/notification-preferences', { method: 'PUT', body: JSON.stringify(values) });
+            applyLocale(response.data.preferred_locale);
+            applyLowBandwidthMode(response.data.low_bandwidth_mode === true);
+            if (feedback) { feedback.hidden = false; feedback.classList.remove('is-error'); feedback.textContent = response.message; }
+            showToast(response.message);
+        } catch (error) {
+            if (feedback) { feedback.hidden = false; feedback.classList.add('is-error'); feedback.textContent = errorMessage(error, 'Could not save preferences.'); }
+        }
+    });
+
+    $('[data-download-latest-statement]')?.addEventListener('click', async (event) => {
+        const id = event.currentTarget.dataset.statementId;
+        if (!id) return;
+        try { await downloadAuthenticatedFile(`/api/billing-statements/${id}/document`, 'billing-statement.pdf'); } catch { showToast('Could not download the statement.', 'error'); }
+    });
+    $('[data-install-app]')?.addEventListener('click', async (event) => {
+        if (!installPromptEvent) return;
+        await installPromptEvent.prompt();
+        await installPromptEvent.userChoice;
+        installPromptEvent = null;
+        event.currentTarget.hidden = true;
+    });
+    $('[data-billing-history]')?.addEventListener('click', async (event) => {
+        const statement = event.target.closest('[data-download-statement]');
+        const receipt = event.target.closest('[data-download-receipt]');
+        if (!statement && !receipt) return;
+        try {
+            if (statement) await downloadAuthenticatedFile(`/api/billing-statements/${statement.dataset.downloadStatement}/document`, 'billing-statement.pdf');
+            if (receipt) await downloadAuthenticatedFile(`/api/billing-payments/${receipt.dataset.downloadReceipt}/receipt`, 'payment-receipt.pdf');
+        } catch { showToast('Could not download this billing document.', 'error'); }
+    });
 
     const clearNotificationsButton = $('[data-clear-notifications]');
     clearNotificationsButton?.addEventListener('click', async () => {

@@ -21,6 +21,7 @@ class AccountRecoveryTest extends TestCase
             'approved_at' => now(),
             'account_status' => User::ACCOUNT_STATUS_ACTIVE,
         ]);
+        $existingToken = $user->createToken('existing-session')->accessToken;
 
         Password::shouldReceive('sendResetLink')
             ->once()
@@ -46,6 +47,7 @@ class AccountRecoveryTest extends TestCase
         ])->assertOk();
 
         $this->assertTrue(Hash::check('new-password', $user->fresh()->password));
+        $this->assertDatabaseMissing('personal_access_tokens', ['id' => $existingToken->id]);
     }
 
     public function test_unapproved_household_accounts_do_not_receive_password_reset_access(): void

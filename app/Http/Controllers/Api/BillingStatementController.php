@@ -13,12 +13,11 @@ class BillingStatementController extends Controller
 {
     public function __construct(
         protected BillingStatementService $billingStatementService
-    ) {
-    }
+    ) {}
 
     public function index(Request $request)
     {
-        $query = BillingStatement::query()->latest('billing_month');
+        $query = BillingStatement::query()->with('payments')->latest('billing_month');
 
         if ($request->user()?->isAdmin() !== true) {
             $query->where('user_id', $request->user()?->id);
@@ -40,7 +39,7 @@ class BillingStatementController extends Controller
         }
 
         return response()->json([
-            'data' => $billingStatement,
+            'data' => $billingStatement->load('payments'),
         ]);
     }
 
@@ -81,26 +80,11 @@ class BillingStatementController extends Controller
             'amount_paid' => ['required', 'numeric', 'min:0'],
         ]);
 
-        $remainingBalance = max((float) $billingStatement->opening_balance + (float) $billingStatement->current_charge - (float) $validated['amount_paid'], 0);
-
-        $billingStatement->update([
-            'amount_paid' => $validated['amount_paid'],
-            'remaining_balance' => $remainingBalance,
-            'status' => $remainingBalance > 0 ? 'partial' : 'paid',
-            'paid_at' => $remainingBalance <= 0 ? now() : null,
+        $request->merge([
+            'amount' => $validated['amount_paid'],
+            'payment_method' => $request->input('payment_method', 'cash'),
         ]);
 
-        $this->billingStatementService->recordAudit(
-            $request->user(),
-            'billing_statement_paid',
-            'Marked billing statement as paid.',
-            ['billing_statement_id' => $billingStatement->id, 'amount_paid' => $validated['amount_paid']],
-            $billingStatement,
-        );
-
-        return response()->json([
-            'message' => 'Billing statement updated successfully.',
-            'data' => $billingStatement->fresh(),
-        ]);
+        return app(BillingPaymentController::class)->store($request, $billingStatement);
     }
 }

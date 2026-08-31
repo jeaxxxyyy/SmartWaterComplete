@@ -45,6 +45,8 @@
         <button type="button" data-household-nav="live-monitoring" title="Live Monitoring"><span>@include('components.ui-icon', ['name' => 'monitoring']) <span class="sidebar-nav-label">Live Monitoring</span></span></button>
         <button type="button" data-household-nav="history" title="Consumption History"><span>@include('components.ui-icon', ['name' => 'history']) <span class="sidebar-nav-label">Consumption History</span></span></button>
         <button type="button" data-household-nav="billing" title="Estimated Billing"><span>@include('components.ui-icon', ['name' => 'billing']) <span class="sidebar-nav-label">Estimated Billing</span></span></button>
+        <button type="button" data-household-nav="goals" title="Usage Goals"><span><i class="bi bi-bullseye" aria-hidden="true"></i> <span class="sidebar-nav-label">Goals &amp; Forecast</span></span></button>
+        <button type="button" data-household-nav="requests" title="Service Requests"><span><i class="bi bi-chat-square-text" aria-hidden="true"></i> <span class="sidebar-nav-label">Service Requests</span></span></button>
         <button type="button" data-household-nav="leak" title="Leak Detection"><span>@include('components.ui-icon', ['name' => 'leak']) <span class="sidebar-nav-label">Leak Detection</span></span></button>
         <button type="button" data-household-nav="notifications" title="Notifications"><span>@include('components.ui-icon', ['name' => 'notifications']) <span class="sidebar-nav-label">Notifications</span></span><span class="sidebar-count" data-household-alert-count aria-hidden="true" hidden></span></button>
         <button type="button" data-household-nav="settings" title="Account Settings"><span>@include('components.ui-icon', ['name' => 'settings']) <span class="sidebar-nav-label">Account Settings</span></span></button>
@@ -554,7 +556,7 @@
                     <p class="eyebrow">Billing History</p>
                     <h2>Finalized statements</h2>
                 </div>
-                <button type="button" class="button button-ghost" disabled aria-label="Download billing statements">
+                <button type="button" class="button button-ghost" data-download-latest-statement disabled aria-label="Download latest billing statement">
                     Download Statements
                 </button>
             </div>
@@ -568,11 +570,12 @@
                             <th>Charge</th>
                             <th>Balance</th>
                             <th>Status</th>
+                            <th>Documents</th>
                         </tr>
                     </thead>
                     <tbody data-billing-history>
                         <tr>
-                            <td colspan="5">
+                            <td colspan="6">
                                 <div class="empty-state table-empty-state">
                                     <i class="bi bi-receipt-cutoff" aria-hidden="true"></i>
                                     <strong>No finalized bills yet</strong>
@@ -631,6 +634,54 @@
                 </div>
             </div>
         </article>
+    </section>
+
+    <section class="dashboard-view" data-household-view="goals">
+        <header class="feature-page-header">
+            <div><p class="eyebrow">Goals &amp; Forecast</p><h1>Plan your monthly water usage</h1><p>Set a household target and compare actual usage with the projected end-of-month total.</p></div>
+            <span class="status-chip status-chip-muted" data-goal-status>Loading forecast</span>
+        </header>
+        <div class="resident-feature-grid">
+            <article class="panel resident-feature-card">
+                <div class="panel-head"><div><p class="eyebrow">Monthly target</p><h2>Water budget</h2></div><i class="bi bi-bullseye" aria-hidden="true"></i></div>
+                <form class="stack-form" data-consumption-goal-form>
+                    <label>Month<input type="month" name="month" required></label>
+                    <label>Target consumption in liters<input type="number" name="target_liters" min="1" step="1" placeholder="10000" required></label>
+                    <div class="form-feedback" data-goal-feedback role="status" aria-live="polite" hidden></div>
+                    <button class="button button-primary" type="submit">Save monthly goal</button>
+                </form>
+            </article>
+            <article class="panel resident-feature-card">
+                <div class="panel-head"><div><p class="eyebrow">Forecast</p><h2>Current month outlook</h2></div><i class="bi bi-graph-up-arrow" aria-hidden="true"></i></div>
+                <div class="goal-progress" data-goal-progress>
+                    <div class="dashboard-empty-state is-loading"><strong>Calculating forecast...</strong><span>Using actual readings received this month.</span></div>
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <section class="dashboard-view" data-household-view="requests">
+        <header class="feature-page-header">
+            <div><p class="eyebrow">Household support</p><h1>Service-request center</h1><p>Submit and follow billing, account, water-service, or inspection concerns with a municipal reference number.</p></div>
+            <span class="status-chip status-chip-muted" data-request-summary>Loading requests</span>
+        </header>
+        <div class="resident-feature-grid service-request-grid">
+            <article class="panel resident-feature-card">
+                <div class="panel-head"><div><p class="eyebrow">New request</p><h2>How can we help?</h2></div><i class="bi bi-send" aria-hidden="true"></i></div>
+                <form class="stack-form" data-service-request-form>
+                    <label>Category<select name="category" required><option value="billing_question">Billing question</option><option value="billing_dispute">Billing dispute</option><option value="suspected_leak">Suspected leak</option><option value="account_update">Account update</option><option value="service_interruption">Service interruption</option><option value="meter_inspection">Meter inspection request</option><option value="general_inquiry">General inquiry</option></select></label>
+                    <label>Subject<input type="text" name="subject" maxlength="150" required></label>
+                    <label>Details<textarea name="description" maxlength="5000" rows="5" required></textarea></label>
+                    <label>Related statement<select name="billing_statement_id" data-request-statement><option value="">Not related to a statement</option></select></label>
+                    <div class="form-feedback" data-service-request-feedback role="status" aria-live="polite" hidden></div>
+                    <button class="button button-primary" type="submit">Submit request</button>
+                </form>
+            </article>
+            <article class="panel resident-feature-card service-request-list-card">
+                <div class="panel-head"><div><p class="eyebrow">Request history</p><h2>Status and responses</h2></div><button class="link-button" type="button" data-refresh-service-requests>Refresh</button></div>
+                <div class="service-request-list" data-service-request-list aria-live="polite"><div class="dashboard-empty-state is-loading"><strong>Loading requests...</strong></div></div>
+            </article>
+        </div>
     </section>
 
     <section class="dashboard-view" data-household-view="settings">
@@ -693,6 +744,26 @@
                         <div class="form-feedback" data-password-feedback hidden role="status" aria-live="polite"></div>
                         <button class="button button-secondary" type="submit" data-password-submit>Update password</button>
                     </div>
+                </form>
+            </article>
+
+            <article class="panel account-settings-card notification-preferences-card">
+                <div class="account-settings-card-head">
+                    <span class="account-settings-card-icon" aria-hidden="true"><i class="bi bi-bell-slash"></i></span>
+                    <div><p class="eyebrow">Preferences</p><h2>Notifications, language, and data use</h2><p>Choose in-app notices and a lower-data dashboard. Critical account-security notices remain enabled.</p></div>
+                </div>
+                <form class="stack-form compact-settings-form" data-notification-preferences-form>
+                    <label class="admin-checkbox-field"><span>Municipal announcements</span><span><input type="checkbox" name="announcements"> In-app</span></label>
+                    <label class="admin-checkbox-field"><span>Billing updates</span><span><input type="checkbox" name="billing_updates"> In-app</span></label>
+                    <label class="admin-checkbox-field"><span>Consumption alerts</span><span><input type="checkbox" name="consumption_alerts"> In-app</span></label>
+                    <label class="admin-checkbox-field"><span>Leak alerts</span><span><input type="checkbox" name="leak_alerts"> In-app</span></label>
+                    <label class="admin-checkbox-field"><span>Service-request updates</span><span><input type="checkbox" name="service_request_updates"> In-app</span></label>
+                    <div class="form-grid-two"><label>Quiet hours start<input type="time" name="quiet_hours_start"></label><label>Quiet hours end<input type="time" name="quiet_hours_end"></label></div>
+                    <label>Language<select name="preferred_locale"><option value="en">English</option><option value="fil">Filipino</option></select></label>
+                    <label class="admin-checkbox-field"><span>Low-bandwidth mode</span><span><input type="checkbox" name="low_bandwidth_mode"> Reduce polling and motion</span></label>
+                    <button class="button button-ghost" type="button" data-install-app hidden>Install Smart Water on this device</button>
+                    <div class="form-feedback" data-preferences-feedback role="status" aria-live="polite" hidden></div>
+                    <button class="button button-primary" type="submit">Save preferences</button>
                 </form>
             </article>
         </div>

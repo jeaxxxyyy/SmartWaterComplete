@@ -4,12 +4,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class BillingStatement extends Model
 {
     protected $fillable = [
         'user_id',
+        'statement_number',
         'billing_month',
+        'due_date',
         'opening_balance',
         'total_liters',
         'total_cubic_meter',
@@ -27,6 +30,7 @@ class BillingStatement extends Model
 
     protected $casts = [
         'billing_month' => 'date',
+        'due_date' => 'date',
         'opening_balance' => 'decimal:2',
         'total_liters' => 'decimal:2',
         'total_cubic_meter' => 'decimal:4',
@@ -43,5 +47,10 @@ class BillingStatement extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(BillingPayment::class);
     }
 }

@@ -1,13 +1,17 @@
 <?php
 
 use App\Http\Controllers\Api\AccountController;
-use App\Http\Controllers\Api\AnalyticsController;
+use App\Http\Controllers\Api\AdminActionCenterController;
 use App\Http\Controllers\Api\AdminReportController;
+use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BillingController;
+use App\Http\Controllers\Api\BillingDocumentController;
 use App\Http\Controllers\Api\BillingManagementController;
+use App\Http\Controllers\Api\BillingPaymentController;
 use App\Http\Controllers\Api\BillingStatementController;
+use App\Http\Controllers\Api\ConsumptionGoalController;
 use App\Http\Controllers\Api\ConsumptionMonitoringController;
 use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\ExportController;
@@ -15,7 +19,9 @@ use App\Http\Controllers\Api\HouseholdBillingController;
 use App\Http\Controllers\Api\HouseholdConsumptionController;
 use App\Http\Controllers\Api\LeakAlertController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\NotificationPreferenceController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\ServiceRequestController;
 use App\Http\Controllers\Api\SystemHealthController;
 use App\Http\Controllers\Api\UserManagementController;
 use App\Http\Controllers\Api\WaterController;
@@ -64,6 +70,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/notifications/received/{notification}', [NotificationController::class, 'destroyReceived']);
     Route::get('/billing-statements', [BillingStatementController::class, 'index']);
     Route::get('/billing-statements/{billingStatement}', [BillingStatementController::class, 'show']);
+    Route::get('/billing-statements/{billingStatement}/document', [BillingDocumentController::class, 'statement']);
+    Route::get('/billing-payments/{billingPayment}/receipt', [BillingDocumentController::class, 'receipt']);
+    Route::get('/service-requests', [ServiceRequestController::class, 'index']);
+    Route::post('/service-requests', [ServiceRequestController::class, 'store']);
+    Route::get('/service-requests/{serviceRequest}', [ServiceRequestController::class, 'show']);
+    Route::patch('/service-requests/{serviceRequest}', [ServiceRequestController::class, 'update']);
+    Route::post('/service-requests/{serviceRequest}/messages', [ServiceRequestController::class, 'reply']);
+    Route::get('/notification-preferences', [NotificationPreferenceController::class, 'show']);
+    Route::put('/notification-preferences', [NotificationPreferenceController::class, 'update']);
+    Route::get('/consumption-goal', [ConsumptionGoalController::class, 'show']);
+    Route::put('/consumption-goal', [ConsumptionGoalController::class, 'update']);
 });
 
 Route::middleware(['auth:sanctum', 'throttle:120,1'])->post('/water-data', [WaterController::class, 'store']);
@@ -78,6 +95,8 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::post('/billing-settings/leak-settings', [BillingController::class, 'storeLeakSettings']);
     Route::post('/billing-statements/generate', [BillingStatementController::class, 'generate']);
     Route::patch('/billing-statements/{billingStatement}/paid', [BillingStatementController::class, 'markAsPaid']);
+    Route::post('/billing-statements/{billingStatement}/payments', [BillingPaymentController::class, 'store']);
+    Route::get('/admin/action-center', AdminActionCenterController::class);
     Route::get('/billing-management', [BillingManagementController::class, 'index']);
     Route::get('/billing-management/{billingStatement}', [BillingManagementController::class, 'show']);
     Route::get('/users', [UserManagementController::class, 'index']);

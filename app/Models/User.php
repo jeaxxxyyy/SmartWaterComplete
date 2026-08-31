@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -22,6 +23,8 @@ use Laravel\Sanctum\HasApiTokens;
     'account_number',
     'address',
     'phone',
+    'preferred_locale',
+    'low_bandwidth_mode',
     'is_active',
     'created_by_admin',
     'created_by',
@@ -80,6 +83,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'is_active' => 'boolean',
             'created_by_admin' => 'boolean',
             'approved_at' => 'datetime',
+            'low_bandwidth_mode' => 'boolean',
         ];
     }
 
@@ -161,5 +165,25 @@ class User extends Authenticatable implements MustVerifyEmail
     public function auditLogs(): HasMany
     {
         return $this->hasMany(AuditLog::class);
+    }
+
+    public function billingPayments(): HasMany
+    {
+        return $this->hasMany(BillingPayment::class, 'recorded_by');
+    }
+
+    public function serviceRequests(): HasMany
+    {
+        return $this->hasMany(ServiceRequest::class);
+    }
+
+    public function notificationPreference(): HasOne
+    {
+        return $this->hasOne(NotificationPreference::class);
+    }
+
+    public function consumptionGoals(): HasMany
+    {
+        return $this->hasMany(ConsumptionGoal::class);
     }
 }

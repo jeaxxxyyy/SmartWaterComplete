@@ -54,6 +54,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | First-party Web Token Expiration
+    |--------------------------------------------------------------------------
+    |
+    | Browser logins use this shorter lifetime while commissioned device tokens
+    | retain their independently configured expiry date.
+    |
+    */
+
+    'web_token_expiration' => (int) env('SANCTUM_WEB_TOKEN_MINUTES', 480),
+
+    /*
+    |--------------------------------------------------------------------------
     | Token Prefix
     |--------------------------------------------------------------------------
     |

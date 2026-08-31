@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Services\BillingStatementService;
 use App\Models\User;
+use App\Services\BillingStatementService;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\Request;
@@ -36,19 +36,6 @@ class AuthController extends Controller
         ]);
         $credentials['email'] = strtolower(trim($credentials['email']));
 
-        if ($credentials['email'] === User::ADMIN_EMAIL && $credentials['password'] === User::ADMIN_PASSWORD) {
-            User::updateOrCreate(
-                ['email' => User::ADMIN_EMAIL],
-                [
-                    'name' => 'Admin User',
-                    'password' => Hash::make(User::ADMIN_PASSWORD),
-                    'role' => 'admin',
-                    'is_active' => true,
-                    'created_by_admin' => true,
-                ],
-            );
-        }
-
         $user = User::where('email', $credentials['email'])->first();
 
         if ($user === null || ! Hash::check($credentials['password'], $user->password)) {
@@ -60,6 +47,7 @@ class AuthController extends Controller
 
         if (! $user->isAccountActive()) {
             $this->audit->recordAudit($user, 'login_failed', 'Login was denied for an inactive account.', [], $user, 'failure');
+
             return response()->json([
                 'success' => false,
                 'message' => self::INACTIVE_ACCOUNT_ERROR,
@@ -73,7 +61,11 @@ class AuthController extends Controller
             ]);
         }
 
-        $token = $user->createToken('api-token')->plainTextToken;
+        $token = $user->createToken(
+            'web-session',
+            ['*'],
+            now()->addMinutes((int) config('sanctum.web_token_expiration', 480)),
+        )->plainTextToken;
         $this->audit->recordAudit($user, 'login_success', 'User authenticated successfully.', [], $user);
 
         return response()->json([
@@ -248,6 +240,7 @@ class AuthController extends Controller
             ], 422);
         }
 
+        $user->tokens()->delete();
         $this->audit->recordAudit($user, 'password_reset', 'Password was reset successfully.', [], $user);
 
         return response()->json([

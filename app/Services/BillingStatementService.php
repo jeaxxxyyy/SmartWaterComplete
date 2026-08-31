@@ -3,8 +3,8 @@
 namespace App\Services;
 
 use App\Models\AuditLog;
-use App\Models\BillingStatement;
 use App\Models\Billing;
+use App\Models\BillingStatement;
 use App\Models\User;
 use App\Models\WaterReading;
 use Carbon\Carbon;
@@ -50,11 +50,19 @@ class BillingStatementService
         $fixedMonthlyCharge = (float) ($settings?->fixed_monthly_charge ?? 0);
         $subsidyDeduction = (float) ($settings?->subsidy_deduction ?? 0);
         $currentCharge = max(($totalCubicMeter * $waterRate) + $fixedMonthlyCharge - $subsidyDeduction, 0);
-        $amountPaid = 0;
+        $existingStatement = BillingStatement::query()
+            ->where('user_id', $user->id)
+            ->whereDate('billing_month', $periodStart->toDateString())
+            ->first();
+        $amountPaid = $existingStatement
+            ? max((float) $existingStatement->amount_paid, (float) $existingStatement->payments()->sum('amount'))
+            : 0;
         $remainingBalance = max($openingBalance + $currentCharge - $amountPaid, 0);
 
-        return BillingStatement::updateOrCreate(
+        $statement = BillingStatement::updateOrCreate(
             [
+                'statement_number' => $existingStatement?->statement_number,
+                'due_date' => $periodEnd->copy()->addDays(15)->toDateString(),
                 'user_id' => $user->id,
                 'billing_month' => $periodStart->toDateString(),
             ],
@@ -74,6 +82,14 @@ class BillingStatementService
                 'paid_at' => $remainingBalance <= 0 ? now() : null,
             ],
         );
+
+        if (! $statement->statement_number) {
+            $statement->update([
+                'statement_number' => sprintf('SW-%s-%06d', $periodStart->format('Ym'), $statement->id),
+            ]);
+        }
+
+        return $statement->fresh();
     }
 
     public function recordAudit(?User $user, string $action, string $description, array $metadata = [], mixed $auditable = null, string $outcome = 'success'): AuditLog

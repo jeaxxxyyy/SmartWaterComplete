@@ -6,6 +6,7 @@ use App\Models\Billing;
 use App\Models\Device;
 use App\Models\User;
 use App\Models\WaterReading;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -89,6 +90,7 @@ class ConsumptionMonitoringTest extends TestCase
 
     public function test_admin_history_returns_daily_weekly_monthly_totals_and_active_rate(): void
     {
+        $anchor = Carbon::parse('2026-08-15 12:00:00', config('app.timezone'));
         $admin = User::factory()->admin()->create();
         $household = User::factory()->create();
         $deviceUser = User::factory()->create(['role' => 'device', 'email' => 'history-meter@example.com']);
@@ -107,17 +109,17 @@ class ConsumptionMonitoringTest extends TestCase
             'liters_used' => 1000,
             'cubic_meter' => 1,
             'estimated_bill' => 40,
-            'recorded_at' => now()->subDay(),
+            'recorded_at' => $anchor->copy()->subDay(),
         ]);
         $this->createReading($household, $device, [
             'liters_used' => 500,
             'cubic_meter' => 0.5,
             'estimated_bill' => 20,
-            'recorded_at' => now()->subHours(2),
+            'recorded_at' => $anchor->copy()->subHours(2),
         ]);
 
         Sanctum::actingAs($admin);
-        $this->getJson("/api/consumption-monitoring/{$household->id}/history?from=".now()->subDays(10)->toDateString().'&to='.now()->toDateString())
+        $this->getJson("/api/consumption-monitoring/{$household->id}/history?from=".$anchor->copy()->subDays(10)->toDateString().'&to='.$anchor->toDateString())
             ->assertOk()
             ->assertJsonPath('data.summary.total_liters', 1500)
             ->assertJsonPath('data.summary.estimated_bill', 60)

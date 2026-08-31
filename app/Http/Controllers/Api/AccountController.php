@@ -43,9 +43,16 @@ class AccountController extends Controller
         ]);
         if (! Hash::check($validated['current_password'], $request->user()->password)) {
             $this->audit->recordAudit($request->user(), 'password_change_failed', 'A password change was rejected because the current password was incorrect.', [], $request->user(), 'failure');
+
             return response()->json(['message' => 'Current password is incorrect.'], 422);
         }
         $request->user()->update(['password' => $validated['password']]);
+        $currentTokenId = $request->user()->currentAccessToken()?->getKey();
+        $otherTokens = $request->user()->tokens();
+        if ($currentTokenId !== null) {
+            $otherTokens->whereKeyNot($currentTokenId);
+        }
+        $otherTokens->delete();
         $this->audit->recordAudit($request->user(), 'password_changed', 'Account password was changed.', [], $request->user());
 
         return response()->json(['message' => 'Password changed successfully.']);

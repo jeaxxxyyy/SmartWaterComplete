@@ -22,6 +22,194 @@
     --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Resident services, forecasting, and municipal action workflows */
+.feature-page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.feature-page-header h1 {
+    margin: .15rem 0 .35rem;
+}
+
+.feature-page-header p:last-child {
+    color: var(--muted);
+    margin: 0;
+    max-width: 72ch;
+}
+
+.resident-feature-grid {
+    display: grid;
+    grid-template-columns: minmax(280px, .8fr) minmax(420px, 1.2fr);
+    gap: 1rem;
+}
+
+.resident-feature-card {
+    min-width: 0;
+    padding: 1.25rem;
+}
+
+.goal-progress-summary,
+.action-center-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .75rem;
+}
+
+.goal-progress-summary > span,
+.action-center-metrics > button {
+    background: color-mix(in srgb, var(--surface) 86%, var(--primary) 14%);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    color: var(--text);
+    display: grid;
+    gap: .25rem;
+    padding: .85rem;
+    text-align: left;
+}
+
+.goal-progress-summary small,
+.action-center-metrics small {
+    color: var(--muted);
+}
+
+.goal-progress-track {
+    background: color-mix(in srgb, var(--line) 70%, transparent);
+    border-radius: 999px;
+    height: 14px;
+    margin: 1.25rem 0;
+    overflow: hidden;
+}
+
+.goal-progress-track > span {
+    background: linear-gradient(90deg, #0ea5e9, #14b8a6);
+    border-radius: inherit;
+    display: block;
+    height: 100%;
+    transition: width .45s ease;
+}
+
+.goal-forecast-message {
+    border-radius: 14px;
+    font-weight: 650;
+    margin: 0;
+    padding: 1rem;
+}
+
+.goal-forecast-message.is-on-track { background: color-mix(in srgb, #10b981 12%, transparent); color: #047857; }
+.goal-forecast-message.is-at-risk { background: color-mix(in srgb, #f59e0b 14%, transparent); color: #b45309; }
+
+.service-request-list,
+.admin-service-request-list,
+.action-center-list,
+.service-request-thread {
+    display: grid;
+    gap: .75rem;
+}
+
+.service-request-item,
+.admin-service-request-item,
+.action-center-item {
+    align-items: center;
+    background: color-mix(in srgb, var(--surface) 94%, var(--primary) 6%);
+    border: 1px solid var(--line);
+    border-radius: 15px;
+    display: grid;
+    gap: .75rem;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    padding: 1rem;
+}
+
+.admin-service-request-item { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+.service-request-item > div,
+.service-request-item > span,
+.admin-service-request-item > span,
+.action-center-item > span { display: grid; gap: .2rem; min-width: 0; }
+.service-request-item small,
+.service-request-item span,
+.admin-service-request-item small,
+.action-center-item small { color: var(--muted); }
+
+.service-request-detail,
+.service-request-description {
+    margin-top: 1rem;
+}
+
+.service-request-detail > header {
+    align-items: flex-start;
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.service-request-message {
+    background: color-mix(in srgb, var(--surface) 90%, #0ea5e9 10%);
+    border-left: 4px solid #0ea5e9;
+    border-radius: 12px;
+    padding: .9rem 1rem;
+}
+
+.service-request-message.is-staff { border-left-color: #14b8a6; }
+.service-request-message.is-internal { background: color-mix(in srgb, #f59e0b 12%, var(--surface)); border-left-color: #f59e0b; }
+.service-request-message p { margin: .35rem 0; white-space: pre-wrap; }
+.service-request-message small { color: var(--muted); }
+
+.admin-action-center {
+    padding: 1.25rem;
+}
+
+.admin-action-center .action-center-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-bottom: 1rem;
+}
+
+.action-center-item.is-urgent,
+.action-center-item.is-high {
+    border-left: 4px solid #ef4444;
+}
+
+.billing-history-table td:last-child {
+    display: grid;
+    gap: .3rem;
+}
+
+.billing-history-table td small,
+.billing-history-table td strong {
+    display: block;
+}
+
+.low-bandwidth-mode *,
+.low-bandwidth-mode *::before,
+.low-bandwidth-mode *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .001ms !important;
+}
+
+.low-bandwidth-mode .backdrop,
+.low-bandwidth-mode .loading-skeleton-card {
+    display: none !important;
+}
+
+@media (max-width: 900px) {
+    .resident-feature-grid,
+    .goal-progress-summary,
+    .admin-action-center .action-center-metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .service-request-item,
+    .admin-service-request-item,
+    .action-center-item {
+        align-items: start;
+        grid-template-columns: 1fr;
+    }
+}
+
 :root {
     color-scheme: light;
     /* Design tokens: keep the visual language in one place. */
@@ -1250,6 +1438,30 @@ body.login-is-transitioning .login-layout {
     transition: transform 220ms ease;
 }
 
+body.logout-is-transitioning .app-shell,
+body.logout-is-transitioning > .topbar {
+    opacity: 0.82;
+    transform: scale(0.992);
+    transition: opacity 260ms ease, transform 260ms ease;
+}
+
+.logout-transition {
+    background: rgb(4 19 32 / 58%);
+}
+
+.logout-transition-card {
+    border-color: color-mix(in srgb, var(--primary) 32%, var(--line));
+}
+
+.logout-transition-mark {
+    background: linear-gradient(135deg, #38bdf8, #0f766e);
+    box-shadow: 0 8px 20px rgb(14 116 144 / 28%);
+}
+
+.logout-transition-mark i {
+    animation: logout-transition-icon 650ms ease-in-out infinite alternate;
+}
+
 @keyframes login-transition-backdrop {
     from { opacity: 0; }
     to { opacity: 1; }
@@ -1265,6 +1477,11 @@ body.login-is-transitioning .login-layout {
     to { opacity: 1; transform: scale(1) rotate(0); }
 }
 
+@keyframes logout-transition-icon {
+    from { transform: translateX(-0.08rem); }
+    to { transform: translateX(0.12rem); }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .login-transition,
     .login-transition-card,
@@ -1273,6 +1490,13 @@ body.login-is-transitioning .login-layout {
     }
 
     body.login-is-transitioning .login-layout {
+        transition: none;
+    }
+
+    body.logout-is-transitioning .app-shell,
+    body.logout-is-transitioning > .topbar,
+    .logout-transition-mark i {
+        animation: none;
         transition: none;
     }
 }
@@ -2349,6 +2573,143 @@ body[data-page="admin"] .admin-overview-list-icon {
     border-radius: 8px;
     color: var(--primary-dark);
     background: #e5f5fa;
+}
+
+body[data-page="admin"] .admin-consumption-baselines {
+    padding: 1.15rem;
+}
+
+body[data-page="admin"] .admin-consumption-baselines .panel-head {
+    align-items: flex-start;
+}
+
+body[data-page="admin"] .consumption-baseline-list {
+    display: grid;
+    gap: 0.8rem;
+    margin-top: 1rem;
+}
+
+body[data-page="admin"] .consumption-baseline-item {
+    display: grid;
+    gap: 0.85rem;
+    padding: 0.95rem;
+    border: 1px solid var(--line);
+    border-radius: 0.9rem;
+    background: color-mix(in srgb, var(--surface) 94%, var(--primary) 6%);
+}
+
+body[data-page="admin"] .consumption-baseline-item.requires-attention {
+    border-color: color-mix(in srgb, var(--danger) 42%, var(--line));
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--danger) 78%, #f97316);
+}
+
+body[data-page="admin"] .consumption-baseline-item > header {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+}
+
+body[data-page="admin"] .consumption-baseline-icon {
+    display: grid;
+    width: 2.25rem;
+    height: 2.25rem;
+    flex: 0 0 2.25rem;
+    place-items: center;
+    border-radius: 0.7rem;
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 14%, var(--surface));
+}
+
+body[data-page="admin"] .consumption-baseline-household {
+    display: grid;
+    min-width: 0;
+    flex: 1;
+}
+
+body[data-page="admin"] .consumption-baseline-household strong,
+body[data-page="admin"] .consumption-baseline-household small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body[data-page="admin"] .consumption-baseline-household small,
+body[data-page="admin"] .consumption-baseline-metrics small,
+body[data-page="admin"] .consumption-baseline-metrics em,
+body[data-page="admin"] .consumption-baseline-chip small {
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-style: normal;
+}
+
+body[data-page="admin"] .consumption-baseline-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 0.75rem;
+}
+
+body[data-page="admin"] .consumption-baseline-metrics > span {
+    display: grid;
+    gap: 0.18rem;
+    min-width: 0;
+    padding: 0.7rem 0.8rem;
+    border-right: 1px solid var(--line);
+}
+
+body[data-page="admin"] .consumption-baseline-metrics > span:last-child {
+    border-right: 0;
+}
+
+body[data-page="admin"] .consumption-baseline-metrics strong {
+    color: var(--text);
+    font-size: 1rem;
+}
+
+body[data-page="admin"] .consumption-baseline-metrics .is-increase strong {
+    color: var(--danger);
+}
+
+body[data-page="admin"] .consumption-baseline-metrics .is-decrease strong {
+    color: #0f8a70;
+}
+
+body[data-page="admin"] .consumption-baseline-history {
+    display: flex;
+    gap: 0.45rem;
+    overflow-x: auto;
+    padding-bottom: 0.15rem;
+}
+
+body[data-page="admin"] .consumption-baseline-chip {
+    display: grid;
+    min-width: 5.6rem;
+    gap: 0.12rem;
+    padding: 0.45rem 0.55rem;
+    border: 1px solid var(--line);
+    border-radius: 0.65rem;
+    background: var(--surface);
+}
+
+body[data-page="admin"] .consumption-baseline-chip.is-baseline {
+    border-color: color-mix(in srgb, var(--primary) 44%, var(--line));
+    background: color-mix(in srgb, var(--primary) 9%, var(--surface));
+}
+
+@media (max-width: 720px) {
+    body[data-page="admin"] .consumption-baseline-metrics {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body[data-page="admin"] .consumption-baseline-metrics > span {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+    }
+
+    body[data-page="admin"] .consumption-baseline-metrics > span:last-child {
+        border-bottom: 0;
+    }
 }
 
 body[data-page="admin"] .hero-metrics { gap: 0.65rem; }
@@ -6279,6 +6640,33 @@ html.dark body[data-page="household"] .dashboard-empty-state .loading-skeleton-c
 
 html.dark body[data-page="household"] .dashboard-empty-state .loading-skeleton-line {
     background: linear-gradient(90deg, #263f59 0%, #3a5873 50%, #263f59 100%);
+    background-size: 200% 100%;
+}
+
+html.dark body[data-page="admin"] .dashboard-empty-state {
+    border-color: color-mix(in srgb, var(--primary) 30%, var(--line-strong));
+    color: var(--admin-muted);
+    background:
+        radial-gradient(circle at 50% 0%, rgb(73 183 173 / 9%), transparent 65%),
+        linear-gradient(145deg, #19485b 0%, #143547 100%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%), 0 10px 24px rgb(2 12 27 / 12%);
+}
+
+html.dark body[data-page="admin"] .dashboard-empty-state strong {
+    color: var(--admin-ink);
+}
+
+html.dark body[data-page="admin"] .dashboard-empty-state span {
+    color: var(--admin-muted);
+}
+
+html.dark body[data-page="admin"] .dashboard-empty-state .loading-skeleton-card {
+    border-color: var(--admin-line);
+    background: #16384a;
+}
+
+html.dark body[data-page="admin"] .dashboard-empty-state .loading-skeleton-line {
+    background: linear-gradient(90deg, #215367 0%, #327086 50%, #215367 100%);
     background-size: 200% 100%;
 }
 

@@ -238,6 +238,25 @@ class LoginAccessRestrictionTest extends TestCase
         ])->assertOk();
     }
 
+    public function test_default_demo_credentials_cannot_reset_an_existing_admin_password(): void
+    {
+        $admin = User::factory()->admin()->create([
+            'password' => Hash::make('changed-admin-password'),
+        ]);
+
+        $this->postJson('/api/login', [
+            'email' => User::ADMIN_EMAIL,
+            'password' => User::ADMIN_PASSWORD,
+        ])->assertUnprocessable();
+
+        $this->assertTrue(Hash::check('changed-admin-password', $admin->fresh()->password));
+
+        $this->postJson('/api/login', [
+            'email' => User::ADMIN_EMAIL,
+            'password' => 'changed-admin-password',
+        ])->assertOk();
+    }
+
     public function test_an_active_administrator_role_can_use_administrator_endpoints_without_household_fields(): void
     {
         $administrator = User::factory()->create([

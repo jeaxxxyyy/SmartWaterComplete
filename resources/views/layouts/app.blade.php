@@ -4,6 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="theme-color" content="#075985">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/smart-water-icon.svg" type="image/svg+xml">
     <title>@yield('title', config('app.name', 'Smart Water Monitoring'))</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     @include('components.theme-init')
@@ -12,12 +15,21 @@
         @vite(['resources/css/app.css', 'resources/js/app.js', 'resources/js/boot.js'])
     @endif
 </head>
-<body class="page antialiased bg-app-bg text-app-text dark:bg-app-bg dark:text-app-text" data-page="@yield('page', 'default')">
+<body class="page antialiased bg-app-bg text-app-text dark:bg-app-bg dark:text-app-text" data-page="@yield('page', 'default')" data-app-version="2.1">
     <a class="skip-link" href="#main-content">Skip to main content</a>
     <div class="toast-stack" data-toast-stack aria-live="polite" aria-atomic="true"></div>
     <div class="backdrop backdrop-a"></div>
     <div class="backdrop backdrop-b"></div>
     <div class="backdrop backdrop-c"></div>
+    <div class="login-transition logout-transition" data-logout-transition role="status" aria-live="polite" hidden>
+        <div class="login-transition-card logout-transition-card">
+            <span class="login-transition-mark logout-transition-mark" aria-hidden="true"><i class="bi bi-box-arrow-right"></i></span>
+            <span class="login-transition-copy">
+                <strong>Signing you out</strong>
+                <small>Securing your session&hellip;</small>
+            </span>
+        </div>
+    </div>
 
     <header class="topbar">
         <div class="container site-header-container">

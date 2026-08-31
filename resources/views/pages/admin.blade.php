@@ -56,6 +56,7 @@
         <button type="button" data-admin-nav="device-management" title="Device Management"><i class="bi bi-cpu"></i><span>Device Management</span></button>
         <button type="button" data-admin-nav="water-rates" title="Water Rate Management"><i class="bi bi-droplet"></i><span>Water Rate Management</span></button>
         <button type="button" data-admin-nav="billing-management" title="Billing"><i class="bi bi-receipt"></i><span>Billing</span></button>
+        <button type="button" data-admin-nav="service-requests" title="Service Requests"><i class="bi bi-inbox"></i><span>Service Requests</span></button>
         <span class="sidebar-section-title">Monitoring</span>
         <button type="button" data-admin-nav="consumption-monitoring" title="Consumption Monitoring"><i class="bi bi-activity"></i><span>Consumption Monitoring</span></button>
         <button type="button" data-admin-nav="leak-monitoring" title="Leak Monitoring"><i class="bi bi-exclamation-triangle"></i><span>Leak Monitoring</span></button>
@@ -72,6 +73,7 @@
     <button type="button" data-admin-nav="device-management">Device Management</button>
     <button type="button" data-admin-nav="water-rates">Water Rate Management</button>
     <button type="button" data-admin-nav="billing-management">Billing Management</button>
+    <button type="button" data-admin-nav="service-requests">Service Requests</button>
     <button type="button" data-admin-nav="consumption-monitoring">Consumption Monitoring</button>
     <button type="button" data-admin-nav="leak-monitoring">Leak Monitoring</button>
     <button type="button" data-admin-nav="reports">Reports</button>
@@ -283,6 +285,36 @@
             <div class="usage-chart single-series" data-admin-monthly-chart>
                 <div class="empty-state">No usage data yet.</div>
             </div>
+        </article>
+
+        <article class="panel admin-consumption-baselines" aria-labelledby="admin-consumption-baselines-title">
+            <div class="panel-head">
+                <div>
+                    <p class="eyebrow">Consumption alerts</p>
+                    <h2 id="admin-consumption-baselines-title">Usage compared with each household's first month</h2>
+                    <p class="field-hint">The first recorded month is fixed at 100%. Every later month shows usage against that permanent baseline.</p>
+                </div>
+                <span class="status-pill" data-admin-consumption-baseline-summary>Loading</span>
+            </div>
+            <div class="consumption-baseline-list" data-admin-consumption-baselines aria-live="polite">
+                <div class="dashboard-empty-state is-loading">
+                    <div class="loading-skeleton-card loading-skeleton-card-inline" aria-hidden="true">
+                        <span class="loading-skeleton-line loading-skeleton-line-lg"></span>
+                        <span class="loading-skeleton-line"></span>
+                    </div>
+                    <strong>Loading baseline comparisons...</strong>
+                    <span>Calculating consecutive monthly percentages from each household's first reading.</span>
+                </div>
+            </div>
+        </article>
+
+        <article class="panel admin-action-center" aria-labelledby="admin-action-center-title">
+            <div class="panel-head">
+                <div><p class="eyebrow">Action center</p><h2 id="admin-action-center-title">Municipal work requiring attention</h2><p class="field-hint">Service requests, overdue statements, leak follow-ups, and failed notices in one prioritized queue.</p></div>
+                <span class="status-pill" data-action-center-summary>Loading</span>
+            </div>
+            <div class="action-center-metrics" data-action-center-metrics></div>
+            <div class="action-center-list" data-action-center-list aria-live="polite"><div class="dashboard-empty-state is-loading"><strong>Loading action center...</strong></div></div>
         </article>
 
         <section class="admin-overview-lower-grid">
@@ -591,11 +623,11 @@
 
             <article class="panel admin-card water-rate-section-card">
                 <div class="panel-head"><div><p class="eyebrow">Consumption Alerts</p><h2>Consumption alert configuration</h2></div><i class="bi bi-graph-up-arrow admin-section-icon" aria-hidden="true"></i></div>
-                <p class="field-hint">Compare actual current month-to-date usage with the same period of the previous month. Only changes that reach the configured percentage are relevant and generate an alert.</p>
+                <p class="field-hint">The first recorded month is each household's permanent 100% baseline. Later months are compared with that baseline, and only changes that reach the configured percentage generate a notification.</p>
                 <div class="form-feedback" data-consumption-alert-status role="status" aria-live="polite" hidden></div>
                 <form class="stack-form" data-consumption-alert-form novalidate>
-                    <label>Relevant change percentage <span class="required-mark" aria-hidden="true">*</span><input type="number" step="0.01" min="0.01" max="10000" name="percentage_threshold" value="100" placeholder="100" required><small class="field-hint">Example: 100% increase means the current usage is twice the previous period's usage.</small></label>
-                    <div class="admin-settings-note"><strong>Comparison basis</strong><span>Current month-to-date versus the equivalent days of the previous month. Both increases and decreases are evaluated from actual readings.</span></div>
+                    <label>Relevant change percentage <span class="required-mark" aria-hidden="true">*</span><input type="number" step="0.01" min="0.01" max="10000" name="percentage_threshold" value="100" placeholder="100" required><small class="field-hint">Example: a 100% increase means usage reached 200% of the first-month baseline.</small></label>
+                    <div class="admin-settings-note"><strong>Comparison basis</strong><span>First recorded month = 100%. Every consecutive month is measured against that same baseline; increases and decreases use actual readings.</span></div>
                     <label class="admin-checkbox-field"><span>Alert status</span><span><input type="checkbox" name="consumption_alert_enabled" value="1" checked> Enable consumption alerts</span></label>
                     <label>Notification behavior<select name="notification_behavior" required><option value="household">Notify household</option><option value="household_admin">Notify household and administrators</option><option value="disabled">Do not send notifications</option></select></label>
                     <button class="button button-primary" type="submit">Save consumption alerts</button>
@@ -667,6 +699,40 @@
         <dialog class="admin-user-dialog billing-detail-dialog" data-billing-detail-dialog aria-labelledby="billing-detail-title">
             <div class="panel-head"><div><p class="eyebrow">Billing calculation</p><h2 id="billing-detail-title" data-billing-detail-title>Billing details</h2></div><button class="link-button" type="button" data-billing-detail-close>Close</button></div>
             <div data-billing-detail-content><div class="empty-state">Select a billing record to view its calculation.</div></div>
+        </dialog>
+        <dialog class="admin-user-dialog billing-detail-dialog" data-payment-dialog aria-labelledby="payment-dialog-title">
+            <div class="panel-head"><div><p class="eyebrow">Offline payment</p><h2 id="payment-dialog-title">Record payment and issue receipt</h2></div><button class="link-button" type="button" data-payment-dialog-close>Close</button></div>
+            <p class="field-hint" data-payment-dialog-summary>Select a finalized statement.</p>
+            <form class="stack-form" data-payment-form>
+                <input type="hidden" name="billing_statement_id">
+                <label>Amount received<input type="number" name="amount" min="0.01" step="0.01" required></label>
+                <label>Payment method<select name="payment_method" required><option value="cash">Cash</option><option value="bank_deposit">Bank deposit</option><option value="check">Check</option><option value="other">Other offline method</option></select></label>
+                <label>Reference number<input type="text" name="reference_number" maxlength="100"></label>
+                <label>Date received<input type="datetime-local" name="received_at"></label>
+                <label>Notes<textarea name="notes" maxlength="1000"></textarea></label>
+                <div class="form-feedback" data-payment-feedback role="status" aria-live="polite" hidden></div>
+                <button class="button button-primary" type="submit">Record payment</button>
+            </form>
+        </dialog>
+    </section>
+
+    <section class="dashboard-view" data-admin-view="service-requests">
+        <header class="feature-page-header">
+            <div><p class="eyebrow">Resident services</p><h1>Household service requests</h1><p>Prioritize, assign, respond to, and resolve formal household requests.</p></div>
+            <span class="status-chip status-chip-muted" data-admin-request-summary>Loading requests</span>
+        </header>
+        <article class="panel">
+            <form class="filters admin-filter-bar" data-admin-service-request-filters>
+                <input type="search" name="search" placeholder="Reference, subject, household, or account">
+                <select name="status"><option value="">Any status</option><option value="open">Open</option><option value="acknowledged">Acknowledged</option><option value="in_progress">In progress</option><option value="waiting_for_household">Waiting for household</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select>
+                <select name="category"><option value="">Any category</option><option value="billing_question">Billing question</option><option value="billing_dispute">Billing dispute</option><option value="suspected_leak">Suspected leak</option><option value="account_update">Account update</option><option value="service_interruption">Service interruption</option><option value="meter_inspection">Meter inspection</option><option value="general_inquiry">General inquiry</option></select>
+                <button class="button button-secondary" type="submit">Apply filters</button>
+            </form>
+            <div class="admin-service-request-list" data-admin-service-request-list aria-live="polite"><div class="dashboard-empty-state is-loading"><strong>Loading household requests...</strong></div></div>
+        </article>
+        <dialog class="admin-user-dialog service-request-dialog" data-admin-service-request-dialog aria-labelledby="admin-service-request-title">
+            <div class="panel-head"><div><p class="eyebrow">Request workflow</p><h2 id="admin-service-request-title" data-admin-service-request-title>Service request</h2></div><button class="link-button" type="button" data-admin-service-request-close>Close</button></div>
+            <div data-admin-service-request-detail></div>
         </dialog>
     </section>
 

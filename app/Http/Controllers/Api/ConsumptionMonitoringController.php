@@ -11,7 +11,6 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ConsumptionMonitoringController extends Controller
@@ -33,16 +32,20 @@ class ConsumptionMonitoringController extends Controller
         $query = $this->householdQuery($validated, $from, $to);
         $matchingHouseholdIds = (clone $query)->pluck('users.id');
         $matchingReadings = WaterReading::query()->whereIn('user_id', $matchingHouseholdIds)->whereBetween('recorded_at', [$from, $to]);
-        $totalReadings = (clone $matchingReadings)->count();
+        $readingTotals = (clone $matchingReadings)
+            ->selectRaw('COUNT(*) as reading_count')
+            ->selectRaw('COALESCE(SUM(liters_used), 0) as total_liters')
+            ->selectRaw('COALESCE(SUM(cubic_meter), 0) as total_cubic_meter')
+            ->selectRaw('COALESCE(SUM(estimated_bill), 0) as estimated_bill')
+            ->selectRaw('COUNT(DISTINCT CASE WHEN is_possible_leak = 1 OR is_threshold_exceeded = 1 THEN user_id END) as abnormal_count')
+            ->first();
         $meta = [
             'household_count' => $matchingHouseholdIds->count(),
-            'reading_count' => $totalReadings,
-            'total_liters' => $totalReadings ? (float) (clone $matchingReadings)->sum('liters_used') : 0,
-            'total_cubic_meter' => $totalReadings ? (float) (clone $matchingReadings)->sum('cubic_meter') : 0,
-            'estimated_bill' => $totalReadings ? (float) (clone $matchingReadings)->sum('estimated_bill') : 0,
-            'abnormal_count' => (clone $matchingReadings)->where(function ($builder): void {
-                $builder->where('is_possible_leak', true)->orWhere('is_threshold_exceeded', true);
-            })->distinct('user_id')->count('user_id'),
+            'reading_count' => (int) ($readingTotals?->reading_count ?? 0),
+            'total_liters' => (float) ($readingTotals?->total_liters ?? 0),
+            'total_cubic_meter' => (float) ($readingTotals?->total_cubic_meter ?? 0),
+            'estimated_bill' => (float) ($readingTotals?->estimated_bill ?? 0),
+            'abnormal_count' => (int) ($readingTotals?->abnormal_count ?? 0),
             'period' => $this->period($from, $to),
         ];
 
@@ -51,7 +54,24 @@ class ConsumptionMonitoringController extends Controller
             ->orderBy('users.name')
             ->paginate($validated['per_page'] ?? 10);
 
-        $paginator->getCollection()->transform(fn (User $user): array => $this->householdItem($user, $from, $to));
+        $pageUserIds = $paginator->getCollection()->pluck('id');
+        $householdTotals = WaterReading::query()
+            ->whereIn('user_id', $pageUserIds)
+            ->whereBetween('recorded_at', [$from, $to])
+            ->select('user_id')
+            ->selectRaw('COUNT(*) as reading_count')
+            ->selectRaw('COALESCE(SUM(liters_used), 0) as total_liters')
+            ->selectRaw('COALESCE(SUM(cubic_meter), 0) as total_cubic_meter')
+            ->selectRaw('COALESCE(SUM(estimated_bill), 0) as estimated_bill')
+            ->selectRaw('COALESCE(SUM(CASE WHEN is_possible_leak = 1 THEN 1 ELSE 0 END), 0) as possible_leak_count')
+            ->selectRaw('COALESCE(SUM(CASE WHEN is_threshold_exceeded = 1 THEN 1 ELSE 0 END), 0) as threshold_exceeded_count')
+            ->groupBy('user_id')
+            ->get()
+            ->keyBy('user_id');
+
+        $paginator->getCollection()->transform(
+            fn (User $user): array => $this->householdItem($user, $from, $to, $householdTotals->get($user->id)),
+        );
 
         return response()->json([
             'data' => $paginator,
@@ -158,21 +178,49 @@ class ConsumptionMonitoringController extends Controller
         return $query;
     }
 
-    private function householdItem(User $user, Carbon $from, Carbon $to): array
+    private function householdItem(User $user, Carbon $from, Carbon $to, mixed $totals): array
     {
-        $readings = $user->waterReadings()->with('device:id,name,asset_number,serial_number')->whereBetween('recorded_at', [$from, $to])->latest('recorded_at')->latest('id')->get();
         $device = $user->devices->first();
         $billing = $this->activeBilling($user->id);
+        $latestQuery = $user->waterReadings()->with('device:id,name,asset_number,serial_number');
+        if ((int) ($totals?->reading_count ?? 0) > 0) {
+            $latestQuery->whereBetween('recorded_at', [$from, $to]);
+        }
+        $latest = $latestQuery->latest('recorded_at')->latest('id')->first();
 
         return [
             'household' => $this->householdIdentity($user),
             'device' => $device ? $this->deviceItem($device) : null,
-            'summary' => [...$this->readingSummary($readings, $billing), 'period' => $this->period($from, $to)],
+            'summary' => [...$this->aggregateReadingSummary($totals, $billing), 'period' => $this->period($from, $to)],
             'active_billing' => $billing ? [
                 'water_rate' => (float) $billing->water_rate,
                 'subsidy_deduction' => (float) $billing->subsidy_deduction,
             ] : null,
-            'latest_reading' => $this->readingItem($readings->first() ?? $user->waterReadings()->with('device:id,name,asset_number,serial_number')->latest('recorded_at')->latest('id')->first()),
+            'latest_reading' => $this->readingItem($latest),
+        ];
+    }
+
+    private function aggregateReadingSummary(mixed $totals, ?Billing $billing = null): array
+    {
+        $readingCount = (int) ($totals?->reading_count ?? 0);
+        $possibleLeaks = (int) ($totals?->possible_leak_count ?? 0);
+        $thresholds = (int) ($totals?->threshold_exceeded_count ?? 0);
+        $totalCubicMeter = (float) ($totals?->total_cubic_meter ?? 0);
+        $estimatedBill = (float) ($totals?->estimated_bill ?? 0);
+
+        if ($readingCount > 0 && $billing) {
+            $estimatedBill = max(($totalCubicMeter * (float) $billing->water_rate) - (float) $billing->subsidy_deduction, 0);
+        }
+
+        return [
+            'has_data' => $readingCount > 0,
+            'reading_count' => $readingCount,
+            'total_liters' => (float) ($totals?->total_liters ?? 0),
+            'total_cubic_meter' => $totalCubicMeter,
+            'estimated_bill' => $estimatedBill,
+            'threshold_exceeded_count' => $thresholds,
+            'possible_leak_count' => $possibleLeaks,
+            'condition' => $readingCount === 0 ? 'no_data' : ($possibleLeaks > 0 ? 'leak' : ($thresholds > 0 ? 'high' : 'normal')),
         ];
     }
 

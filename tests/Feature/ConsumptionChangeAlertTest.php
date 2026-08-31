@@ -24,12 +24,13 @@ class ConsumptionChangeAlertTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_one_relevant_increase_alert_is_sent_for_the_month(): void
+    public function test_one_relevant_increase_alert_uses_the_first_month_as_its_permanent_baseline(): void
     {
         Carbon::setTestNow('2026-08-15 12:00:00');
         [$household, $deviceIdentity] = $this->householdAndDevice();
         $this->settings(100);
-        $this->previousReading($household, 100, '2026-07-15 12:00:00');
+        $this->previousReading($household, 100, '2026-06-15 12:00:00');
+        $this->previousReading($household, 800, '2026-07-15 12:00:00');
         Sanctum::actingAs($deviceIdentity, ['device-upload']);
 
         $this->postJson('/api/water-data', $this->payload('increase-1', 200))
@@ -38,9 +39,12 @@ class ConsumptionChangeAlertTest extends TestCase
         $notice = Notification::query()->where('type', 'consumption_change')->firstOrFail();
         $this->assertSame('increase', $notice->metadata['change_direction']);
         $this->assertSame(100.0, (float) $notice->metadata['percentage_change']);
+        $this->assertSame(200.0, (float) $notice->metadata['usage_percentage']);
         $this->assertSame(200.0, (float) $notice->metadata['current_liters']);
-        $this->assertSame(100.0, (float) $notice->metadata['previous_liters']);
+        $this->assertSame(100.0, (float) $notice->metadata['baseline_liters']);
+        $this->assertSame('2026-06', $notice->metadata['baseline_month']);
         $this->assertStringContainsString('notify the local waterworks', $notice->message);
+        $this->assertStringContainsString('first recorded month baseline', $notice->message);
 
         $this->postJson('/api/water-data', $this->payload('increase-2', 10))->assertCreated();
         $this->assertDatabaseCount('notifications', 1);
@@ -72,6 +76,27 @@ class ConsumptionChangeAlertTest extends TestCase
         $this->postJson('/api/water-data', $this->payload('no-baseline-1', 500))->assertCreated();
 
         $this->assertDatabaseMissing('notifications', ['type' => 'consumption_change']);
+    }
+
+    public function test_admin_analytics_reports_each_month_as_a_percentage_of_the_first_month(): void
+    {
+        Carbon::setTestNow('2026-08-15 12:00:00');
+        $admin = User::factory()->admin()->create();
+        $household = User::factory()->create(['name' => 'Baseline Household']);
+        $this->previousReading($household, 100, '2026-06-15 12:00:00');
+        $this->previousReading($household, 150, '2026-07-15 12:00:00');
+        $this->previousReading($household, 50, '2026-08-15 12:00:00');
+        Sanctum::actingAs($admin);
+
+        $this->getJson('/api/analytics/admin?range=last_12_months')
+            ->assertOk()
+            ->assertJsonPath('data.alerts.consumption_baselines.0.household.name', 'Baseline Household')
+            ->assertJsonPath('data.alerts.consumption_baselines.0.baseline.month', '2026-06')
+            ->assertJsonPath('data.alerts.consumption_baselines.0.baseline.usage_percentage', 100)
+            ->assertJsonPath('data.alerts.consumption_baselines.0.months.1.usage_percentage', 150)
+            ->assertJsonPath('data.alerts.consumption_baselines.0.latest.month', '2026-08')
+            ->assertJsonPath('data.alerts.consumption_baselines.0.latest.usage_percentage', 50)
+            ->assertJsonPath('data.alerts.consumption_baselines.0.latest.change_percent', -50);
     }
 
     /** @return array{User, User} */

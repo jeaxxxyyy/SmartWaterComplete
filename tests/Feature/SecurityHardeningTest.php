@@ -62,4 +62,49 @@ class SecurityHardeningTest extends TestCase
         $this->assertStringContainsString('refreshLiveDashboard();', $script);
         $this->assertStringContainsString('const FULL_DASHBOARD_REFRESH_MS = 60000;', $script);
     }
+
+    public function test_dashboard_cache_is_user_scoped_and_logout_has_a_transition(): void
+    {
+        $script = file_get_contents(resource_path('js/app.js'));
+
+        $this->assertStringContainsString('sessionStorage.setItem(key', $script);
+        $this->assertStringContainsString('`${dashboardCachePrefix}:${user.id}:${url}`', $script);
+        $this->assertStringContainsString("url.startsWith('/api/live-')", $script);
+        $this->assertStringContainsString('warmDashboardCache(response.data.user)', $script);
+        $this->assertStringContainsString("document.body.classList.add('logout-is-transitioning')", $script);
+
+        $this->get('/admin')
+            ->assertOk()
+            ->assertSee('data-logout-transition', false);
+    }
+
+    public function test_browser_and_api_responses_include_baseline_security_headers(): void
+    {
+        foreach (['/login', '/api/ping'] as $path) {
+            $this->get($path)
+                ->assertOk()
+                ->assertHeader('X-Content-Type-Options', 'nosniff')
+                ->assertHeader('X-Frame-Options', 'DENY')
+                ->assertHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+                ->assertHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+                ->assertHeader('Cross-Origin-Opener-Policy', 'same-origin');
+        }
+    }
+
+    public function test_web_login_tokens_expire(): void
+    {
+        $user = User::factory()->create([
+            'password' => Hash::make('household-password'),
+            'created_by' => User::factory()->admin()->create()->id,
+            'approved_at' => now(),
+        ]);
+
+        $response = $this->postJson('/api/login', [
+            'email' => $user->email,
+            'password' => 'household-password',
+        ])->assertOk();
+
+        $tokenId = (int) explode('|', $response->json('data.token'), 2)[0];
+        $this->assertNotNull($user->tokens()->findOrFail($tokenId)->expires_at);
+    }
 }

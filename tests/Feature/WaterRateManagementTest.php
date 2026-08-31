@@ -20,7 +20,8 @@ class WaterRateManagementTest extends TestCase
             ->assertOk()
             ->assertSee('name="percentage_threshold"', false)
             ->assertDontSee('name="threshold_unit"', false)
-            ->assertSee('Current month-to-date versus the equivalent days of the previous month.');
+            ->assertSee('data-admin-consumption-baselines', false)
+            ->assertSee('First recorded month = 100%. Every consecutive month is measured against that same baseline');
     }
 
     public function test_admin_can_save_each_configuration_section_without_losing_the_other_sections(): void

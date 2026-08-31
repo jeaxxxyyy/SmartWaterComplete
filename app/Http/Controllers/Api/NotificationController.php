@@ -7,13 +7,13 @@ use App\Models\Notification;
 use App\Models\User;
 use App\Services\BillingStatementService;
 use Carbon\Carbon;
-use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class NotificationController extends Controller
 {
@@ -34,6 +34,9 @@ class NotificationController extends Controller
             $query->delivered()
                 ->where('user_id', $request->user()?->id)
                 ->whereNull('user_deleted_at');
+            if ($this->isWithinQuietHours($request->user()?->notificationPreference)) {
+                $query->whereIn('type', ['possible_leak', 'leak_alert', 'service_interruption']);
+            }
         } elseif ($request->filled('user_id')) {
             $query->delivered()
                 ->whereNull('archived_at')
@@ -156,13 +159,28 @@ class NotificationController extends Controller
         }
         $scheduledAt = isset($validated['scheduled_at']) ? Carbon::parse($validated['scheduled_at']) : null;
         $recipients = User::query()
+            ->with('notificationPreference')
             ->where('role', 'user')
             ->where('is_active', true)
             ->where(function ($query): void {
                 $query->whereNull('account_status')->orWhere('account_status', User::ACCOUNT_STATUS_ACTIVE);
             })
             ->when($audience === 'selected_household', fn ($query) => $query->whereKey($validated['user_id']))
-            ->get();
+            ->get()
+            ->filter(function (User $user) use ($validated): bool {
+                $preference = $user->notificationPreference;
+                if (! $preference) {
+                    return true;
+                }
+
+                return match ($validated['type']) {
+                    'billing' => $preference->billing_updates,
+                    'leak_alert' => $preference->leak_alerts,
+                    'announcement', 'maintenance', 'device_system' => $preference->announcements,
+                    default => true,
+                };
+            })
+            ->values();
         $batchId = (string) Str::uuid();
         $sentAt = $scheduledAt ? null : now();
         $deliveryStatus = $scheduledAt ? 'scheduled' : 'delivered';
@@ -352,5 +370,20 @@ class NotificationController extends Controller
                 'is_read' => (bool) $item->is_read,
             ])->values(),
         ];
+    }
+
+    private function isWithinQuietHours($preference): bool
+    {
+        if (! $preference?->quiet_hours_start || ! $preference?->quiet_hours_end) {
+            return false;
+        }
+
+        $current = now(config('app.timezone'))->format('H:i:s');
+        $start = (string) $preference->quiet_hours_start;
+        $end = (string) $preference->quiet_hours_end;
+
+        return $start < $end
+            ? $current >= $start && $current < $end
+            : $current >= $start || $current < $end;
     }
 }
