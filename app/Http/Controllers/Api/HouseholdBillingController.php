@@ -21,6 +21,7 @@ class HouseholdBillingController extends Controller
         abort_unless($user?->isHousehold() && $user->isAccountActive(), 403, 'Household account access is required.');
 
         [$periodStart, $periodEnd] = $this->consumption->currentBillingPeriod();
+        $periodIsCurrent = true;
         $meter = null;
 
         try {
@@ -45,18 +46,6 @@ class HouseholdBillingController extends Controller
                 ->whereDate('billing_month', $periodStart->toDateString())
                 ->latest('id')
                 ->first();
-            $settings = $this->consumption->resolveSettingsForUser($user->id, $periodStart);
-            $hasRateConfiguration = $settings->exists === true;
-
-            if (! $statement && ! $hasRateConfiguration) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No active water rate is configured for this billing period.',
-                    'data' => [
-                        'period' => $this->periodPayload($periodStart, $periodEnd),
-                    ],
-                ], 422);
-            }
 
             // Telemetry stores interval usage in liters_used. The device payload
             // may also contain a cumulative total_water_liters, but that value is
@@ -69,6 +58,55 @@ class HouseholdBillingController extends Controller
                 ->first();
             $readingCount = (int) ($periodAggregate?->reading_count ?? 0);
             $totalLiters = round((float) ($periodAggregate?->total_liters ?? 0), 6);
+
+            // At the beginning of a new month, the current period can be empty
+            // even though the meter has valid historical telemetry. Keep the
+            // household billing card useful by showing the latest metered month
+            // until the first reading for the current month arrives.
+            if (! $statement && $readingCount === 0) {
+                $latestPriorReading = $meter->readings()
+                    ->whereNotNull('recorded_at')
+                    ->where('recorded_at', '<', $periodStart)
+                    ->latest('recorded_at')
+                    ->latest('id')
+                    ->first();
+
+                if ($latestPriorReading) {
+                    $periodStart = $latestPriorReading->recorded_at->copy()->startOfMonth();
+                    $periodEnd = $latestPriorReading->recorded_at->copy()->endOfMonth();
+                    $periodIsCurrent = false;
+
+                    $statement = BillingStatement::query()
+                        ->where('user_id', $user->id)
+                        ->whereDate('billing_month', $periodStart->toDateString())
+                        ->latest('id')
+                        ->first();
+
+                    $periodAggregate = $meter->readings()
+                        ->whereBetween('recorded_at', [$periodStart, $periodEnd])
+                        ->whereNotNull('recorded_at')
+                        ->where('liters_used', '>=', 0)
+                        ->selectRaw('COUNT(*) as reading_count, COALESCE(SUM(liters_used), 0) as total_liters')
+                        ->first();
+                    $readingCount = (int) ($periodAggregate?->reading_count ?? 0);
+                    $totalLiters = round((float) ($periodAggregate?->total_liters ?? 0), 6);
+                }
+            }
+
+            $settingsEffectiveOn = $periodIsCurrent ? now() : $periodEnd;
+            $settings = $this->consumption->resolveSettingsForUser($user->id, $settingsEffectiveOn);
+            $hasRateConfiguration = $settings->exists === true;
+
+            if (! $statement && ! $hasRateConfiguration) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No active water rate is configured for this billing period.',
+                    'data' => [
+                        'period' => $this->periodPayload($periodStart, $periodEnd, $periodIsCurrent),
+                    ],
+                ], 422);
+            }
+
             $totalCubicMeter = round($totalLiters / 1000, 8);
 
             $latestReading = $meter->readings()
@@ -118,7 +156,7 @@ class HouseholdBillingController extends Controller
                 ->values();
 
             $data = [
-                'period' => $this->periodPayload($periodStart, $periodEnd),
+                'period' => $this->periodPayload($periodStart, $periodEnd, $periodIsCurrent),
                 'record_type' => $recordType,
                 'has_rate_configuration' => $hasRateConfiguration || $statement !== null,
                 'rate_effective_date' => $statement
@@ -177,6 +215,7 @@ class HouseholdBillingController extends Controller
                 'meter_id' => $meter?->id,
                 'period' => $periodStart->format('Y-m'),
                 'exception' => $exception::class,
+                'exception_message' => $exception->getMessage(),
                 'error_reference' => $reference,
             ]);
 
@@ -184,12 +223,12 @@ class HouseholdBillingController extends Controller
                 'success' => false,
                 'message' => 'Billing estimate is temporarily unavailable. Please try again.',
                 'error_reference' => $reference,
-            ], 500);
+            ], 503);
         }
     }
 
-    /** @return array{start: string, end: string, label: string} */
-    private function periodPayload($periodStart, $periodEnd): array
+    /** @return array{start: string, end: string, from: string, to: string, label: string, is_current: bool} */
+    private function periodPayload($periodStart, $periodEnd, bool $isCurrent = true): array
     {
         return [
             'start' => $periodStart->toDateString(),
@@ -197,6 +236,7 @@ class HouseholdBillingController extends Controller
             'from' => $periodStart->toDateString(),
             'to' => $periodEnd->toDateString(),
             'label' => $periodStart->format('F Y'),
+            'is_current' => $isCurrent,
         ];
     }
 

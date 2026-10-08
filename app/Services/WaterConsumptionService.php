@@ -223,7 +223,10 @@ class WaterConsumptionService
                         'settings' => $settings,
                         'notifications' => collect(),
                         'duplicate' => true,
-                        'server_total_liters' => $this->serverTotalLiters($household->id),
+                        'server_total_liters' => $this->serverTotalLiters(
+                            $household->id,
+                            $duplicate->recorded_at,
+                        ),
                         'water_limit_liters' => $waterLimitLiters,
                         'limit_reached' => (bool) $duplicate->is_threshold_exceeded,
                     ];
@@ -433,16 +436,21 @@ class WaterConsumptionService
                 'settings' => $settings,
                 'notifications' => $notifications,
                 'duplicate' => false,
-                'server_total_liters' => $this->serverTotalLiters($household->id),
+                'server_total_liters' => $this->serverTotalLiters($household->id, $recordedAt),
                 'water_limit_liters' => $waterLimitLiters,
                 'limit_reached' => $isThresholdExceeded,
             ];
         });
     }
 
-    public function serverTotalLiters(int $userId): float
+    public function serverTotalLiters(int $userId, ?Carbon $reference = null): float
     {
-        return (float) WaterReading::query()->where('user_id', $userId)->sum('liters_used');
+        [$periodStart, $periodEnd] = $this->currentBillingPeriod($reference);
+
+        return (float) WaterReading::query()
+            ->where('user_id', $userId)
+            ->whereBetween('recorded_at', [$periodStart, $periodEnd])
+            ->sum('liters_used');
     }
 
     private function notifyAdministrators(Notification $source, string $message): void

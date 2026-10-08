@@ -18,7 +18,7 @@
 </head>
 <body>
     <h1>Smart Water Monitoring</h1>
-    <div class="meta">{{ $title }} · Generated {{ $generatedAt->format('F j, Y g:i A') }}</div>
+    <div class="meta">{{ $title }} - Generated {{ $generatedAt->format('F j, Y g:i A') }}</div>
     <table>
         <thead><tr>@foreach ($headers as $header)<th>{{ $header }}</th>@endforeach</tr></thead>
         <tbody>

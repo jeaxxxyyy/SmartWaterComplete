@@ -15,25 +15,6 @@
     <div class="admin-topbar-title"><span>Administrator workspace</span><strong data-admin-page-title>Dashboard</strong></div>
     <label class="admin-search" aria-label="Search administrator workspace"><i class="bi bi-search" aria-hidden="true"></i><input type="search" placeholder="Search workspace" data-admin-search></label>
     <div class="admin-topbar-actions">
-        <div class="admin-notification-control" data-admin-notification-control>
-            <button class="admin-icon-button admin-notification-button" type="button" data-admin-notification-toggle aria-haspopup="dialog" aria-expanded="false" aria-controls="admin-notification-dropdown" aria-label="Open administrator notifications" title="Notifications">
-                <i class="bi bi-bell" aria-hidden="true"></i>
-                <span class="admin-notification-badge" data-admin-alert-count aria-hidden="true" hidden></span>
-            </button>
-            <section class="household-notification-dropdown admin-notification-dropdown" id="admin-notification-dropdown" data-admin-notification-dropdown role="dialog" aria-label="Recent administrator notifications" hidden>
-                <header class="notification-dropdown-header">
-                    <div>
-                        <strong>Notifications</strong>
-                        <small data-admin-notification-dropdown-summary>No unread household messages</small>
-                    </div>
-                    <span class="notification-live-dot" aria-hidden="true"></span>
-                </header>
-                <div class="notification-dropdown-list" data-admin-notification-dropdown-list>
-                    <div class="notification-dropdown-empty">Loading notifications...</div>
-                </div>
-                <button class="notification-dropdown-footer" type="button" data-admin-notification-view-all>View all notifications</button>
-            </section>
-        </div>
         @include('components.theme-toggle', ['class' => 'admin-icon-button'])
         <div class="admin-profile" aria-label="Administrator municipal account">
             <span class="admin-avatar">AD</span>
@@ -56,13 +37,10 @@
         <button type="button" data-admin-nav="device-management" title="Device Management"><i class="bi bi-cpu"></i><span>Device Management</span></button>
         <button type="button" data-admin-nav="water-rates" title="Water Rate Management"><i class="bi bi-droplet"></i><span>Water Rate Management</span></button>
         <button type="button" data-admin-nav="billing-management" title="Billing"><i class="bi bi-receipt"></i><span>Billing</span></button>
-        <button type="button" data-admin-nav="service-requests" title="Service Requests"><i class="bi bi-inbox"></i><span>Service Requests</span></button>
+        <button type="button" data-admin-nav="service-requests" title="Messages"><i class="bi bi-chat-dots"></i><span>Messages</span></button>
         <span class="sidebar-section-title">Monitoring</span>
         <button type="button" data-admin-nav="consumption-monitoring" title="Consumption Monitoring"><i class="bi bi-activity"></i><span>Consumption Monitoring</span></button>
         <button type="button" data-admin-nav="leak-monitoring" title="Leak Monitoring"><i class="bi bi-exclamation-triangle"></i><span>Leak Monitoring</span></button>
-        <span class="sidebar-section-title">Insights</span>
-        <button type="button" data-admin-nav="reports" title="Reports"><i class="bi bi-bar-chart-line"></i><span>Reports</span></button>
-        <button type="button" data-admin-nav="notifications" title="Notifications"><i class="bi bi-megaphone"></i><span>Notifications</span></button>
     </nav>
     <button class="admin-sidebar-logout" type="button" data-logout><i class="bi bi-box-arrow-left"></i><span>Sign out</span></button>
 @endsection
@@ -73,11 +51,9 @@
     <button type="button" data-admin-nav="device-management">Device Management</button>
     <button type="button" data-admin-nav="water-rates">Water Rate Management</button>
     <button type="button" data-admin-nav="billing-management">Billing Management</button>
-    <button type="button" data-admin-nav="service-requests">Service Requests</button>
+    <button type="button" data-admin-nav="service-requests">Messages</button>
     <button type="button" data-admin-nav="consumption-monitoring">Consumption Monitoring</button>
     <button type="button" data-admin-nav="leak-monitoring">Leak Monitoring</button>
-    <button type="button" data-admin-nav="reports">Reports</button>
-    <button type="button" data-admin-nav="notifications">Notification Management</button>
 @endsection
 
 @section('content')
@@ -231,12 +207,6 @@
                 <small>Detected, acknowledged, or investigating.</small>
                 <button class="link-button" type="button" data-admin-nav="leak-monitoring">Review leaks</button>
             </article>
-            <article class="stat-card">
-                <span class="stat-label">Unread notifications</span>
-                <strong class="rose" data-admin-unread-notifications>--</strong>
-                <small>Unread notices for household accounts.</small>
-                <button class="link-button" type="button" data-admin-nav="notifications">Open notifications</button>
-            </article>
         </section>
 
         <article class="panel admin-overview-system-health" aria-labelledby="admin-system-health-title">
@@ -310,7 +280,7 @@
 
         <article class="panel admin-action-center" aria-labelledby="admin-action-center-title">
             <div class="panel-head">
-                <div><p class="eyebrow">Action center</p><h2 id="admin-action-center-title">Municipal work requiring attention</h2><p class="field-hint">Service requests, overdue statements, leak follow-ups, and failed notices in one prioritized queue.</p></div>
+                <div><p class="eyebrow">Action center</p><h2 id="admin-action-center-title">Municipal work requiring attention</h2><p class="field-hint">Overdue statements, meter issues, household accounts, and leak follow-ups in one prioritized queue.</p></div>
                 <span class="status-pill" data-action-center-summary>Loading</span>
             </div>
             <div class="action-center-metrics" data-action-center-metrics></div>
@@ -342,7 +312,7 @@
                         <p class="eyebrow">Recent activity</p>
                         <h2>Administrative and device events</h2>
                     </div>
-                    <button class="link-button" type="button" data-admin-nav="reports">View reports</button>
+                    <button class="link-button" type="button" data-admin-nav="consumption-monitoring">View monitoring</button>
                 </div>
                 <div class="admin-overview-list" data-admin-activity-list>
                     <div class="dashboard-empty-state is-loading admin-overview-empty-state">
@@ -600,6 +570,7 @@
                 <div><dt>Current water rate</dt><dd>--</dd></div>
                 <div><dt>Effective date</dt><dd>--</dd></div>
                 <div><dt>Currency</dt><dd>--</dd></div>
+                <div><dt>Monthly usage limit</dt><dd>--</dd></div>
                 <div><dt>Leak monitoring</dt><dd>--</dd></div>
             </div>
         </section>
@@ -607,7 +578,7 @@
         <section class="admin-water-rate-grid">
             <article class="panel admin-card water-rate-section-card">
                 <div class="panel-head"><div><p class="eyebrow">Billing Rates</p><h2>Billing configuration</h2></div><i class="bi bi-receipt-cutoff admin-section-icon" aria-hidden="true"></i></div>
-                <p class="field-hint">These values are used for estimated household billing and billing statements.</p>
+                <p class="field-hint">These values are used for estimated household billing and billing statements. One cubic meter (m³) equals 1,000 liters.</p>
                 <div class="form-feedback" data-billing-rates-status role="status" aria-live="polite" hidden></div>
                 <form class="stack-form" data-billing-rates-form novalidate>
                     <label>Water rate per m³ <span class="required-mark" aria-hidden="true">*</span><div class="input-with-currency"><span data-rate-currency>PHP</span><input type="number" step="0.01" min="0" name="water_rate" placeholder="40.00" required></div></label>
@@ -625,12 +596,39 @@
                 <div class="panel-head"><div><p class="eyebrow">Consumption Alerts</p><h2>Consumption alert configuration</h2></div><i class="bi bi-graph-up-arrow admin-section-icon" aria-hidden="true"></i></div>
                 <p class="field-hint">The first recorded month is each household's permanent 100% baseline. Later months are compared with that baseline, and only changes that reach the configured percentage generate a notification.</p>
                 <div class="form-feedback" data-consumption-alert-status role="status" aria-live="polite" hidden></div>
-                <form class="stack-form" data-consumption-alert-form novalidate>
-                    <label>Relevant change percentage <span class="required-mark" aria-hidden="true">*</span><input type="number" step="0.01" min="0.01" max="10000" name="percentage_threshold" value="100" placeholder="100" required><small class="field-hint">Example: a 100% increase means usage reached 200% of the first-month baseline.</small></label>
-                    <div class="admin-settings-note"><strong>Comparison basis</strong><span>First recorded month = 100%. Every consecutive month is measured against that same baseline; increases and decreases use actual readings.</span></div>
-                    <label class="admin-checkbox-field"><span>Alert status</span><span><input type="checkbox" name="consumption_alert_enabled" value="1" checked> Enable consumption alerts</span></label>
-                    <label>Notification behavior<select name="notification_behavior" required><option value="household">Notify household</option><option value="household_admin">Notify household and administrators</option><option value="disabled">Do not send notifications</option></select></label>
-                    <button class="button button-primary" type="submit">Save consumption alerts</button>
+                <form class="stack-form consumption-alert-form" data-consumption-alert-form novalidate>
+                    <div class="consumption-alert-fields">
+                        <label><span>Monthly usage limit (liters) <span class="required-mark" aria-hidden="true">*</span></span><input type="number" step="1" min="0" name="threshold_liters" value="15000" placeholder="15000" required><small class="field-hint">Marks the household as over its monthly limit when month-to-date usage reaches this value. Enter 0 to disable the limit.</small></label>
+                        <label><span>Relevant change percentage <span class="required-mark" aria-hidden="true">*</span></span><input type="number" step="0.01" min="0.01" max="10000" name="percentage_threshold" value="100" placeholder="100" required><small class="field-hint">Example: a 100% increase means usage reached 200% of the first-month baseline.</small></label>
+                    </div>
+                    <section class="consumption-alert-comparison" data-consumption-alert-comparison aria-labelledby="consumption-comparison-title">
+                        <div class="consumption-alert-comparison-head">
+                            <div><p class="eyebrow">Monthly usage comparison</p><h3 id="consumption-comparison-title">Previous month vs current month</h3></div>
+                            <span class="status-chip status-chip-muted" data-consumption-comparison-change>Loading comparison</span>
+                        </div>
+                        <div class="consumption-comparison-chart" data-consumption-comparison-chart role="img" aria-label="Loading the previous and current month water consumption comparison">
+                            <div class="consumption-comparison-row is-previous">
+                                <div class="consumption-comparison-label"><strong data-consumption-previous-label>Previous month</strong><small>Complete month</small></div>
+                                <div class="consumption-comparison-track" aria-hidden="true"><span data-consumption-previous-bar></span></div>
+                                <strong class="consumption-comparison-value" data-consumption-previous-value>--</strong>
+                            </div>
+                            <div class="consumption-comparison-row is-current">
+                                <div class="consumption-comparison-label"><strong data-consumption-current-label>Current month</strong><small>Month to date</small></div>
+                                <div class="consumption-comparison-track" aria-hidden="true"><span data-consumption-current-bar></span></div>
+                                <strong class="consumption-comparison-value" data-consumption-current-value>--</strong>
+                            </div>
+                        </div>
+                        <p class="field-hint" data-consumption-comparison-summary>Loading municipality-wide recorded consumption.</p>
+                    </section>
+                    <div class="admin-settings-note consumption-alert-note">
+                        <i class="bi bi-info-circle" aria-hidden="true"></i>
+                        <div><strong>Alert comparison basis</strong><span>The graph is an informational municipality-wide monthly comparison. Alerts continue to compare each household with its own first recorded month, which remains the permanent 100% baseline.</span></div>
+                    </div>
+                    <div class="consumption-alert-controls">
+                        <label class="admin-checkbox-field"><span>Alert status</span><span><input type="checkbox" name="consumption_alert_enabled" value="1" checked> Enable consumption alerts</span></label>
+                        <label><span>Notification behavior</span><select name="notification_behavior" required><option value="household">Notify household</option><option value="household_admin">Notify household and flag for admin review</option><option value="disabled">Do not send notifications</option></select></label>
+                        <button class="button button-primary" type="submit">Save consumption alerts</button>
+                    </div>
                 </form>
             </article>
 
@@ -643,7 +641,7 @@
                     <label>Continuous-flow duration (minutes) <span class="required-mark" aria-hidden="true">*</span><input type="number" step="1" min="0" max="1440" name="leak_continuous_duration_minutes" placeholder="0" required></label>
                     <div class="form-grid-two"><label>Quiet-hours start <input type="number" min="0" max="23" name="quiet_hours_start" placeholder="22" required></label><label>Quiet-hours end <input type="number" min="0" max="23" name="quiet_hours_end" placeholder="4" required></label></div>
                     <label class="admin-checkbox-field"><span>Alert status</span><span><input type="checkbox" name="leak_alert_enabled" value="1" checked> Enable leak alerts</span></label>
-                    <label>Leak-alert behavior<select name="leak_alert_behavior" required><option value="household">Notify household</option><option value="household_admin">Notify household and administrators</option><option value="disabled">Do not send notifications</option></select></label>
+                    <label>Leak-alert behavior<select name="leak_alert_behavior" required><option value="household">Notify household</option><option value="household_admin">Notify household and flag for admin review</option><option value="disabled">Do not send notifications</option></select></label>
                     <button class="button button-primary" type="submit">Save leak settings</button>
                 </form>
             </article>
@@ -718,8 +716,8 @@
 
     <section class="dashboard-view" data-admin-view="service-requests">
         <header class="feature-page-header">
-            <div><p class="eyebrow">Resident services</p><h1>Household service requests</h1><p>Prioritize, assign, respond to, and resolve formal household requests.</p></div>
-            <span class="status-chip status-chip-muted" data-admin-request-summary>Loading requests</span>
+            <div><p class="eyebrow">Household communication</p><h1>Messages</h1><p>Review household concerns, reply, and mark each conversation as resolved.</p></div>
+            <span class="status-chip status-chip-muted" data-admin-request-summary>Loading messages</span>
         </header>
         <article class="panel">
             <form class="filters admin-filter-bar" data-admin-service-request-filters>
@@ -728,10 +726,10 @@
                 <select name="category"><option value="">Any category</option><option value="billing_question">Billing question</option><option value="billing_dispute">Billing dispute</option><option value="suspected_leak">Suspected leak</option><option value="account_update">Account update</option><option value="service_interruption">Service interruption</option><option value="meter_inspection">Meter inspection</option><option value="general_inquiry">General inquiry</option></select>
                 <button class="button button-secondary" type="submit">Apply filters</button>
             </form>
-            <div class="admin-service-request-list" data-admin-service-request-list aria-live="polite"><div class="dashboard-empty-state is-loading"><strong>Loading household requests...</strong></div></div>
+            <div class="admin-service-request-list" data-admin-service-request-list aria-live="polite"><div class="dashboard-empty-state is-loading"><strong>Loading household messages...</strong></div></div>
         </article>
         <dialog class="admin-user-dialog service-request-dialog" data-admin-service-request-dialog aria-labelledby="admin-service-request-title">
-            <div class="panel-head"><div><p class="eyebrow">Request workflow</p><h2 id="admin-service-request-title" data-admin-service-request-title>Service request</h2></div><button class="link-button" type="button" data-admin-service-request-close>Close</button></div>
+            <div class="panel-head"><div><p class="eyebrow">Message thread</p><h2 id="admin-service-request-title" data-admin-service-request-title>Household message</h2></div><button class="link-button" type="button" data-admin-service-request-close>Close</button></div>
             <div data-admin-service-request-detail></div>
         </dialog>
     </section>
@@ -835,215 +833,4 @@
         </article>
     </section>
 
-    <section class="dashboard-view" data-admin-view="reports">
-        <section class="panel admin-card reports-header">
-            <div class="panel-head">
-                <div>
-                    <p class="eyebrow">Reports</p>
-                    <h2>Official operational reports</h2>
-                    <p class="subtle">Preview real system records, then export the selected period and report category.</p>
-                </div>
-                <span class="status-pill" data-report-management-state>Loading report data...</span>
-            </div>
-        </section>
-
-        <section class="panel filter-panel reports-filter-panel">
-            <form class="filter-form reports-filter-form" data-report-management-filters>
-                <label>
-                    Period
-                    <select name="period">
-                        <option value="daily">Daily</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="monthly" selected>Monthly</option>
-                        <option value="custom">Custom range</option>
-                    </select>
-                </label>
-                <label>
-                    Report type
-                    <select name="report_type">
-                        <option value="all" selected>All operational reports</option>
-                        <option value="consumption">Consumption and meter readings</option>
-                        <option value="billing">Billing records</option>
-                        <option value="notifications">Notifications and announcements</option>
-                        <option value="leaks">Leak alerts</option>
-                        <option value="devices">Device and connection health</option>
-                        <option value="households">Household account summaries</option>
-                        <option value="audit">Administrative activity</option>
-                    </select>
-                </label>
-                <label>
-                    From
-                    <input type="date" name="from" data-report-date-from disabled>
-                </label>
-                <label>
-                    To
-                    <input type="date" name="to" data-report-date-to disabled>
-                </label>
-                <label class="reports-search-field">
-                    Search
-                    <input type="search" name="search" placeholder="Household, account, meter, or title">
-                </label>
-                <label>
-                    Status
-                    <select name="status" data-report-status>
-                        <option value="">Any status</option>
-                    </select>
-                </label>
-                <div class="filter-actions">
-                    <button class="button button-primary" type="submit">Apply filters</button>
-                    <button class="button button-ghost" type="button" data-report-reset>Reset</button>
-                </div>
-                <p class="subtle reports-period-description" data-report-period-description>Current calendar month</p>
-            </form>
-        </section>
-
-        <section class="stat-grid reports-summary" data-report-summary aria-live="polite">
-            <article class="stat-card"><span>Records</span><strong>—</strong></article>
-            <article class="stat-card"><span>Consumption</span><strong>—</strong></article>
-            <article class="stat-card"><span>Charges</span><strong>—</strong></article>
-            <article class="stat-card"><span>Attention</span><strong>—</strong></article>
-        </section>
-
-        <article class="panel admin-card reports-preview-card">
-            <div class="panel-head">
-                <div>
-                    <p class="eyebrow">Report preview</p>
-                    <h2 data-report-preview-label>Operational report</h2>
-                </div>
-                <div class="report-preview-actions">
-                    <label class="report-page-size">
-                        Rows
-                        <select data-report-page-size aria-label="Report preview rows per page">
-                            <option value="5" selected>5 rows</option>
-                            <option value="10">10 rows</option>
-                            <option value="15">15 rows</option>
-                            <option value="20">20 rows</option>
-                            <option value="25">25 rows</option>
-                        </select>
-                    </label>
-                    <div class="token-controls report-export-actions">
-                        <button class="button button-ghost" type="button" data-report-export="/api/exports/reports" disabled hidden>Export selected report</button>
-                    </div>
-                </div>
-            </div>
-            <div class="empty-state" data-report-error hidden>
-                <strong>Reports could not be loaded.</strong>
-                <span data-report-error-message>Try again or adjust the selected filters.</span>
-                <button class="button button-ghost" type="button" data-report-retry>Retry</button>
-            </div>
-            <div class="table-wrap reports-table-wrap">
-                <table class="data-table reports-preview-table">
-                    <thead><tr data-report-preview-head><th>Report preview</th></tr></thead>
-                    <tbody data-report-preview-body><tr><td>Loading report data...</td></tr></tbody>
-                </table>
-            </div>
-            <div class="pager" data-report-pager hidden></div>
-        </article>
-    </section>
-
-    <section class="dashboard-view" data-admin-view="notifications">
-        <section class="admin-grid admin-notification-layout">
-            <article class="panel admin-card admin-notification-compose-card">
-                <div class="panel-head">
-                    <div>
-                        <p class="eyebrow">Notification Management</p>
-                        <h2>Compose an official notice</h2>
-                    </div>
-                    <span class="status-pill">Household inbox</span>
-                </div>
-                <p class="subtle">Messages are persisted in the household notification inbox and remain available after logout or refresh.</p>
-                <form class="stack-form" data-announcement-form>
-                    <label>
-                        Category
-                        <select name="type" required>
-                            <option value="announcement">General announcement</option>
-                            <option value="service_interruption">Service interruption</option>
-                            <option value="maintenance">Scheduled maintenance</option>
-                            <option value="billing">Billing notice</option>
-                            <option value="leak_alert">Leak or emergency alert</option>
-                            <option value="device_system">Device or system notice</option>
-                        </select>
-                    </label>
-                    <label>
-                        Recipient audience
-                        <select name="audience" data-notification-audience required>
-                            <option value="all_active_households">All active households</option>
-                            <option value="selected_household">Selected household</option>
-                        </select>
-                    </label>
-                    <label data-notification-household-field hidden>
-                        Household recipient
-                        <select name="user_id" data-announcement-user disabled>
-                            <option value="">Choose a household</option>
-                        </select>
-                    </label>
-                    <small class="field-hint" data-notification-recipient-status role="status" aria-live="polite">Loading eligible active households...</small>
-                    <label>
-                        Schedule delivery <span class="field-hint">optional</span>
-                        <input type="datetime-local" name="scheduled_at" data-notification-scheduled-at>
-                    </label>
-                    <label>
-                        Title
-                        <input type="text" name="title" maxlength="255" placeholder="Official notification title" required>
-                    </label>
-                    <label>
-                        Message
-                        <textarea name="message" maxlength="2000" placeholder="Write the message for the selected household audience." data-notification-message required></textarea>
-                    </label>
-                    <small class="field-hint notification-character-count" data-notification-character-count>0 / 2000</small>
-                    <div class="button-row">
-                        <button class="button button-primary" type="submit">Send notification</button>
-                        <button class="button button-ghost" type="reset">Clear form</button>
-                    </div>
-                </form>
-            </article>
-
-            <article class="panel admin-card admin-notification-guidance">
-                <p class="eyebrow">Delivery controls</p>
-                <h2>Audience and delivery status</h2>
-                <div class="summary-list">
-                    <div><dt>Audience</dt><dd>Only active Household Users</dd></div>
-                    <div><dt>Persistence</dt><dd>Database-backed inbox</dd></div>
-                    <div><dt>Read tracking</dt><dd>Household read status</dd></div>
-                    <div><dt>Scheduling</dt><dd>Due notices delivered automatically</dd></div>
-                    <div><dt>Audit trail</dt><dd>Send, retry, archive, and delete actions</dd></div>
-                </div>
-                <button class="button button-ghost" type="button" data-delete-all-sent-notifications>Delete all sent records</button>
-            </article>
-        </section>
-
-        <article class="panel admin-card admin-notification-history-card">
-            <div class="panel-head">
-                <div>
-                    <p class="eyebrow">Sent-notification history</p>
-                    <h2>Recipients, delivery, and read status</h2>
-                </div>
-                <small class="table-secondary" data-admin-notification-summary>Loading notification history...</small>
-            </div>
-            <form class="filter-bar admin-notification-filters" data-admin-notification-filters>
-                <input type="search" name="search" class="filter-input" placeholder="Search title, message, or household" aria-label="Search sent notifications">
-                <select name="type" class="filter-input" aria-label="Filter notification category">
-                    <option value="">All categories</option>
-                    <option value="announcement">General announcement</option>
-                    <option value="service_interruption">Service interruption</option>
-                    <option value="maintenance">Scheduled maintenance</option>
-                    <option value="billing">Billing notice</option>
-                    <option value="leak_alert">Leak or emergency alert</option>
-                    <option value="device_system">Device or system notice</option>
-                </select>
-                <select name="status" class="filter-input" aria-label="Filter delivery status">
-                    <option value="">All delivery statuses</option>
-                    <option value="delivered">Delivered</option>
-                    <option value="scheduled">Scheduled</option>
-                    <option value="partial">Partially delivered</option>
-                    <option value="failed">Failed</option>
-                </select>
-                <button class="button button-primary" type="submit">Apply filters</button>
-            </form>
-            <div class="notification-list" data-admin-notification-history>
-                <div class="empty-state">Loading sent-notification history...</div>
-            </div>
-            <div class="pager" data-admin-notification-pager></div>
-        </article>
-    </section>
 @endsection

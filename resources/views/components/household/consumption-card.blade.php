@@ -8,7 +8,7 @@
 
     <div class="household-consumption-card__value mt-1 text-3xl font-bold text-slate-900 dark:text-white" aria-live="polite">
         <span data-household-consumption-value hidden></span>
-        <span class="household-consumption-card__unit text-lg font-semibold text-slate-500 dark:text-slate-400" data-household-consumption-unit hidden>m³</span>
+        <span class="household-consumption-card__unit text-lg font-semibold text-slate-500 dark:text-slate-400" data-household-consumption-unit hidden>L</span>
         <span class="household-consumption-card__skeleton block h-10 w-36 max-w-full animate-pulse rounded-lg bg-slate-200/80 dark:bg-slate-700/70" data-household-consumption-skeleton aria-hidden="true"></span>
     </div>
 

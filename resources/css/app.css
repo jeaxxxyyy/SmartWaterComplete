@@ -480,6 +480,9 @@ body[data-page="home"] {
 
 body[data-page="landing"] .topbar,
 body[data-page="home"] .topbar {
+    position: fixed;
+    top: 0;
+    z-index: 40;
     width: min(1200px, calc(100% - 2.5rem));
     border-bottom-color: rgb(158 207 213 / 50%);
 }
@@ -490,6 +493,9 @@ body[data-page="home"] .shell {
     padding-top: clamp(1.5rem, 4vw, 3.5rem);
     gap: clamp(2rem, 5vw, 4.5rem);
 }
+
+body[data-page="landing"] .shell { margin-top: 4.25rem; }
+body[data-page="home"] .shell { margin-top: 4.5rem; }
 
 body[data-page="home"] .topbar {
     width: 100%;
@@ -2160,10 +2166,14 @@ body[data-page="admin"] {
     --admin-ink: #10243e;
     --admin-muted: #6b7d91;
     --admin-line: #e4ebf2;
+    --admin-topbar-height: 4.7rem;
     background: #f5f8fb;
 }
 
 body[data-page="admin"] .topbar {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 40;
     width: 100%;
     max-width: none;
     min-height: 4.7rem;
@@ -2330,7 +2340,7 @@ body[data-page="admin"] .app-shell {
     width: 100%;
     max-width: 1440px;
     min-height: calc(100vh - 4.7rem);
-    margin: 0 auto;
+    margin: var(--admin-topbar-height) auto 0;
     padding: 0;
     grid-template-columns: 16.5rem minmax(0, 1fr);
     gap: 0;
@@ -3234,9 +3244,17 @@ body[data-page="household"] .household-billing-header p:last-child {
 
 body[data-page="household"] .household-billing-header-meta {
     display: grid;
+    min-width: 0;
     flex: 0 0 auto;
     justify-items: end;
     gap: 0.45rem;
+}
+
+body[data-page="household"] .household-billing-header-meta .status-chip,
+body[data-page="household"] .billing-period-label {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
 }
 
 body[data-page="household"] .billing-period-label {
@@ -3725,6 +3743,8 @@ html.dark body[data-page="admin"] .admin-sidebar-nav button.is-active { color: #
 }
 
 @media (max-width: 767px) {
+    body[data-page="admin"] { --admin-topbar-height: 7.5rem; }
+
     body[data-page="admin"] .admin-water-rate-grid,
     body[data-page="admin"] .form-grid-two {
         grid-template-columns: 1fr;
@@ -5582,6 +5602,9 @@ html.dark body[data-page="admin"] .filter-panel {
 
 /* Household dashboard --------------------------------------------------- */
 body[data-page="household"] .topbar {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 40;
     width: 100%;
     max-width: none;
     padding: 0.75rem clamp(1rem, 3vw, 2rem);
@@ -5604,6 +5627,7 @@ body[data-page="household"] .site-header-container {
 
 body[data-page="household"] .app-shell {
     width: min(1440px, 100%);
+    margin-top: 4.7rem;
     min-height: calc(100vh - 4.7rem);
     gap: 0;
 }
@@ -7291,7 +7315,7 @@ html.dark body[data-page="household"] .analytics-custom-toggle {
 
     .household-kpi-grid,
     .household-dashboard-grid,
-    .household-activity-grid {
+    body[data-page="household"] .household-activity-grid {
         grid-template-columns: 1fr;
     }
 
@@ -9556,12 +9580,43 @@ html.dark body[data-page="household"] .household-kpi-overview > .metric-card {
 }
 
 @media (max-width: 600px) {
+    body[data-page="household"] .household-billing-view,
+    body[data-page="household"] .household-billing-view > *,
+    body[data-page="household"] .household-billing-header-meta {
+        min-width: 0;
+        max-width: 100%;
+    }
+
     body[data-page="household"] .billing-summary-grid {
         grid-template-columns: 1fr;
     }
 
     body[data-page="household"] .household-billing-heading {
         align-items: flex-start;
+    }
+
+    body[data-page="household"] .household-billing-heading > .history-filter-heading-icon {
+        display: none;
+    }
+
+    body[data-page="household"] .billing-calculation-row,
+    body[data-page="household"] .billing-calculation-total {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.3rem;
+    }
+
+    body[data-page="household"] .billing-calculation-row strong,
+    body[data-page="household"] .billing-calculation-total strong {
+        max-width: 100%;
+        text-align: left;
+        overflow-wrap: anywhere;
+    }
+
+    body[data-page="household"] .household-billing-history .table-wrap {
+        max-width: 100%;
+        overflow-x: auto;
+        overscroll-behavior-inline: contain;
     }
 }
 
@@ -10734,6 +10789,186 @@ body.page[data-page="admin"] .water-rate-section-card .stack-form > .button {
     box-shadow: none;
 }
 
+body.page[data-page="admin"] .water-rate-section-card .consumption-alert-form {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 1rem;
+}
+
+body.page[data-page="admin"] .consumption-alert-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    align-items: start;
+}
+
+body.page[data-page="admin"] .consumption-alert-fields > label,
+body.page[data-page="admin"] .consumption-alert-controls > label {
+    min-width: 0;
+}
+
+body.page[data-page="admin"] .consumption-alert-comparison {
+    display: grid;
+    gap: 0.85rem;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--admin-control-radius);
+    background: color-mix(in srgb, var(--surface-soft) 88%, var(--primary) 12%);
+}
+
+body.page[data-page="admin"] .consumption-alert-comparison-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+body.page[data-page="admin"] .consumption-alert-comparison-head .eyebrow {
+    margin: 0 0 0.2rem;
+}
+
+body.page[data-page="admin"] .consumption-alert-comparison-head h3 {
+    margin: 0;
+    color: var(--text);
+    font-size: 1rem;
+    line-height: 1.3;
+}
+
+body.page[data-page="admin"] .consumption-alert-comparison-head .status-chip {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+body.page[data-page="admin"] .consumption-alert-comparison-head .status-chip.consumption-change-increase {
+    border-color: color-mix(in srgb, var(--warning) 45%, var(--line));
+    color: color-mix(in srgb, var(--warning) 72%, var(--text));
+    background: color-mix(in srgb, var(--warning) 12%, var(--surface));
+}
+
+body.page[data-page="admin"] .consumption-comparison-chart {
+    display: grid;
+    gap: 0.8rem;
+}
+
+body.page[data-page="admin"] .consumption-comparison-row {
+    display: grid;
+    grid-template-columns: minmax(10rem, 0.8fr) minmax(12rem, 2fr) minmax(7rem, auto);
+    align-items: center;
+    gap: 0.85rem;
+}
+
+body.page[data-page="admin"] .consumption-comparison-label {
+    display: grid;
+    gap: 0.1rem;
+    min-width: 0;
+}
+
+body.page[data-page="admin"] .consumption-comparison-label strong {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 0.875rem;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.page[data-page="admin"] .consumption-comparison-label small {
+    color: var(--muted);
+    font-size: 0.75rem;
+}
+
+body.page[data-page="admin"] .consumption-comparison-track {
+    height: 0.72rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--line) 74%, var(--surface));
+}
+
+body.page[data-page="admin"] .consumption-comparison-track > span {
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    transition: width 280ms ease;
+}
+
+body.page[data-page="admin"] .consumption-comparison-row.is-previous .consumption-comparison-track > span {
+    background: color-mix(in srgb, var(--muted) 66%, var(--primary));
+}
+
+body.page[data-page="admin"] .consumption-comparison-row.is-current .consumption-comparison-track > span {
+    background: linear-gradient(90deg, var(--primary), var(--primary-strong));
+}
+
+body.page[data-page="admin"] .consumption-comparison-value {
+    color: var(--text);
+    font-size: 0.875rem;
+    line-height: 1.3;
+    text-align: right;
+    white-space: nowrap;
+}
+
+body.page[data-page="admin"] .consumption-alert-comparison > .field-hint {
+    margin: 0;
+}
+
+body.page[data-page="admin"] .consumption-alert-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.85rem 0.95rem;
+    border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--line));
+    border-radius: var(--admin-control-radius);
+    color: var(--text);
+    background: color-mix(in srgb, var(--primary) 5%, var(--surface-soft));
+}
+
+body.page[data-page="admin"] .consumption-alert-note > i {
+    display: grid;
+    width: 1.8rem;
+    height: 1.8rem;
+    flex: 0 0 1.8rem;
+    place-items: center;
+    border-radius: 50%;
+    color: var(--primary-strong);
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+body.page[data-page="admin"] .consumption-alert-note strong,
+body.page[data-page="admin"] .consumption-alert-note span {
+    display: block;
+}
+
+body.page[data-page="admin"] .consumption-alert-note strong {
+    font-size: 0.875rem;
+    line-height: 1.3;
+}
+
+body.page[data-page="admin"] .consumption-alert-note span {
+    margin-top: 0.2rem;
+    color: var(--muted);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.45;
+}
+
+body.page[data-page="admin"] .consumption-alert-controls {
+    display: grid;
+    grid-template-columns: minmax(12rem, 0.85fr) minmax(16rem, 1.15fr) auto;
+    gap: 1rem;
+    align-items: end;
+    padding-top: 0.15rem;
+}
+
+body.page[data-page="admin"] .consumption-alert-controls > .button {
+    width: auto;
+    min-width: 12rem;
+    min-height: 2.75rem;
+    justify-self: start;
+    padding-inline: 1.1rem;
+    box-shadow: none;
+}
+
 /* Admin header controls keep a single, correctly aligned focus treatment. */
 body.page[data-page="admin"] .admin-search input:focus,
 body.page[data-page="admin"] .admin-search input:focus-visible {
@@ -11170,6 +11405,18 @@ body.page[data-page="admin"] .admin-notification-actions {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    body.page[data-page="admin"] .water-rate-section-card .consumption-alert-form {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.page[data-page="admin"] .consumption-alert-controls {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body.page[data-page="admin"] .consumption-alert-controls > .button {
+        grid-column: 1 / -1;
+    }
+
     body.page[data-page="admin"] .admin-device-register-form > :is(label:first-of-type, label:has(input[name="installation_address"])) {
         grid-column: span 1;
     }
@@ -11211,6 +11458,34 @@ body.page[data-page="admin"] .admin-notification-actions {
     body.page[data-page="admin"] :is(.customer-management-form-card .stack-form, .admin-device-register-form, .water-rate-section-card .stack-form, .admin-notification-layout, .admin-notification-compose-card .stack-form, .admin-notification-history, .leak-alert-update-form, .leak-alert-notify-form),
     body.page[data-page="admin"] .admin-device-list-card [data-municipal-devices] {
         grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.page[data-page="admin"] .consumption-alert-fields,
+    body.page[data-page="admin"] .consumption-alert-controls,
+    body.page[data-page="admin"] .water-rate-section-card .consumption-alert-form {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.page[data-page="admin"] .consumption-alert-controls > .button {
+        width: 100%;
+        min-width: 0;
+        grid-column: auto;
+        justify-self: stretch;
+    }
+
+    body.page[data-page="admin"] .consumption-alert-comparison-head {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    body.page[data-page="admin"] .consumption-comparison-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.45rem 0.75rem;
+    }
+
+    body.page[data-page="admin"] .consumption-comparison-track {
+        grid-column: 1 / -1;
+        grid-row: 2;
     }
 
     body.page[data-page="admin"] .device-health-card {
@@ -11609,4 +11884,327 @@ body.page[data-page="admin"] .customer-management-table .table-actions .link-but
 
 html.dark body.page[data-page="admin"] .customer-management-table-shell {
     box-shadow: 0 10px 26px rgb(0 7 18 / 18%);
+}
+
+/* Administrator readability baseline --------------------------------- */
+body.page[data-page="admin"] :is(
+    .eyebrow,
+    .admin-overview-eyebrow,
+    .sidebar-section-title,
+    .table-head,
+    .stat-card-badge,
+    .report-page-size,
+    .water-rate-current-summary dt,
+    .consumption-monitoring-summary dt,
+    .admin-notification-guidance .summary-list dt,
+    .leak-alert-summary dt
+) {
+    font-size: 0.75rem;
+    line-height: 1.35;
+}
+
+body.page[data-page="admin"] :is(
+    .admin-topbar-title span,
+    .admin-profile-copy small,
+    .admin-sidebar-brand small,
+    .field-hint,
+    .field-error,
+    .subtle,
+    .table-secondary,
+    .notification-card small,
+    .notification-card p,
+    .admin-overview-list-item small,
+    .consumption-baseline-household small,
+    .consumption-baseline-metrics small,
+    .consumption-baseline-metrics em,
+    .consumption-baseline-chip small,
+    .admin-device-register-form .admin-field-label .field-hint,
+    .filter-date,
+    .billing-date-field,
+    .reports-filter-form > label,
+    .input-with-currency > span,
+    .reports-period-description,
+    .pager
+) {
+    font-size: 0.8125rem;
+    line-height: 1.4;
+}
+
+body.page[data-page="admin"] :is(
+    .admin-sidebar-nav button,
+    .admin-sidebar-logout,
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea,
+    .filter-input,
+    .table-row,
+    .table-primary,
+    .admin-form-field,
+    .admin-device-register-form .admin-field-label,
+    .water-rate-section-card .admin-checkbox-field > span:last-child,
+    .button,
+    .link-button
+) {
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+body.page[data-page="admin"] :is(
+    .admin-overview-kpis,
+    .admin-overview-period-stats,
+    .billing-management-summary,
+    .reports-summary
+) .stat-card :is(small, .link-button) {
+    font-size: 0.8125rem;
+    line-height: 1.4;
+}
+
+body.page[data-page="admin"] .table-actions :is(.link-button, .button),
+body.page[data-page="admin"] .pager button {
+    font-size: 0.8125rem;
+    line-height: 1.3;
+}
+
+body.page[data-page="admin"] .report-page-size select {
+    font-size: 0.875rem;
+}
+
+@media (min-width: 992px) {
+    body.page[data-page="admin"] .admin-sidebar-nav .sidebar-section-title {
+        font-size: 0.75rem;
+    }
+
+    body.page[data-page="admin"] .admin-sidebar-nav button,
+    body.page[data-page="admin"] .admin-sidebar-logout {
+        font-size: 0.8125rem;
+    }
+}
+
+/* Household readability baseline --------------------------------------- */
+body[data-page="household"] :is(.dashboard-updated, .panel-context) {
+    font-size: 0.8125rem;
+    line-height: 1.4;
+}
+
+body[data-page="household"] :is(.status-pill, .status-chip) {
+    font-size: 0.8125rem;
+    line-height: 1.25;
+}
+
+body[data-page="household"] :is(.household-dashboard-eyebrow, .eyebrow) {
+    font-size: 0.8125rem;
+    line-height: 1.35;
+}
+
+body[data-page="household"] .household-kpi-overview > .metric-card .metric-card-label,
+body[data-page="household"] .metric-overview-grid .metric-card-label,
+body[data-page="household"] .household-consumption-card__label {
+    font-size: 0.8125rem;
+    line-height: 1.35;
+}
+
+body[data-page="household"] .household-kpi-overview > .metric-card .metric-card-badge,
+body[data-page="household"] .metric-overview-grid .metric-card-badge {
+    font-size: 0.75rem;
+    line-height: 1.25;
+}
+
+body[data-page="household"] .household-kpi-overview > .metric-card > small,
+body[data-page="household"] .billing-summary-grid .metric-card > small,
+body[data-page="household"] .household-consumption-card__state,
+body[data-page="household"] .household-trend-description,
+body[data-page="household"] .billing-explanation {
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+body[data-page="household"] .household-consumption-selector button,
+body[data-page="household"] .household-trend-selector button,
+body[data-page="household"] .activity-view-all {
+    font-size: 0.8125rem;
+}
+
+body[data-page="household"] .analytics-group-heading p,
+body[data-page="household"] .analytics-timezone,
+body[data-page="household"] .analytics-timezone strong,
+body[data-page="household"] .dashboard-feedback {
+    font-size: 0.8125rem;
+    line-height: 1.4;
+}
+
+body[data-page="household"] .system-status-item :is(span, strong),
+body[data-page="household"] .recent-reading-row strong,
+body[data-page="household"] .dashboard-notification-card p:not(.notification-tag) {
+    font-size: 0.875rem;
+    line-height: 1.45;
+}
+
+body[data-page="household"] .recent-reading-row small,
+body[data-page="household"] .dashboard-notification-card small,
+body[data-page="household"] .dashboard-notification-card .notification-tag,
+body[data-page="household"] .billing-period-label,
+body[data-page="household"] .billing-calculation-row strong small,
+body[data-page="household"] .billing-meter-summary small,
+body[data-page="household"] .billing-empty-state span,
+body[data-page="household"] .billing-reading-empty span {
+    font-size: 0.8125rem;
+    line-height: 1.45;
+}
+
+body[data-page="household"] .billing-latest-reading :is(dt, dd),
+body[data-page="household"] .household-data-panel .table-head,
+body[data-page="household"] .billing-history-table :is(th, td) {
+    font-size: 0.875rem;
+    line-height: 1.45;
+}
+
+body[data-page="household"] .area-chart-y-label,
+body[data-page="household"] .area-chart-x-label,
+body[data-page="household"] .area-chart-axis-unit {
+    font-size: 13px;
+}
+
+body[data-page="household"] .household-trend-summary span,
+body[data-page="household"] :is(.analytics-period-copy, .analytics-metric-list) dt,
+body[data-page="household"] .household-trend-history-link,
+body[data-page="household"] .household-trend-text {
+    font-size: 0.8125rem;
+    line-height: 1.4;
+}
+
+body[data-page="household"] :is(.account-role-badge, .sidebar-section-title),
+body[data-page="household"] .household-sidebar-brand-copy small,
+body[data-page="household"] .household-sidebar-account .subtle {
+    font-size: 0.75rem;
+    line-height: 1.35;
+}
+
+@media (max-width: 767px) {
+    body[data-page="household"] {
+        overflow-x: hidden;
+    }
+}
+
+@media (max-width: 480px) {
+    body[data-page="household"] .household-header-actions .account-role-badge {
+        display: none;
+    }
+}
+
+/* Dark theme depth and contrast --------------------------------------- */
+html.dark {
+    --bg: #071421;
+    --surface: #12283d;
+    --surface-soft: #1b354d;
+    --line: #3a5872;
+    --line-strong: #58758e;
+    --text: #f4f7fb;
+    --muted: #bdcad8;
+    --primary: #4bc1b5;
+    --primary-dark: #8be1d8;
+    --success: #7ad9ac;
+    --warning: #f2cc78;
+    --danger: #ffa0ae;
+    --shadow: 0 18px 46px rgb(0 6 16 / 38%);
+}
+
+html.dark body.page {
+    background: linear-gradient(145deg, #0b1d2e, var(--bg) 58%, #081827);
+}
+
+html.dark body.page:is([data-page="household"], [data-page="admin"]) .topbar {
+    border-bottom-color: var(--line);
+    background: rgb(11 31 47 / 96%);
+    box-shadow: 0 8px 28px rgb(0 6 16 / 22%);
+}
+
+html.dark body.page[data-page="household"] aside.household-sidebar,
+html.dark body.page[data-page="admin"] aside.admin-sidebar {
+    border-color: var(--line);
+    background-color: #0f2639;
+    background-image: none;
+    box-shadow: 10px 0 30px rgb(0 6 16 / 18%);
+}
+
+/* Bootstrap's responsive offcanvas utility paints the administrator
+ * sidebar transparent at desktop width unless the theme surface wins. */
+html.dark body.page[data-page="admin"] aside.admin-sidebar.offcanvas-lg {
+    background-color: #0f2639 !important;
+}
+
+html.dark body.page:is([data-page="household"], [data-page="admin"]) .shell-dashboard {
+    background: transparent;
+}
+
+html.dark body.page[data-page="household"] :is(
+    .panel,
+    .metric-card,
+    .activity-panel,
+    .chart-panel,
+    .system-status-panel,
+    .account-settings-card,
+    .household-dashboard-hero
+),
+html.dark body.page[data-page="admin"] :is(
+    .admin-card,
+    .filter-panel,
+    .chart-panel,
+    .admin-overview-header,
+    .admin-overview-list-panel
+) {
+    border-color: var(--line);
+    background-color: var(--surface);
+    box-shadow: var(--shadow);
+}
+
+html.dark body.page:is([data-page="household"], [data-page="admin"]) :is(
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea,
+    .filter-input,
+    .table-row,
+    .notification-card,
+    .mini-card
+) {
+    border-color: var(--line-strong);
+    background-color: var(--surface-soft);
+}
+
+html.dark body.page[data-page="household"] .household-sidebar-nav button,
+html.dark body.page[data-page="admin"] .admin-sidebar-nav button {
+    color: var(--muted);
+    background: transparent;
+}
+
+html.dark body.page[data-page="household"] .household-sidebar-nav button:is(:hover, .is-active),
+html.dark body.page[data-page="admin"] .admin-sidebar-nav button:is(:hover, .is-active) {
+    color: var(--text);
+    border-color: color-mix(in srgb, var(--primary) 48%, var(--line));
+    background: color-mix(in srgb, var(--primary) 14%, var(--surface-soft));
+}
+
+html.dark body.page:is([data-page="household"], [data-page="admin"]) :is(
+    .header-action-button,
+    .theme-toggle,
+    .site-theme-toggle,
+    .household-menu-button,
+    .admin-sidebar-toggle,
+    .admin-icon-button
+) {
+    border-color: var(--line-strong);
+    color: var(--text);
+    background: var(--surface);
+}
+
+html.dark body.page:is([data-page="household"], [data-page="admin"]) :is(
+    .header-action-button,
+    .theme-toggle,
+    .site-theme-toggle,
+    .household-menu-button,
+    .admin-sidebar-toggle,
+    .admin-icon-button
+):is(:hover, :focus-visible) {
+    border-color: color-mix(in srgb, var(--primary) 55%, var(--line));
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 12%, var(--surface-soft));
 }

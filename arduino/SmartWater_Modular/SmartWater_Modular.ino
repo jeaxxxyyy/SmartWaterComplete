@@ -9,16 +9,24 @@
 
 void setup() {
   Serial.begin(115200);
+  Serial.println();
+  Serial.println("=== Smart Water Meter starting ===");
 
   auto config = M5.config();
   M5.begin(config);
   M5.Power.setExtOutput(true);
   M5.Display.setRotation(1);
 
-  Serial.print("CoreS3 external 5V output: ");
-  Serial.println(M5.Power.getExtOutput() ? "ON" : "OFF");
+  Serial.println(M5.Power.getExtOutput()
+      ? "[Device] External 5V output ready."
+      : "[Device] External 5V output is unavailable.");
 
   beginSensorManager();
+
+  // Start the sample clock before Wi-Fi/activation, which may block for
+  // several seconds. Pulses received during setup then use the correct elapsed
+  // time instead of being mistaken for an implausible one-second burst.
+  lastSample = millis();
 
   preferences.begin("smartwater", false);
   deviceToken = preferences.getString("api_token", "");
@@ -37,7 +45,6 @@ void setup() {
     activateDevice();
   }
 
-  lastSample = millis();
   lastSend = millis();
 
   beginScreenManager();
@@ -46,8 +53,6 @@ void setup() {
 
 void loop() {
   M5.update();
-
-  pollFlowSensorInput();
 
   handleScreenInput();
 

@@ -164,8 +164,7 @@ const localeLabels = {
         'Live Monitoring': 'Live na Pagsubaybay',
         'Consumption History': 'Kasaysayan ng Konsumo',
         'Estimated Billing': 'Tinatayang Singil',
-        'Goals & Forecast': 'Layunin at Pagtataya',
-        'Service Requests': 'Mga Kahilingan sa Serbisyo',
+        Messages: 'Mga Mensahe',
         'Leak Detection': 'Pagtukoy ng Tagas',
         Notifications: 'Mga Abiso',
         'Account Settings': 'Mga Setting ng Account',
@@ -324,6 +323,7 @@ let accountProfileLoaded = false;
 let accountProfileLoading = false;
 let householdBillingLoaded = false;
 let householdBillingRequest = null;
+let householdBillingSnapshot = null;
 let notificationRefreshInFlight = false;
 let notificationMutationInFlight = false;
 let notificationMutationVersion = 0;
@@ -429,11 +429,9 @@ const adminViewTitles = {
     'device-management': 'Device Management',
     'water-rates': 'Water Rate Management',
     'billing-management': 'Billing',
+    'service-requests': 'Messages',
     'consumption-monitoring': 'Consumption Monitoring',
     'leak-monitoring': 'Leak Monitoring',
-    reports: 'Reports',
-    notifications: 'Notifications',
-    'service-requests': 'Service Requests',
 };
 
 const updateAdminPageTitle = (target) => {
@@ -959,6 +957,7 @@ const authHeaders = () => {
 };
 
 const REQUEST_TIMEOUT_MS = 15000;
+const BILLING_REQUEST_TIMEOUT_MS = 30000;
 
 const requestJsonFromNetwork = async (url, options = {}) => {
     const requestOptions = { ...options };
@@ -1568,9 +1567,14 @@ const renderLiveConsumptionSummary = (response) => {
     setText('[data-live-last-reading]', latest ? liveChartTimestamp(latest.recorded_at) : '--');
     setText('[data-live-chart-status]', statusLabel);
     setText('[data-current-flow]', latest ? `${formatNumber(latest.flow_rate, 2)} L/min` : '--');
-    setText('[data-flow-state]', latest && Number(latest.flow_rate) > 0
-        ? 'Active water flow detected.'
-        : 'No active water flow detected.');
+    const lastReading = latest?.recorded_at ? ` Last reading: ${liveChartTimestamp(latest.recorded_at)}.` : '';
+    setText('[data-flow-state]', !latest
+        ? 'No meter reading received yet.'
+        : status !== 'live'
+            ? `Meter is ${statusLabel.toLowerCase()}.${lastReading}`
+            : Number(latest.flow_rate) > 0
+                ? 'Water is currently flowing.'
+                : 'Meter is online. No active water flow detected.');
     $$('[data-live-chart-status]').forEach((node) => {
         node.classList.toggle('status-pill-live', status === 'live');
         node.classList.toggle('status-pill-soft', status === 'live');
@@ -1868,7 +1872,6 @@ const showHouseholdView = (target) => {
     if (target === 'history') loadConsumptionHistory();
     if (target === 'billing') loadHouseholdBilling({ force: true });
     if (target === 'requests') loadHouseholdServiceRequests();
-    if (target === 'goals') loadConsumptionGoal();
     if (target === 'settings') loadNotificationPreferences();
 };
 
@@ -1973,11 +1976,9 @@ const warmDashboardCache = (user) => {
           ]
         : [
               `/api/summary?user_id=${encodeURIComponent(user?.id ?? '')}`,
-              '/api/household-billing',
               '/api/household-consumption?period=daily',
               '/api/notifications?per_page=100',
               '/api/notification-preferences',
-              '/api/consumption-goal',
               '/api/service-requests?per_page=50',
           ];
 
@@ -2652,9 +2653,51 @@ const billingRecordTypeLabel = (type) => ({
     unavailable: 'Unavailable',
 }[type] ?? 'Unavailable');
 
+const normalizeConnectionStatus = (value, unavailable = 'Unavailable') => {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) return unavailable;
+    if (['connected', 'online', 'active'].includes(normalized)) return 'Connected';
+    if (['disconnected', 'offline', 'inactive'].includes(normalized)) return 'Disconnected';
+
+    return normalized
+        .replaceAll('_', ' ')
+        .replace(/\b\w/g, (character) => character.toUpperCase());
+};
+
+const applyHouseholdBillingSummary = (billing) => {
+    const calculation = billing?.calculation ?? {};
+    const periodIsCurrent = billing?.period?.is_current !== false;
+    const periodLabel = billing?.period?.label ?? 'the latest available period';
+    const currentCharge = calculation.current_charge;
+    const hasCharge = currentCharge !== null && currentCharge !== undefined;
+    const amount = hasCharge ? formatCurrency(currentCharge, calculation.currency) : 'No data';
+    const badge = billing?.record_type === 'finalized'
+        ? 'Finalized'
+        : billing?.record_type === 'estimated' && !periodIsCurrent
+            ? 'Latest estimate'
+            : billing?.record_type === 'estimated'
+                ? 'Estimated'
+                : 'Unavailable';
+
+    setText('[data-estimated-bill]', amount);
+    setText('[data-stat-bill]', amount);
+    setText('[data-billing-state]', billing?.record_type === 'unavailable'
+        ? 'No billable readings this period.'
+        : periodIsCurrent
+            ? 'Includes usage and the fixed monthly charge.'
+            : `Latest available estimate from ${periodLabel}.`);
+    setText('[data-billing-badge]', badge);
+    applyStatusTone('[data-billing-badge]', badge);
+};
+
 const renderHouseholdBilling = (billing) => {
     const calculation = billing?.calculation ?? {};
     const type = billing?.record_type ?? 'unavailable';
+    const periodLabel = billing?.period?.label ?? 'Current billing period';
+    const periodIsCurrent = billing?.period?.is_current !== false;
+    const recordTypeLabel = type === 'estimated' && !periodIsCurrent
+        ? 'Latest estimate'
+        : billingRecordTypeLabel(type);
     const hasReadings = Number(billing?.reading_count ?? 0) > 0;
     const hasRate = billing?.has_rate_configuration === true;
     const currency = calculation.currency ?? 'PHP';
@@ -2665,7 +2708,7 @@ const renderHouseholdBilling = (billing) => {
             ? 'An active water rate has not been configured yet. Billing will appear after the administrator publishes a rate.'
             : 'This amount is based on the recorded readings and the effective billing configuration for this period.';
 
-    setText('[data-household-billing-period]', billing?.period?.label ?? 'Current billing period');
+    setText('[data-household-billing-period]', periodLabel);
     setText('[data-billing-current-charge]', type === 'unavailable' ? 'Unavailable' : formatCurrency(calculation.current_charge, currency));
     setText('[data-billing-consumption]', type === 'unavailable' && !hasReadings ? 'No readings' : type === 'unavailable' ? 'Unavailable' : formatCubicMeterValue(calculation.total_cubic_meter));
     setText('[data-billing-reading-count]', `${formatNumber(billing?.reading_count ?? 0, 0)} reading${Number(billing?.reading_count ?? 0) === 1 ? '' : 's'} in this period`);
@@ -2674,17 +2717,19 @@ const renderHouseholdBilling = (billing) => {
         ? (billing.rate_effective_date ? `Effective ${billing.rate_effective_date}` : 'Effective for this billing period')
         : 'No active rate configured');
     setText('[data-billing-balance]', calculation.remaining_balance === null || calculation.remaining_balance === undefined ? 'Not finalized' : formatCurrency(calculation.remaining_balance, currency));
-    setText('[data-billing-record-type]', `${billingRecordTypeLabel(type)} · ${billing?.period?.label ?? 'Current period'}`);
+    setText('[data-billing-record-type]', `${recordTypeLabel} · ${periodLabel}`);
     setText(
         '[data-billing-explanation]',
         type === 'unavailable'
             ? 'This estimate will update automatically after the missing meter data or billing rate becomes available.'
-            : unavailableReason,
+            : !periodIsCurrent
+                ? `No readings have been received for the current month yet. This is the latest available estimate from ${periodLabel}.`
+                : unavailableReason,
     );
 
     const typeChip = $('[data-billing-type-chip]');
     if (typeChip) {
-        typeChip.textContent = billingRecordTypeLabel(type);
+        typeChip.textContent = recordTypeLabel;
         typeChip.classList.toggle('status-chip-soft', type === 'finalized');
         typeChip.classList.toggle('status-chip-muted', type === 'estimated' || type === 'unavailable');
         typeChip.classList.toggle('status-chip-alert', type === 'unavailable');
@@ -2698,7 +2743,7 @@ const renderHouseholdBilling = (billing) => {
                 <div class="billing-calculation-row"><span>Usage charge</span><strong>${formatCurrency(calculation.usage_charge, currency)}</strong></div>
                 <div class="billing-calculation-row"><span>Fixed monthly charge</span><strong>${formatCurrency(calculation.fixed_monthly_charge, currency)}</strong></div>
                 <div class="billing-calculation-row"><span>Subsidy or discount</span><strong class="billing-discount">− ${formatCurrency(calculation.subsidy_deduction, currency)}</strong></div>
-                <div class="billing-calculation-total"><span>${type === 'finalized' ? 'Finalized charge' : 'Estimated current charge'}</span><strong>${formatCurrency(calculation.current_charge, currency)}</strong></div>`;
+                <div class="billing-calculation-total"><span>${type === 'finalized' ? 'Finalized charge' : periodIsCurrent ? 'Estimated current charge' : 'Latest estimated charge'}</span><strong>${formatCurrency(calculation.current_charge, currency)}</strong></div>`;
     }
 
     const meterContainer = $('[data-billing-meter]');
@@ -2718,7 +2763,7 @@ const renderHouseholdBilling = (billing) => {
     const latestContainer = $('[data-billing-latest-reading]');
     if (latestContainer) {
         latestContainer.innerHTML = latest
-            ? `<div><dt>Recorded</dt><dd>${escapeHtml(formatDateTime(latest.recorded_at))}</dd></div><div><dt>Flow rate</dt><dd>${formatNumber(latest.flow_rate)} L/min</dd></div><div><dt>Reading volume</dt><dd>${formatNumber(latest.liters_used, 2)} L · ${formatCubicMeterValue(latest.cubic_meter)}</dd></div><div><dt>Meter connection</dt><dd>${escapeHtml(normalizeConnectionStatus(latest.device_connection_status))}</dd></div>`
+            ? `<div><dt>Recorded</dt><dd>${escapeHtml(formatDateTime(latest.recorded_at))}</dd></div><div><dt>Flow rate</dt><dd>${formatNumber(latest.flow_rate)} L/min</dd></div><div><dt>Reading volume</dt><dd>${formatNumber(latest.liters_used, 2)} L · ${formatCubicMeterValue(latest.cubic_meter)}</dd></div><div><dt>Connection when recorded</dt><dd>${escapeHtml(normalizeConnectionStatus(latest.device_connection_status))}</dd></div>`
             : '<div class="billing-reading-empty"><i class="bi bi-activity" aria-hidden="true"></i><div><strong>No recent meter reading</strong><span>The latest billing-period reading will appear here automatically.</span></div></div>';
     }
 
@@ -2763,19 +2808,24 @@ const loadHouseholdBilling = ({ force = false } = {}) => {
             const response = await requestJson('/api/household-billing');
             const billing = response?.data ?? {};
             renderHouseholdBilling(billing);
+            householdBillingSnapshot = billing;
             householdBillingLoaded = true;
-            const currentCharge = billing?.calculation?.current_charge;
-            setText('[data-estimated-bill]', currentCharge === null || currentCharge === undefined ? 'No data' : formatCurrency(currentCharge, billing?.calculation?.currency));
-            setText('[data-billing-state]', billing.record_type === 'unavailable' ? 'No billable readings this period.' : 'Current billing-period estimate.');
-            setText('[data-billing-badge]', billing.record_type === 'finalized' ? 'Finalized' : billing.record_type === 'estimated' ? 'Estimated' : 'Unavailable');
+            const periodIsCurrent = billing?.period?.is_current !== false;
+            const periodLabel = billing?.period?.label ?? 'the latest available period';
+            applyHouseholdBillingSummary(billing);
             setHouseholdBillingState(
-                billing.record_type === 'unavailable' ? 'Billing needs attention' : `${billingRecordTypeLabel(billing.record_type)} ready`,
+                billing.record_type === 'unavailable'
+                    ? 'Billing needs attention'
+                    : billing.record_type === 'estimated' && !periodIsCurrent
+                        ? `${periodLabel} estimate ready`
+                        : `${billingRecordTypeLabel(billing.record_type)} ready`,
                 billing.record_type === 'unavailable' ? 'empty' : 'ready',
             );
             return true;
         } catch (error) {
             console.error('Dashboard request failed: /api/household-billing', error);
             householdBillingLoaded = false;
+            householdBillingSnapshot = null;
             if (handleAuthFailure(error)) return false;
             const payload = errorPayload(error);
             const message = error?.status === 404
@@ -2857,7 +2907,7 @@ const renderHouseholdServiceRequestDetail = (item) => {
     const container = $('[data-service-request-list]');
     if (!container) return;
     const messages = (item.messages ?? []).map((message) => `<div class="service-request-message ${message.author?.role === 'admin' ? 'is-staff' : 'is-household'}"><strong>${escapeHtml(message.author?.role === 'admin' ? 'Municipal staff' : 'You')}</strong><p>${escapeHtml(message.message)}</p><small>${escapeHtml(formatDateTime(message.created_at))}</small></div>`).join('');
-    container.innerHTML = `<button class="link-button" type="button" data-request-back>← Back to requests</button>
+    container.innerHTML = `<button class="link-button" type="button" data-request-back>← Back to messages</button>
         <article class="service-request-detail"><header><div><small>${escapeHtml(item.reference_number)}</small><h3>${escapeHtml(item.subject)}</h3></div><span class="status-chip">${escapeHtml(String(item.status).replaceAll('_', ' '))}</span></header>
         <p>${escapeHtml(item.description)}</p><div class="service-request-thread">${messages}</div>
         ${!['closed'].includes(item.status) ? `<form class="stack-form service-request-reply-form" data-household-request-reply="${escapeHtml(item.id)}"><label>Add a reply<textarea name="message" maxlength="5000" required></textarea></label><button class="button button-secondary" type="submit">Send reply</button></form>` : ''}</article>`;
@@ -2869,10 +2919,10 @@ const loadHouseholdServiceRequests = async () => {
     try {
         const response = await requestJson('/api/service-requests?per_page=50');
         const items = responseItems(response);
-        setText('[data-request-summary]', `${items.length} request${items.length === 1 ? '' : 's'}`);
-        container.innerHTML = items.length ? items.map((item) => `<article class="service-request-item"><div><small>${escapeHtml(item.reference_number)} · ${escapeHtml(String(item.category).replaceAll('_', ' '))}</small><strong>${escapeHtml(item.subject)}</strong><span>Updated ${escapeHtml(formatCompactDateTime(item.updated_at))}</span></div><span class="status-chip">${escapeHtml(String(item.status).replaceAll('_', ' '))}</span><button class="link-button" type="button" data-request-open="${escapeHtml(item.id)}">View conversation</button></article>`).join('') : '<div class="dashboard-empty-state"><strong>No service requests</strong><span>New requests and staff responses will appear here.</span></div>';
+        setText('[data-request-summary]', `${items.length} message${items.length === 1 ? '' : 's'}`);
+        container.innerHTML = items.length ? items.map((item) => `<article class="service-request-item"><div><small>${escapeHtml(item.reference_number)} · ${escapeHtml(String(item.category).replaceAll('_', ' '))}</small><strong>${escapeHtml(item.subject)}</strong><span>Updated ${escapeHtml(formatCompactDateTime(item.updated_at))}</span></div><span class="status-chip">${escapeHtml(String(item.status).replaceAll('_', ' '))}</span><button class="link-button" type="button" data-request-open="${escapeHtml(item.id)}">Open message</button></article>`).join('') : '<div class="dashboard-empty-state"><strong>No household messages</strong><span>New messages and administrator responses will appear here.</span></div>';
     } catch (error) {
-        if (!handleAuthFailure(error)) container.innerHTML = '<div class="dashboard-empty-state is-error"><strong>Requests unavailable</strong><span>Please try again.</span></div>';
+        if (!handleAuthFailure(error)) container.innerHTML = '<div class="dashboard-empty-state is-error"><strong>Messages unavailable</strong><span>Please try again.</span></div>';
     }
 };
 
@@ -3415,15 +3465,16 @@ const renderHouseholdConsumptionState = ({ value = '', description = '', hasUnit
 };
 
 const renderHouseholdConsumption = (data) => {
-    const value = Number(data?.cubic_meters);
+    const value = Number(data?.liters);
+    const cubicMeters = Number(data?.cubic_meters);
     const period = data?.period ?? householdConsumptionPeriod;
     setHouseholdConsumptionPeriod(period);
 
     if (data?.has_data === true && Number.isFinite(value)) {
         const description = value === 0
             ? 'No water consumption recorded for this period.'
-            : householdConsumptionPeriods[period]?.description ?? 'Consumption recorded for this period.';
-        renderHouseholdConsumptionState({ value: formatNumber(value), description, hasUnit: true });
+            : `${householdConsumptionPeriods[period]?.description ?? 'Consumption recorded for this period.'}${Number.isFinite(cubicMeters) ? ` Equivalent to ${formatNumber(cubicMeters, 4)} m³ for billing.` : ''}`;
+        renderHouseholdConsumptionState({ value: formatNumber(value, 2), description, hasUnit: true });
         return;
     }
 
@@ -3584,11 +3635,15 @@ const renderHouseholdSummaryCards = (summaryData, latestReading, notifications, 
     const estimatedBill = !hasRate ? 'Rate unavailable' : hasEstimatedBill ? formatCurrency(summaryData.estimated_bill) : 'No data';
     const leakDetected = Boolean(latestReading?.is_possible_leak);
     const leakStatus = !latestReading ? 'Unavailable' : leakDetected ? 'Possible leak' : 'Normal';
-    const monitoringStatus = normalizeMonitoringStatus(latestReading?.monitoring_status);
-    const wifiStatus = latestReading?.wifi_signal_strength === null || latestReading?.wifi_signal_strength === undefined
-        ? 'Unavailable'
-        : Number(latestReading.wifi_signal_strength) > 0 ? 'Connected' : 'Disconnected';
     const connection = resolveHouseholdConnection(deviceState, latestReading);
+    const monitoringStatus = connection.isLive
+        ? normalizeMonitoringStatus(latestReading?.monitoring_status)
+        : connection.label;
+    const wifiStatus = !connection.isLive
+        ? connection.label
+        : latestReading?.wifi_signal_strength === null || latestReading?.wifi_signal_strength === undefined
+            ? 'Unavailable'
+            : Number(latestReading.wifi_signal_strength) > 0 ? 'Connected' : 'Disconnected';
     const overallConnection = connection.label;
     const lastUpdated = deviceState?.last_seen_at || latestReading?.recorded_at
         ? formatDateTime(deviceState?.last_seen_at ?? latestReading.recorded_at)
@@ -3597,13 +3652,13 @@ const renderHouseholdSummaryCards = (summaryData, latestReading, notifications, 
 
     setText('[data-stat-readings]', readingCount);
     setText('[data-stat-liters]', totalConsumed);
-    setText('[data-stat-bill]', estimatedBill);
+    setText('[data-stat-bill]', householdBillingSnapshot ? formatCurrency(householdBillingSnapshot.calculation?.current_charge, householdBillingSnapshot.calculation?.currency) : estimatedBill);
     const unreadCount = Number(notifications.unread ?? 0);
     setText('[data-stat-alerts]', unreadCount > 0 ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}` : 'No unread notifications');
     setHouseholdAlertCount(notifications.unread ?? 0);
     setText('[data-today-total]', totalConsumed);
     setText('[data-total-consumed]', totalConsumed);
-    setText('[data-estimated-bill]', estimatedBill);
+    setText('[data-estimated-bill]', householdBillingSnapshot ? formatCurrency(householdBillingSnapshot.calculation?.current_charge, householdBillingSnapshot.calculation?.currency) : estimatedBill);
     setText('[data-quick-summary]', quickSummary);
     const flowValue = Number(latestReading?.flow_rate);
     const hasFlowReading = latestReading && Number.isFinite(flowValue);
@@ -3616,19 +3671,24 @@ const renderHouseholdSummaryCards = (summaryData, latestReading, notifications, 
         : flowValue === 0
             ? 'No active water flow detected.'
             : connection.isLive ? 'Water is currently flowing.' : `Last known reading. Last reading received ${formatDateTime(latestReading.recorded_at)}.`);
-    setText('[data-billing-state]', !hasRate ? 'No active water rate is configured.' : hasEstimatedBill ? 'Current billing-period estimate.' : 'No billable readings this period.');
+    if (householdBillingSnapshot) {
+        applyHouseholdBillingSummary(householdBillingSnapshot);
+    } else {
+        setText('[data-billing-state]', !hasRate ? 'No active water rate is configured.' : hasEstimatedBill ? 'Usage charge only; loading the complete monthly estimate.' : 'No billable readings this period.');
+    }
     setText('[data-leak-state]', !latestReading ? 'No recent device reading available.' : leakDetected ? 'Possible leak detected from the latest reading.' : 'No leak detected in the latest reading.');
     setText('[data-notification-state]', unreadCount > 0 ? 'Unread alerts need your attention.' : "You're all caught up.");
     setText('[data-system-water-meter]', connection.label);
     setText('[data-system-monitoring]', monitoringStatus);
     setText('[data-system-wifi]', wifiStatus);
-    setText('[data-system-server]', connection.label);
+    setText('[data-system-server]', 'Connected');
     setText('[data-system-leak]', leakStatus === 'Normal' ? 'Normal' : leakStatus);
     setText('[data-last-updated-label]', `Last updated: ${lastUpdated}`);
     setText('[data-last-updated]', lastUpdated);
 
     applyStatusTone('[data-leak-summary], [data-system-leak]', leakStatus);
-    applyStatusTone('[data-system-water-meter], [data-system-server], [data-connection-summary]', overallConnection);
+    applyStatusTone('[data-system-water-meter], [data-connection-summary]', overallConnection);
+    applyStatusTone('[data-system-server]', 'Connected');
     applyStatusTone('[data-flow-badge], [data-connection-badge]', overallConnection);
     applyStatusTone('[data-system-monitoring]', monitoringStatus);
     applyStatusTone('[data-system-wifi]', wifiStatus);
@@ -3638,11 +3698,15 @@ const renderHouseholdSummaryCards = (summaryData, latestReading, notifications, 
     });
     setText('[data-flow-badge]', connection.isLive ? 'Live' : connection.label);
     setText('[data-connection-badge]', connection.label);
-    setText('[data-billing-badge]', !hasRate ? 'Unavailable' : billingStatement ? 'Finalized' : 'Estimated');
-    applyStatusTone('[data-billing-badge]', !hasRate ? 'Unavailable' : billingStatement ? 'Finalized' : 'Estimated');
+    if (!householdBillingSnapshot) {
+        setText('[data-billing-badge]', !hasRate ? 'Unavailable' : billingStatement ? 'Finalized' : 'Loading');
+        applyStatusTone('[data-billing-badge]', !hasRate ? 'Unavailable' : billingStatement ? 'Finalized' : 'Loading');
+    }
 
     renderNotifications(notifications.latest ?? [], '[data-dashboard-notifications-list]');
     setText('[data-live-label]', connection.isLive ? 'Live' : connection.label);
+    setText('[data-dashboard-live-state]', connection.isLive ? 'Meter online' : connection.label);
+    applyStatusTone('[data-dashboard-live-state]', connection.label);
 };
 
 const refreshLiveDashboard = async () => {
@@ -4425,8 +4489,6 @@ const renderAdminOverviewAttention = (analytics) => {
         [Number(devices.pending_activation ?? 0), 'Meters pending activation', 'Complete device commissioning', 'device-management', 'bi-cpu'],
         [Number(devices.offline ?? 0), 'Offline meters', 'Check connection health and last-seen time', 'device-management', 'bi-wifi-off'],
         [Number(households.inactive ?? 0) + Number(households.suspended ?? 0), 'Inactive or suspended households', 'Review account access and status', 'customer-management', 'bi-people'],
-        [Number(alerts.unread_notifications ?? 0), 'Unread household notifications', 'Open the notification queue', 'notifications', 'bi-bell'],
-        [Number(analytics.device_sync?.failed_attempts ?? 0), 'Failed device sync attempts', 'Review recent operational reports', 'reports', 'bi-arrow-repeat'],
     ].filter(([count]) => count > 0);
 
     container.innerHTML = items.length
@@ -4530,12 +4592,12 @@ const loadAdminActionCenter = async () => {
         const summary = data.summary ?? {};
         setText('[data-action-center-summary]', `${formatNumber(summary.total_attention ?? 0, 0)} requiring attention`);
         metrics.innerHTML = [
-            ['Open requests', summary.open_service_requests ?? 0, 'service-requests'],
+            ['Open messages', summary.open_service_requests ?? 0, 'service-requests'],
             ['Overdue bills', summary.overdue_statements ?? 0, 'billing-management'],
             ['Active leaks', summary.active_leaks ?? 0, 'leak-monitoring'],
-            ['Failed notices', summary.failed_notifications ?? 0, 'notifications'],
         ].map(([label, value, target]) => `<button type="button" data-admin-nav="${target}"><small>${label}</small><strong>${formatNumber(value, 0)}</strong></button>`).join('');
-        list.innerHTML = (data.items ?? []).length ? data.items.map((item) => `<article class="action-center-item is-${escapeHtml(item.severity)}"><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.description)}</small></span><span class="status-chip">${escapeHtml(String(item.status).replaceAll('_', ' '))}</span><button class="link-button" type="button" data-admin-nav="${escapeHtml(item.target)}">Open</button></article>`).join('') : '<div class="dashboard-empty-state"><strong>Action center clear</strong><span>No unresolved website workflow currently requires attention.</span></div>';
+        const supportedItems = (data.items ?? []).filter((item) => ['service-requests', 'billing-management', 'leak-monitoring', 'device-management', 'customer-management', 'consumption-monitoring'].includes(item.target));
+        list.innerHTML = supportedItems.length ? supportedItems.map((item) => `<article class="action-center-item is-${escapeHtml(item.severity)}"><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.description)}</small></span><span class="status-chip">${escapeHtml(String(item.status).replaceAll('_', ' '))}</span><button class="link-button" type="button" data-admin-nav="${escapeHtml(item.target)}">Open</button></article>`).join('') : '<div class="dashboard-empty-state"><strong>Action center clear</strong><span>No unresolved website workflow currently requires attention.</span></div>';
         const panel = $('.admin-action-center');
         if (panel && panel.dataset.bound !== '1') {
             panel.dataset.bound = '1';
@@ -4575,10 +4637,10 @@ const loadAdminServiceRequests = async () => {
         const query = filter ? buildQuery(Object.fromEntries(new FormData(filter).entries())) : '';
         const response = await requestJson(`/api/service-requests${query}`);
         const items = responseItems(response);
-        setText('[data-admin-request-summary]', `${responsePaginator(response).total ?? items.length} request${items.length === 1 ? '' : 's'}`);
-        container.innerHTML = items.length ? items.map((item) => `<article class="admin-service-request-item"><span><strong>${escapeHtml(item.subject)}</strong><small>${escapeHtml(item.reference_number)} · ${escapeHtml(item.household?.name)} · ${escapeHtml(String(item.category).replaceAll('_', ' '))}</small></span><span class="status-chip">${escapeHtml(String(item.priority))}</span><span class="status-chip">${escapeHtml(String(item.status).replaceAll('_', ' '))}</span><button class="link-button" type="button" data-admin-request-open="${escapeHtml(item.id)}">Manage</button></article>`).join('') : '<div class="dashboard-empty-state"><strong>No matching service requests</strong></div>';
+        setText('[data-admin-request-summary]', `${responsePaginator(response).total ?? items.length} message${items.length === 1 ? '' : 's'}`);
+        container.innerHTML = items.length ? items.map((item) => `<article class="admin-service-request-item"><span><strong>${escapeHtml(item.subject)}</strong><small>${escapeHtml(item.reference_number)} · ${escapeHtml(item.household?.name)} · ${escapeHtml(String(item.category).replaceAll('_', ' '))}</small></span><span class="status-chip">${escapeHtml(String(item.priority))}</span><span class="status-chip">${escapeHtml(String(item.status).replaceAll('_', ' '))}</span><button class="link-button" type="button" data-admin-request-open="${escapeHtml(item.id)}">Open</button></article>`).join('') : '<div class="dashboard-empty-state"><strong>No matching household messages</strong></div>';
     } catch (error) {
-        if (!handleAuthFailure(error)) container.innerHTML = '<div class="dashboard-empty-state is-error"><strong>Service requests unavailable</strong></div>';
+        if (!handleAuthFailure(error)) container.innerHTML = '<div class="dashboard-empty-state is-error"><strong>Household messages unavailable</strong></div>';
     }
 };
 
@@ -5199,13 +5261,78 @@ const renderAdminSystemHealth = (response) => {
     applyStatusTone('[data-admin-system-failed-jobs]', failedJobs === 0 ? 'healthy' : 'critical');
 };
 
+const renderConsumptionAlertComparison = (comparison) => {
+    const container = $('[data-consumption-alert-comparison]');
+    if (!container) return;
+
+    const previous = comparison?.previous_month ?? {};
+    const current = comparison?.current_month ?? {};
+    const previousLiters = Math.max(0, Number(previous.total_liters ?? 0));
+    const currentLiters = Math.max(0, Number(current.total_liters ?? 0));
+    const largestValue = Math.max(previousLiters, currentLiters);
+    const previousWidth = largestValue > 0 && previousLiters > 0 ? Math.max(3, (previousLiters / largestValue) * 100) : 0;
+    const currentWidth = largestValue > 0 && currentLiters > 0 ? Math.max(3, (currentLiters / largestValue) * 100) : 0;
+    const changePercent = comparison?.change_percent === null || comparison?.change_percent === undefined
+        ? null
+        : Number(comparison.change_percent);
+
+    setText('[data-consumption-previous-label]', previous.label ?? 'Previous month');
+    setText('[data-consumption-current-label]', current.label ?? 'Current month');
+    setText('[data-consumption-previous-value]', `${formatNumber(previousLiters, 2)} L`);
+    setText('[data-consumption-current-value]', `${formatNumber(currentLiters, 2)} L`);
+
+    const previousBar = $('[data-consumption-previous-bar]');
+    const currentBar = $('[data-consumption-current-bar]');
+    if (previousBar) previousBar.style.width = `${Math.min(100, previousWidth)}%`;
+    if (currentBar) currentBar.style.width = `${Math.min(100, currentWidth)}%`;
+
+    const changeBadge = $('[data-consumption-comparison-change]');
+    if (changeBadge) {
+        changeBadge.classList.remove('status-chip-muted', 'status-chip-soft', 'status-chip-alert', 'consumption-change-increase');
+        if (changePercent === null) {
+            changeBadge.textContent = currentLiters > 0 ? 'New usage this month' : 'No comparison data';
+            changeBadge.classList.add('status-chip-muted');
+        } else if (changePercent > 0) {
+            changeBadge.textContent = `↑ ${formatNumber(Math.abs(changePercent), 2)}%`;
+            changeBadge.classList.add('consumption-change-increase');
+        } else if (changePercent < 0) {
+            changeBadge.textContent = `↓ ${formatNumber(Math.abs(changePercent), 2)}%`;
+            changeBadge.classList.add('status-chip-soft');
+        } else {
+            changeBadge.textContent = 'No change';
+            changeBadge.classList.add('status-chip-muted');
+        }
+    }
+
+    const previousReadings = Number(previous.reading_count ?? 0);
+    const currentReadings = Number(current.reading_count ?? 0);
+    setText(
+        '[data-consumption-comparison-summary]',
+        previousReadings + currentReadings > 0
+            ? `${formatNumber(currentReadings, 0)} current-month and ${formatNumber(previousReadings, 0)} previous-month household readings are included.`
+            : 'No household water readings were recorded in either month.',
+    );
+
+    const chart = $('[data-consumption-comparison-chart]');
+    if (chart) {
+        const changeDescription = changePercent === null
+            ? 'A percentage change is unavailable because the previous month has no recorded usage.'
+            : changePercent === 0
+                ? 'Usage is unchanged from the previous month.'
+                : `${Math.abs(changePercent).toFixed(2)} percent ${changePercent > 0 ? 'higher' : 'lower'} than the previous month.`;
+        chart.setAttribute(
+            'aria-label',
+            `${previous.label ?? 'Previous month'}: ${previousLiters.toFixed(2)} liters. ${current.label ?? 'Current month'} month to date: ${currentLiters.toFixed(2)} liters. ${changeDescription}`,
+        );
+    }
+};
+
 const loadAdmin = async () => {
     if (!hasTokenOrReport()) {
         return;
     }
 
     const devicesContainer = $('[data-municipal-devices]');
-    const reportsContainer = $('[data-admin-reports]');
     const billingSummaryContainer = $('[data-admin-billing-summary]');
     const deviceHouseholdSelect = $('[data-device-household-select]');
     const householdSelect = $('[data-household-select]');
@@ -5216,25 +5343,17 @@ const loadAdmin = async () => {
     const deviceRegisterForm = $('[data-device-register-form]');
     const activationResult = $('[data-activation-result]');
     const adminAlertsContainer = $('[data-admin-alerts]');
-    const announcementForm = $('[data-announcement-form]');
-    const announcementUser = $('[data-announcement-user]');
 
     bindAdminUserForm(userForm);
     bindAdminHouseholdEditForm();
     bindAdminDeviceRegistrationForm(deviceRegisterForm, activationResult);
     bindAdminDeviceActions(devicesContainer, activationResult);
     bindAdminLeakActions(adminAlertsContainer);
-    // Bind this before dashboard/report requests so notification delivery is
-    // not disabled by an unrelated analytics or device endpoint failure.
-    bindAdminNotificationForm(announcementForm);
-    bindAdminNotificationFilters();
     bindAdminSettingsForm(billingRatesForm, '/api/billing-settings/rates', '[data-billing-rates-status]', 'Billing rates saved successfully.');
     bindAdminSettingsForm(consumptionAlertForm, '/api/billing-settings/consumption-alerts', '[data-consumption-alert-status]', 'Consumption alert settings saved successfully.');
     bindAdminSettingsForm(leakSettingsForm, '/api/billing-settings/leak-settings', '[data-leak-settings-status]', 'Leak monitoring settings saved successfully.');
     bindBillingManagement();
     loadAdminBillingManagement();
-    bindAdminReports();
-    loadAdminReports();
     bindAdminServiceRequests();
     void loadAdminActionCenter();
 
@@ -5271,17 +5390,14 @@ const loadAdmin = async () => {
         await loadAdminUsers({ householdsOnly: true });
         bindConsumptionMonitoring();
         const consumptionPromise = loadAdminConsumption();
-        const overviewHouseholdUsers = await loadEligibleHouseholds([deviceHouseholdSelect, householdSelect, announcementUser]);
-        bindAdminNotificationAudience(announcementForm, overviewHouseholdUsers);
+        const overviewHouseholdUsers = await loadEligibleHouseholds([deviceHouseholdSelect, householdSelect]);
         const municipalDevicesPromise = loadAdminDevices();
         const leakAlertsPromise = loadAdminLeakAlerts();
-        const notificationHistoryPromise = loadAdminNotificationHistory();
-        const [summaryResponse, analyticsResponse, billingResponse, consumptionResponse, notificationsResponse, systemHealthResponse] = await Promise.all([
+        const [summaryResponse, analyticsResponse, billingResponse, consumptionResponse, systemHealthResponse] = await Promise.all([
             requestJson('/api/summary'),
             requestJson(`/api/analytics/admin${analyticsQuery(adminAnalyticsRange, adminAnalyticsFrom, adminAnalyticsTo, 'last_12_months')}`),
-            requestJson('/api/billing-settings'),
+            requestJson('/api/billing-settings', { forceNetwork: true }),
             requestJson('/api/reports/consumption'),
-            requestJson('/api/reports/notifications'),
             requestJson('/api/system-health').catch((error) => {
                 if (!handleAuthFailure(error)) console.error('System health request failed', error);
                 return null;
@@ -5303,6 +5419,7 @@ const loadAdmin = async () => {
             setValue(billingRatesForm, 'effective_date', billingFormSettings.effective_date ? String(billingFormSettings.effective_date).slice(0, 10) : '');
             setValue(billingRatesForm, 'currency', billingFormSettings.currency ?? 'PHP');
 
+            setValue(consumptionAlertForm, 'threshold_liters', billingFormSettings.threshold_liters ?? 15000);
             setValue(consumptionAlertForm, 'percentage_threshold', billingFormSettings.consumption_change_threshold_percent ?? 100);
             setValue(consumptionAlertForm, 'notification_behavior', billingFormSettings.consumption_alert_behavior ?? 'household');
             if (consumptionAlertForm?.elements?.consumption_alert_enabled) consumptionAlertForm.elements.consumption_alert_enabled.checked = billingFormSettings.consumption_alert_enabled !== false;
@@ -5317,12 +5434,11 @@ const loadAdmin = async () => {
         const summary = summaryResponse.data ?? {};
         const analytics = analyticsResponse.data ?? {};
         const consumption = consumptionResponse.data ?? {};
-        const notificationReport = notificationsResponse.data ?? {};
+        renderConsumptionAlertComparison(consumption.monthly_comparison);
         renderAdminSystemHealth(systemHealthResponse);
         const leakHouseholds = await leakAlertsPromise;
         const municipalDevices = await municipalDevicesPromise;
         await consumptionPromise;
-        await notificationHistoryPromise;
         const onlineDevices = municipalDevices.filter((device) => device.is_online).length;
         const offlineDevices = municipalDevices.filter((device) => !device.is_online && device.status !== 'decommissioned').length;
         const totalConsumption = analytics.consumption?.has_data
@@ -5336,8 +5452,6 @@ const loadAdmin = async () => {
         setText('[data-admin-devices]', analytics.devices?.total ?? 0);
         setText('[data-admin-online-devices]', analytics.devices?.connected ?? 0);
         setText('[data-admin-offline-devices]', analytics.devices?.offline ?? 0);
-        setAdminNotificationCount(analytics.alerts?.unread_notifications ?? 0);
-        setText('[data-admin-unread-notifications]', analytics.alerts?.unread_notifications ?? 0);
         setText('[data-admin-unresolved-leaks]', analytics.alerts?.unresolved_leak_alerts ?? 0);
         setText('[data-admin-liters]', totalConsumption);
         setText('[data-admin-billing-total]', estimatedBilling);
@@ -5369,31 +5483,11 @@ const loadAdmin = async () => {
             emptyMessage: '<div class="chart-empty-state"><strong>No analytics data available yet</strong><span>Analytics will appear after the system receives valid water-meter readings.</span></div>',
         });
 
-        if (reportsContainer) {
-            const recentActions = analytics.recent?.administrative_actions ?? [];
-            const recentActivityMarkup = recentActions.length
-                ? recentActions.slice(0, 8).map((item) => `<li><strong>${escapeHtml(item.action)}</strong><span>${escapeHtml(item.description)}</span><small>${escapeHtml(item.actor ?? 'System')} · ${escapeHtml(formatCompactDateTime(item.created_at))}</small></li>`).join('')
-                : '<li class="empty-state">No administrative activity recorded for this period.</li>';
-            reportsContainer.innerHTML = `
-                <div><dt>Selected-period readings</dt><dd>${analytics.consumption?.reading_count ?? 'No data yet'}</dd></div>
-                <div><dt>Monthly usage</dt><dd>${totalConsumption}</dd></div>
-                <div><dt>Estimated billing</dt><dd>${estimatedBilling}</dd></div>
-                <div><dt>Unread alerts</dt><dd>${analytics.alerts?.unread_notifications ?? 0}</dd></div>
-                <div><dt>Consumption rows</dt><dd>${consumption.summary?.reading_count ?? 0}</dd></div>
-                <div><dt>Notification items</dt><dd>${notificationReport.total ?? 0}</dd></div>
-                <div><dt>Failed device sync attempts</dt><dd>${analytics.device_sync?.failed_attempts ?? 0}</dd></div>
-                <div><dt>Average household usage</dt><dd>${analytics.consumption?.average_household_liters === null || analytics.consumption?.average_household_liters === undefined ? 'No data yet' : formatCubicMeters(analytics.consumption.average_household_liters)}</dd></div>
-                <div><dt>Recent account registrations</dt><dd>${analytics.recent?.account_registrations?.length ?? 0}</dd></div>
-                <div><dt>Recent account deactivations</dt><dd>${analytics.recent?.account_deactivations?.length ?? 0}</dd></div>
-                <div><dt>Recent device assignments</dt><dd>${analytics.recent?.device_assignments?.length ?? 0}</dd></div>
-                <div class="analytics-activity"><dt>Recent administrative actions</dt><dd><ul>${recentActivityMarkup}</ul></dd></div>
-            `;
-        }
-
         if (billingSummaryContainer) {
             billingSummaryContainer.innerHTML = `
                 <div><dt>Water rate per m³</dt><dd>${billingSettings ? formatCurrency(billingSettings.water_rate) : '--'}</dd></div>
                 <div><dt>Fixed monthly charge</dt><dd>${billingSettings ? formatCurrency(billingSettings.fixed_monthly_charge ?? 0) : '--'}</dd></div>
+                <div><dt>Monthly usage limit</dt><dd>${billingSettings ? `${formatNumber(billingSettings.threshold_liters ?? 0)} L` : '--'}</dd></div>
                 <div><dt>Consumption change alert</dt><dd>${billingSettings ? `${formatNumber(billingSettings.consumption_change_threshold_percent ?? 100)}%` : '--'}</dd></div>
                 <div><dt>Leak threshold</dt><dd>${billingSettings ? `${formatNumber(billingSettings.leak_flow_rate_threshold ?? 0)} L/min` : '--'}</dd></div>
                 <div><dt>Quiet hours</dt><dd>${billingSettings ? `${billingSettings.quiet_hours_start}:00 - ${billingSettings.quiet_hours_end}:00` : '--'}</dd></div>
@@ -5405,8 +5499,8 @@ const loadAdmin = async () => {
         const currentSummary = $('[data-water-rate-current-summary]');
         if (currentSummary) {
             currentSummary.innerHTML = billingSettings
-                ? `<div><dt>Current water rate</dt><dd>${formatCurrency(billingSettings.water_rate)} / m³</dd></div><div><dt>Effective date</dt><dd>${escapeHtml(billingSettings.effective_date ? formatDateTime(billingSettings.effective_date) : 'Immediately')}</dd></div><div><dt>Currency</dt><dd>${escapeHtml(billingSettings.currency ?? 'PHP')}</dd></div><div><dt>Leak monitoring</dt><dd>${billingSettings.leak_alert_enabled === false ? 'Disabled' : `${formatNumber(billingSettings.leak_flow_rate_threshold ?? 0)} L/min`}</dd></div>`
-                : '<div><dt>Current water rate</dt><dd>Not configured</dd></div><div><dt>Effective date</dt><dd>--</dd></div><div><dt>Currency</dt><dd>PHP</dd></div><div><dt>Leak monitoring</dt><dd>Not configured</dd></div>';
+                ? `<div><dt>Current water rate</dt><dd>${formatCurrency(billingSettings.water_rate)} / m³</dd></div><div><dt>Effective date</dt><dd>${escapeHtml(billingSettings.effective_date ? formatDateTime(billingSettings.effective_date) : 'Immediately')}</dd></div><div><dt>Currency</dt><dd>${escapeHtml(billingSettings.currency ?? 'PHP')}</dd></div><div><dt>Monthly usage limit</dt><dd>${formatNumber(billingSettings.threshold_liters ?? 0)} L</dd></div><div><dt>Leak monitoring</dt><dd>${billingSettings.leak_alert_enabled === false ? 'Disabled' : `${formatNumber(billingSettings.leak_flow_rate_threshold ?? 0)} L/min`}</dd></div>`
+                : '<div><dt>Current water rate</dt><dd>Not configured</dd></div><div><dt>Effective date</dt><dd>--</dd></div><div><dt>Currency</dt><dd>PHP</dd></div><div><dt>Monthly usage limit</dt><dd>--</dd></div><div><dt>Leak monitoring</dt><dd>Not configured</dd></div>';
         }
 
         renderAdminAlerts(leakHouseholds);
@@ -5550,23 +5644,9 @@ const bootCommon = () => {
             setNotificationDropdownOpen(false);
         }
     });
-    adminNotificationToggle?.addEventListener('click', () => {
-        const shouldOpen = adminNotificationDropdown?.hidden !== false;
-        setAdminNotificationDropdownOpen(shouldOpen);
-        if (shouldOpen) void loadAdminNotificationDropdown();
-    });
-    adminNotificationDropdown?.addEventListener('click', (event) => {
-        if (event.target.closest('[data-admin-notification-view-all]')) {
-            setAdminNotificationDropdownOpen(false);
-            showAdminView('notifications');
-        }
-    });
     document.addEventListener('click', (event) => {
         if (notificationDropdown?.hidden === false && !notificationControl?.contains(event.target)) {
             setNotificationDropdownOpen(false);
-        }
-        if (adminNotificationDropdown?.hidden === false && !adminNotificationControl?.contains(event.target)) {
-            setAdminNotificationDropdownOpen(false);
         }
     });
     document.addEventListener('keydown', (event) => {
@@ -5868,12 +5948,22 @@ const bootCommon = () => {
     });
 
     $$('[data-history-export-pdf]').forEach((button) => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
             const pdfUrl = `/api/exports/readings${buildQuery({
                 from: historyState.from,
                 to: historyState.to,
             })}`;
-            window.open(pdfUrl, '_blank');
+            button.disabled = true;
+            button.setAttribute('aria-busy', 'true');
+            try {
+                await downloadAuthenticatedFile(pdfUrl, `consumption-history-${historyPeriod}.pdf`);
+                showToast('Consumption history PDF exported successfully.');
+            } catch (error) {
+                if (!handleAuthFailure(error)) showToast('Could not export the consumption history PDF.', 'error');
+            } finally {
+                button.disabled = false;
+                button.removeAttribute('aria-busy');
+            }
         });
     });
 

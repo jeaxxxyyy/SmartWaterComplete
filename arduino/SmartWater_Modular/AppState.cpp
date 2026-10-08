@@ -1,8 +1,12 @@
 #include "AppState.h"
 
+#include <math.h>
+
 float flowRate = 0.0F;
 float intervalLiters = 0.0F;
 float totalLiters = 0.0F;
+float serverPeriodLiters = NAN;
+float serverWaterLimitLiters = NAN;
 
 float pendingFlowRate = 0.0F;
 float pendingLiters = 0.0F;

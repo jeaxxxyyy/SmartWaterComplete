@@ -54,6 +54,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/readings', [WaterController::class, 'index']);
     Route::get('/live-readings', [WaterController::class, 'liveReadings']);
     Route::get('/consumption-history', [WaterController::class, 'history']);
+    Route::get('/exports/readings', [ExportController::class, 'readings']);
     Route::get('/summary', [ReportController::class, 'summary']);
     Route::get('/analytics/household', [AnalyticsController::class, 'household']);
     Route::get('/live-state', [WaterController::class, 'liveState']);
@@ -126,7 +127,6 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::delete('/municipal-devices/{device}', [DeviceController::class, 'decommission']);
     Route::delete('/notifications/sent/all', [NotificationController::class, 'destroyAllSent']);
     Route::delete('/notifications/sent/{notification}', [NotificationController::class, 'destroy']);
-    Route::get('/exports/readings', [ExportController::class, 'readings']);
     Route::get('/exports/billing-statements', [ExportController::class, 'billingStatements']);
     Route::get('/exports/notifications', [ExportController::class, 'notifications']);
     Route::get('/report-management', [AdminReportController::class, 'index']);

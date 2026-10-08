@@ -100,8 +100,9 @@ void preparePendingReading() {
   persistPendingReading();
 
   Serial.printf(
-      "Telemetry queued: %s | %.4f L pending | %.4f L total\n",
-      pendingReadingId.c_str(), pendingLiters, pendingTotalLiters);
+      "[Upload] Queued %.4f L at %.2f L/min.\n",
+      pendingLiters,
+      pendingFlowRate);
 }
 
 void completePendingReading() {
@@ -128,8 +129,9 @@ void completePendingReading() {
   preferences.putUInt("reading_seq", readingSequence);
 
   Serial.printf(
-      "Telemetry acknowledged: %.4f L | Remaining unsent: %.4f L\n",
-      acknowledgedLiters, intervalLiters);
+      "[Upload] Confirmed %.4f L | Waiting to send: %.4f L.\n",
+      acknowledgedLiters,
+      intervalLiters);
 
   clearPersistedPendingReading();
   clearPendingReadingFromMemory();
@@ -163,15 +165,12 @@ String waterReadingPayload() {
   body += "\"device_name\":\"" + String(DEVICE_NAME) + "\",";
   body += "\"flow_rate\":" + String(pendingFlowRate, 2) + ",";
   body += "\"liters_used\":" + String(pendingLiters, 4) + ",";
-  body += "\"total_water_liters\":" + String(pendingTotalLiters, 4) + ",";
   body += "\"cubic_meter\":" + String(pendingLiters / 1000.0F, 6) + ",";
-  body += "\"water_limit_liters\":" + String(WATER_LIMIT_LITERS, 2) + ",";
   body += "\"monitoring_status\":\"";
   body += monitoring ? "online" : "paused";
   body += "\",";
   body += "\"wifi_signal_strength\":" + String(wifiPercent()) + ",";
-  body += "\"device_connection_status\":\"connected\",";
-  body += "\"server_connection_status\":\"connected\"";
+  body += "\"device_connection_status\":\"connected\"";
   body += "}";
 
   return body;
@@ -204,8 +203,7 @@ void restoreTelemetryState() {
     clearPersistedPendingReading();
     clearPendingReadingFromMemory();
 
-    Serial.println(
-        "Recovered a completed Laravel acknowledgement after restart.");
+    Serial.println("[Storage] Completed the last confirmed upload after restart.");
   } else {
     pendingReadingId = preferences.getString(PENDING_ID_KEY, "");
 
@@ -225,17 +223,16 @@ void restoreTelemetryState() {
         persistTelemetryState(true);
       }
 
-      Serial.printf(
-          "Restored pending telemetry: %s | %.4f L\n",
-          pendingReadingId.c_str(), pendingLiters);
     } else {
       clearPendingReadingFromMemory();
     }
   }
 
-  Serial.printf(
-      "Restored water state: %.4f L unsent | %.4f L total\n",
-      intervalLiters, totalLiters);
+  if (intervalLiters > 0.0F) {
+    Serial.printf("[Storage] Restored %.4f L waiting to upload.\n", intervalLiters);
+  } else {
+    Serial.println("[Storage] No water is waiting to upload.");
+  }
 }
 
 void clearStoredDeviceToken() {
@@ -249,37 +246,37 @@ void clearStoredDeviceToken() {
 
 bool activateDevice() {
   if (!activationRetryAllowed()) {
-  static unsigned long lastRetryMessage = 0;
+    static unsigned long lastRetryMessage = 0;
 
-  if (millis() - lastRetryMessage >= 15000) {
-    const unsigned long elapsed =
-        millis() - lastActivationAttempt;
+    if (millis() - lastRetryMessage >= 15000) {
+      const unsigned long elapsed =
+          millis() - lastActivationAttempt;
 
-    const unsigned long remaining =
-        elapsed >= ACTIVATION_RETRY_MS
-            ? 0
-            : ACTIVATION_RETRY_MS - elapsed;
+      const unsigned long remaining =
+          elapsed >= ACTIVATION_RETRY_MS
+              ? 0
+              : ACTIVATION_RETRY_MS - elapsed;
 
-    Serial.printf(
-      "Waiting before activation retry: %lu seconds.\n",
-      remaining / 1000
-    );
+      Serial.printf(
+          "[Activation] Retrying in %lu seconds.\n",
+          remaining / 1000
+      );
 
-    lastRetryMessage = millis();
+      lastRetryMessage = millis();
+    }
+
+    return false;
   }
 
-  return false;
-}
-
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Activation skipped: WiFi is disconnected.");
+    Serial.println("[Activation] Waiting for Wi-Fi.");
     return false;
   }
 
   if (strlen(SMARTWATER_DEVICE_UUID) == 0 ||
       strlen(SMARTWATER_ACTIVATION_CODE) == 0) {
     Serial.println(
-        "Activation skipped: UUID or activation code is empty.");
+        "[Activation] Missing device UUID or activation code.");
     return false;
   }
 
@@ -291,12 +288,8 @@ bool activateDevice() {
 
   HTTPClient http;
 
-  Serial.println();
-  Serial.print("Activation endpoint: ");
-  Serial.println(endpoint);
-
   if (!http.begin(endpoint)) {
-    Serial.println("Could not initialize activation request.");
+    Serial.println("[Activation] Could not start the server request.");
     return false;
   }
 
@@ -308,21 +301,21 @@ bool activateDevice() {
   const int status = http.POST(activationPayload());
   const String response = http.getString();
 
-  Serial.printf("Activation HTTP status: %d\n", status);
-  Serial.print("Activation response: ");
-  Serial.println(response);
+  Serial.printf("[Activation] Server returned HTTP %d.\n", status);
+  // The successful response contains the bearer token. Never print it to the
+  // serial console, where it could be copied into logs or screenshots.
 
   http.end();
 
   if (status == 429) {
     Serial.println(
-        "Laravel rate-limited activation. Waiting 60 seconds.");
+        "[Activation] Too many attempts. Waiting 60 seconds.");
     return false;
   }
 
   // Accept both OK and Created responses.
   if (status != 200 && status != 201) {
-    Serial.println("Device activation failed.");
+    Serial.println("[Activation] Device activation failed.");
     return false;
   }
 
@@ -330,14 +323,13 @@ bool activateDevice() {
 
   if (deviceToken.isEmpty()) {
     Serial.println(
-        "Activation succeeded, but Laravel returned no 'token' field.");
+        "[Activation] The server did not return a device token.");
     return false;
   }
 
   preferences.putString("api_token", deviceToken);
 
-  Serial.println("Device activated successfully.");
-  Serial.println("Bearer token saved in ESP32 Preferences.");
+  Serial.println("[Activation] Complete. Device access saved.");
 
   return true;
 }
@@ -354,7 +346,7 @@ void sendReading() {
 
   if (WiFi.status() != WL_CONNECTED) {
     serverConnected = false;
-    Serial.println("Reading not sent: WiFi is disconnected.");
+    Serial.println("[Upload] Waiting for Wi-Fi. Water usage is saved on the meter.");
     return;
   }
 
@@ -371,13 +363,9 @@ void sendReading() {
 
   HTTPClient http;
 
-  Serial.println();
-  Serial.print("Water-data endpoint: ");
-  Serial.println(endpoint);
-
   if (!http.begin(endpoint)) {
     serverConnected = false;
-    Serial.println("Could not initialize water-data request.");
+    Serial.println("[Upload] Could not start the server request.");
     return;
   }
 
@@ -388,37 +376,54 @@ void sendReading() {
 
   const String body = waterReadingPayload();
 
-  Serial.print("Water payload: ");
-  Serial.println(body);
-
   const int status = http.POST(body);
   const String response = http.getString();
-
-  Serial.printf("Water-data HTTP status: %d\n", status);
-  Serial.print("Laravel response: ");
-  Serial.println(response);
 
   serverConnected = status >= 200 && status < 300;
 
   if (serverConnected) {
+    const String acknowledgedReadingId =
+        jsonStringValue(response, "reading_id");
+
+    if (acknowledgedReadingId != pendingReadingId) {
+      Serial.println("[Upload] Server acknowledgement did not match. The reading remains queued.");
+      http.end();
+      return;
+    }
+
     leakDetected =
         jsonBooleanValue(response, "is_possible_leak", leakDetected);
+    serverPeriodLiters =
+        jsonFloatValue(response, "server_total_liters", serverPeriodLiters);
+    serverWaterLimitLiters =
+        jsonFloatValue(response, "water_limit_liters", serverWaterLimitLiters);
+
+    if (isfinite(serverPeriodLiters) && isfinite(serverWaterLimitLiters)) {
+      Serial.printf(
+          "[Upload] Saved | HTTP %d | This month: %.4f / %.2f L | Leak: %s\n",
+          status,
+          serverPeriodLiters,
+          serverWaterLimitLiters,
+          leakDetected ? "possible" : "normal");
+    } else {
+      Serial.printf("[Upload] Saved | HTTP %d | Monthly total unavailable.\n", status);
+    }
 
     // A duplicate response is also a successful acknowledgement.
     completePendingReading();
   } else if (status == 401) {
-    Serial.println("Stored bearer token is invalid or expired.");
+    Serial.println("[Upload] Device access expired. Activation will run again.");
     clearStoredDeviceToken();
   } else if (status == 403) {
-    Serial.println("Laravel rejected this device or its permissions.");
+    Serial.println("[Upload] The server rejected this device.");
   } else if (status == 404) {
-    Serial.println("Route not found: check /api/water-data.");
+    Serial.println("[Upload] Server route was not found.");
   } else if (status == 422) {
-    Serial.println("Laravel validation failed. Check field names.");
+    Serial.println("[Upload] The server rejected this reading format.");
   } else if (status == 429) {
-    Serial.println("Laravel rate-limited the water-data request.");
+    Serial.println("[Upload] Too many uploads. The reading remains saved for retry.");
   } else if (status < 0) {
-    Serial.print("HTTP connection error: ");
+    Serial.print("[Upload] Connection error. The reading remains queued for retry: ");
     Serial.println(http.errorToString(status));
   }
 

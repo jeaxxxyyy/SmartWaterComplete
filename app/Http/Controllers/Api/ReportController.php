@@ -152,8 +152,62 @@ class ReportController extends Controller
             'data' => [
                 'summary' => $summary,
                 'daily' => $daily,
+                'monthly_comparison' => $this->monthlyConsumptionComparison(
+                    isset($validated['user_id']) ? (int) $validated['user_id'] : null,
+                ),
             ],
         ]);
+    }
+
+    private function monthlyConsumptionComparison(?int $userId): array
+    {
+        $today = now();
+        $currentStart = $today->copy()->startOfMonth();
+        $currentEnd = $today->copy()->endOfDay();
+        $previousStart = $currentStart->copy()->subMonthNoOverflow()->startOfMonth();
+        $previousEnd = $previousStart->copy()->endOfMonth();
+
+        $query = WaterReading::query()
+            ->whereHas('user', fn ($builder) => $builder->where('role', 'user'))
+            ->when($userId !== null, fn ($builder) => $builder->where('user_id', $userId));
+
+        $previousLiters = (float) (clone $query)
+            ->whereBetween('recorded_at', [$previousStart, $previousEnd])
+            ->sum('liters_used');
+        $previousReadingCount = (clone $query)
+            ->whereBetween('recorded_at', [$previousStart, $previousEnd])
+            ->count();
+        $currentLiters = (float) (clone $query)
+            ->whereBetween('recorded_at', [$currentStart, $currentEnd])
+            ->sum('liters_used');
+        $currentReadingCount = (clone $query)
+            ->whereBetween('recorded_at', [$currentStart, $currentEnd])
+            ->count();
+        $changePercent = $previousLiters > 0
+            ? (($currentLiters - $previousLiters) / $previousLiters) * 100
+            : null;
+
+        return [
+            'previous_month' => [
+                'label' => $previousStart->format('F Y'),
+                'total_liters' => round($previousLiters, 4),
+                'reading_count' => $previousReadingCount,
+                'from' => $previousStart->toDateString(),
+                'to' => $previousEnd->toDateString(),
+            ],
+            'current_month' => [
+                'label' => $currentStart->format('F Y'),
+                'total_liters' => round($currentLiters, 4),
+                'reading_count' => $currentReadingCount,
+                'from' => $currentStart->toDateString(),
+                'to' => $currentEnd->toDateString(),
+                'is_month_to_date' => true,
+            ],
+            'change_percent' => $changePercent === null ? null : round($changePercent, 2),
+            'direction' => $changePercent === null
+                ? ($currentLiters > 0 ? 'new_usage' : 'no_data')
+                : ($changePercent > 0 ? 'increase' : ($changePercent < 0 ? 'decrease' : 'unchanged')),
+        ];
     }
 
     public function notifications(Request $request)

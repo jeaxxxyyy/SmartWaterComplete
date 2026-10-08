@@ -208,4 +208,53 @@ class DeviceTelemetryContractTest extends TestCase
         ]);
         $this->assertNotNull($device->fresh()->last_seen_at);
     }
+
+    public function test_server_total_liters_only_includes_the_readings_billing_month(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-31 12:00:00'));
+        [, $household, $device, $code] = $this->registerDevice();
+        $token = $this->activate($device, $code);
+
+        $this->withToken($token)->postJson('/api/water-data', $this->readingPayload('august-reading', [
+            'liters_used' => 5,
+        ]))->assertCreated()
+            ->assertJsonPath('server_total_liters', 5);
+
+        Carbon::setTestNow(Carbon::parse('2026-09-01 12:00:00'));
+
+        $septemberPayload = $this->readingPayload('september-reading', [
+            'liters_used' => 2,
+        ]);
+
+        $this->withToken($token)->postJson('/api/water-data', $septemberPayload)
+            ->assertCreated()
+            ->assertJsonPath('server_total_liters', 2);
+
+        $this->withToken($token)->postJson('/api/water-data', $septemberPayload)
+            ->assertOk()
+            ->assertJsonPath('duplicate', true)
+            ->assertJsonPath('server_total_liters', 2);
+
+        $this->assertSame(7.0, (float) WaterReading::query()
+            ->where('user_id', $household->id)
+            ->sum('liters_used'));
+    }
+
+    public function test_firmware_preserves_pending_telemetry_for_safe_retry_and_restart_recovery(): void
+    {
+        $source = file_get_contents(base_path('arduino/SmartWater_Modular/ApiClient.cpp'));
+
+        $this->assertStringContainsString('persistPendingReading();', $source);
+        $this->assertStringContainsString('preferences.getString(PENDING_ID_KEY, "")', $source);
+        $this->assertStringContainsString('body += "\\"reading_id\\":\\"" + pendingReadingId', $source);
+        $this->assertStringContainsString('acknowledgedReadingId != pendingReadingId', $source);
+        $this->assertStringContainsString('The reading remains queued for retry:', $source);
+        $this->assertStringContainsString('A duplicate response is also a successful acknowledgement.', $source);
+        $this->assertStringContainsString('completePendingReading();', $source);
+        $this->assertLessThan(
+            strpos($source, 'const int status = http.POST(body);'),
+            strpos($source, 'persistPendingReading();'),
+            'Pending telemetry must be persisted before the HTTP upload begins.',
+        );
+    }
 }

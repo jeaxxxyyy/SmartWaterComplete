@@ -2,6 +2,7 @@
 
 #include <M5Unified.h>
 #include <WiFi.h>
+#include <math.h>
 
 #include "AppState.h"
 #include "Config.h"
@@ -126,22 +127,17 @@ void drawLiveDataScreen() {
   M5.Display.setTextColor(TFT_BLACK);
 
   M5.Display.setCursor(20, 130);
-  M5.Display.printf(
-    "Total: %.3f L",
-    totalLiters
-  );
-
-  M5.Display.setCursor(20, 158);
-  M5.Display.printf(
-    "Usage: %.6f m3",
-    totalLiters / 1000.0F
-  );
+  if (isfinite(serverPeriodLiters)) {
+    M5.Display.printf("This month: %.3f L", serverPeriodLiters);
+  } else {
+    M5.Display.print("This month: --");
+  }
 
   M5.Display.setTextColor(
     leakDetected ? TFT_RED : TFT_DARKGREEN
   );
 
-  M5.Display.setCursor(20, 186);
+  M5.Display.setCursor(20, 158);
   M5.Display.printf(
     "Leak: %s",
     leakDetected ? "DETECTED" : "NORMAL"

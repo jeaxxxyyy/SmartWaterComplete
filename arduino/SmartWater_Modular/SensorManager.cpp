@@ -31,10 +31,6 @@ volatile uint32_t pulseCount = 0;
 volatile uint32_t rejectedNoisePulseCount = 0;
 volatile uint32_t lastAcceptedPulseAtUs = 0;
 uint32_t previousPulseCount = 0;
-int previousObservedSignalLevel = LOW;
-bool observedSignalHigh = false;
-bool observedSignalLow = false;
-uint32_t observedSignalTransitions = 0;
 
 struct PulseSnapshot {
     uint32_t accepted;
@@ -47,10 +43,10 @@ void IRAM_ATTR handleFlowPulse() {
     portENTER_CRITICAL_ISR(&pulseMux);
 
     if (nowUs - lastAcceptedPulseAtUs >= MINIMUM_PULSE_INTERVAL_US) {
-        ++pulseCount;
+        pulseCount = pulseCount + 1;
         lastAcceptedPulseAtUs = nowUs;
     } else {
-        ++rejectedNoisePulseCount;
+        rejectedNoisePulseCount = rejectedNoisePulseCount + 1;
     }
 
     portEXIT_CRITICAL_ISR(&pulseMux);
@@ -76,19 +72,10 @@ void synchronizePulseBaseline() {
     previousPulseCount = takePulseSnapshot(true).accepted;
 }
 
-void resetSignalObservationWindow(int currentLevel) {
-    observedSignalHigh = currentLevel == HIGH;
-    observedSignalLow = currentLevel == LOW;
-    observedSignalTransitions = 0;
-    previousObservedSignalLevel = currentLevel;
-}
-
 }
 
 void beginSensorManager() {
     pinMode(SMARTWATER_SENSOR_PIN, INPUT);
-
-    resetSignalObservationWindow(digitalRead(SMARTWATER_SENSOR_PIN));
 
     attachInterrupt(
         digitalPinToInterrupt(SMARTWATER_SENSOR_PIN),
@@ -98,27 +85,11 @@ void beginSensorManager() {
 
     synchronizePulseBaseline();
 
-    Serial.println("Flow sensor initialized.");
-    Serial.print("Flow sensor GPIO: ");
-    Serial.println(SMARTWATER_SENSOR_PIN);
-    Serial.print("Calibration: ");
-    Serial.print(SMARTWATER_PULSES_PER_LITER, 1);
-    Serial.println(" pulses/L");
-    Serial.print("Pulse noise filter: ");
-    Serial.print(MINIMUM_PULSE_INTERVAL_US);
-    Serial.println(" us minimum edge spacing");
-}
-
-void pollFlowSensorInput() {
-    const int currentLevel = digitalRead(SMARTWATER_SENSOR_PIN);
-
-    observedSignalHigh = observedSignalHigh || currentLevel == HIGH;
-    observedSignalLow = observedSignalLow || currentLevel == LOW;
-
-    if (currentLevel != previousObservedSignalLevel) {
-        ++observedSignalTransitions;
-        previousObservedSignalLevel = currentLevel;
-    }
+    Serial.printf(
+        "[Sensor] Ready | GPIO %d | Calibration: %.1f pulses/L\n",
+        SMARTWATER_SENSOR_PIN,
+        SMARTWATER_PULSES_PER_LITER
+    );
 }
 
 unsigned long getFlowPulseCount() {
@@ -140,23 +111,12 @@ void setSensorMonitoring(bool enabled) {
     // obtains its current timestamp after processing input, avoiding underflow.
     lastSample = millis();
 
-    Serial.println(
-        monitoring
-            ? "Monitoring resumed; flow sample window restarted."
-            : "Monitoring paused; pending sensor pulses discarded."
-    );
+    Serial.println(monitoring
+        ? "[Flow] Monitoring resumed."
+        : "[Flow] Monitoring paused. New pulses will not be counted.");
 }
 
 void updateFlowSensor(unsigned long elapsedMs) {
-    pollFlowSensorInput();
-
-    const int currentSignalLevel = digitalRead(SMARTWATER_SENSOR_PIN);
-    const bool sampleObservedHigh = observedSignalHigh;
-    const bool sampleObservedLow = observedSignalLow;
-    const uint32_t sampleObservedTransitions = observedSignalTransitions;
-
-    resetSignalObservationWindow(currentSignalLevel);
-
     const PulseSnapshot snapshot = takePulseSnapshot(true);
     const uint32_t currentPulseCount = snapshot.accepted;
     const uint32_t newPulses =
@@ -166,35 +126,13 @@ void updateFlowSensor(unsigned long elapsedMs) {
 
     if (snapshot.rejectedNoise > 0) {
         Serial.printf(
-            "Sensor noise filter rejected %lu closely spaced pulse(s).\n",
+            "[Sensor] Ignored %lu closely spaced noise pulse(s).\n",
             static_cast<unsigned long>(snapshot.rejectedNoise)
         );
     }
 
-    const char* observedSignalDescription =
-        sampleObservedHigh && sampleObservedLow
-            ? "HIGH+LOW"
-            : (sampleObservedHigh ? "HIGH only" : "LOW only");
-
-    Serial.printf(
-        "GPIO2 signal: %s now | observed: %s | transitions: %lu\n",
-        currentSignalLevel == HIGH ? "HIGH" : "LOW",
-        observedSignalDescription,
-        static_cast<unsigned long>(sampleObservedTransitions)
-    );
-
     if (!monitoring) {
         flowRate = 0.0F;
-
-        Serial.printf(
-            "Flow pulses: 0 | Total pulses: %lu\n"
-            "Flow rate: 0.00 L/min\n"
-            "Interval liters: 0.0000 L\n"
-            "Total liters: %.4f L\n",
-            static_cast<unsigned long>(currentPulseCount),
-            totalLiters
-        );
-
         return;
     }
 
@@ -215,14 +153,9 @@ void updateFlowSensor(unsigned long elapsedMs) {
         flowRate = 0.0F;
 
         Serial.printf(
-            "WARNING: rejected implausible pulse burst: %lu pulses "
-            "(maximum %lu for %lu ms)\n"
-            "Flow rate: 0.00 L/min\n"
-            "Total liters unchanged: %.4f L\n",
+            "[Flow] Rejected %lu pulse(s); maximum allowed is %lu for this sample.\n",
             static_cast<unsigned long>(newPulses),
-            static_cast<unsigned long>(maximumPlausiblePulses),
-            elapsedMs,
-            totalLiters
+            static_cast<unsigned long>(maximumPlausiblePulses)
         );
 
         return;
@@ -240,14 +173,10 @@ void updateFlowSensor(unsigned long elapsedMs) {
     totalLiters += intervalLitersMeasured;
 
     Serial.printf(
-        "Flow pulses: %lu | Total pulses: %lu\n"
-        "Flow rate: %.2f L/min\n"
-        "Interval liters: %.4f L\n"
-        "Total liters: %.4f L\n",
-        static_cast<unsigned long>(newPulses),
-        static_cast<unsigned long>(currentPulseCount),
+        "[Flow] %.2f L/min | +%lu pulses | +%.4f L | Total pulses: %lu\n",
         flowRate,
+        static_cast<unsigned long>(newPulses),
         intervalLitersMeasured,
-        totalLiters
+        static_cast<unsigned long>(currentPulseCount)
     );
 }

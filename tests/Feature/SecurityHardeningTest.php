@@ -107,4 +107,28 @@ class SecurityHardeningTest extends TestCase
         $tokenId = (int) explode('|', $response->json('data.token'), 2)[0];
         $this->assertNotNull($user->tokens()->findOrFail($tokenId)->expires_at);
     }
+
+    public function test_device_secrets_are_ignored_and_a_safe_template_is_available(): void
+    {
+        $gitignore = file_get_contents(base_path('.gitignore'));
+        $template = file_get_contents(base_path('arduino/SmartWater_Modular/secrets.example.h'));
+
+        $this->assertStringContainsString('/arduino/SmartWater_Modular/secrets.h', $gitignore);
+        $this->assertStringContainsString('YOUR_WIFI_SSID', $template);
+        $this->assertStringContainsString('YOUR_WIFI_PASSWORD', $template);
+        $this->assertStringContainsString('YOUR_DEVICE_UUID', $template);
+        $this->assertStringContainsString('YOUR_ACTIVATION_CODE', $template);
+    }
+
+    public function test_production_environment_template_uses_safe_defaults(): void
+    {
+        $environment = file_get_contents(base_path('.env.production.example'));
+
+        $this->assertStringContainsString('APP_ENV=production', $environment);
+        $this->assertStringContainsString('APP_DEBUG=false', $environment);
+        $this->assertStringContainsString('APP_URL=https://', $environment);
+        $this->assertStringContainsString('SESSION_ENCRYPT=true', $environment);
+        $this->assertStringContainsString('SESSION_SECURE_COOKIE=true', $environment);
+        $this->assertStringContainsString('LOG_LEVEL=warning', $environment);
+    }
 }

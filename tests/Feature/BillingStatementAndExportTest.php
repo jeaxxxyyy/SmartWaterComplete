@@ -103,4 +103,48 @@ class BillingStatementAndExportTest extends TestCase
             ->assertOk()
             ->assertJsonCount(0, 'data');
     }
+
+    public function test_household_can_export_only_its_own_consumption_pdf(): void
+    {
+        $household = User::factory()->create();
+        $otherHousehold = User::factory()->create();
+
+        foreach ([$household, $otherHousehold] as $index => $user) {
+            WaterReading::create([
+                'user_id' => $user->id,
+                'flow_rate' => 1.5,
+                'liters_used' => 25 + $index,
+                'cubic_meter' => (25 + $index) / 1000,
+                'estimated_bill' => 0.25 + $index,
+                'rate_per_cubic_meter' => 10,
+                'subsidy_deduction' => 0,
+                'threshold_liters' => 15000,
+                'is_threshold_exceeded' => false,
+                'is_possible_leak' => false,
+                'recorded_at' => now()->subDays($index),
+            ]);
+        }
+
+        Sanctum::actingAs($household);
+
+        $response = $this->get('/api/exports/readings');
+        $response->assertOk()->assertHeader('content-type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF-', $response->getContent());
+
+        $this->assertDatabaseHas('audit_logs', [
+            'user_id' => $household->id,
+            'action' => 'export_readings',
+        ]);
+        $this->assertSame(
+            $household->id,
+            (int) \App\Models\AuditLog::query()->where('action', 'export_readings')->latest('id')->firstOrFail()->metadata['user_id'],
+        );
+
+        $this->get('/api/exports/readings?user_id='.$otherHousehold->id)->assertForbidden();
+    }
+
+    public function test_consumption_pdf_export_requires_authentication(): void
+    {
+        $this->get('/api/exports/readings')->assertUnauthorized();
+    }
 }

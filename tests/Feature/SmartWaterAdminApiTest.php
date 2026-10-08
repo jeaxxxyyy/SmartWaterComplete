@@ -7,6 +7,7 @@ use App\Models\Device;
 use App\Models\Notification;
 use App\Models\User;
 use App\Models\WaterReading;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -493,6 +494,50 @@ class SmartWaterAdminApiTest extends TestCase
 
         $this->getJson('/api/users')
             ->assertForbidden();
+    }
+
+    public function test_consumption_report_compares_previous_and_current_month_household_usage(): void
+    {
+        $this->travelTo(Carbon::parse('2026-09-29 10:00:00'), function (): void {
+            $admin = User::factory()->admin()->create();
+            $household = User::factory()->create(['role' => 'user']);
+            $deviceAccount = User::factory()->create(['role' => 'device']);
+
+            $createReading = function (User $user, float $liters, string $recordedAt): void {
+                WaterReading::create([
+                    'user_id' => $user->id,
+                    'flow_rate' => 1,
+                    'liters_used' => $liters,
+                    'cubic_meter' => $liters / 1000,
+                    'estimated_bill' => 0,
+                    'rate_per_cubic_meter' => 9,
+                    'subsidy_deduction' => 0,
+                    'threshold_liters' => 15000,
+                    'is_threshold_exceeded' => false,
+                    'is_possible_leak' => false,
+                    'recorded_at' => $recordedAt,
+                ]);
+            };
+
+            $createReading($household, 200, '2026-08-15 08:00:00');
+            $createReading($household, 125, '2026-09-10 08:00:00');
+            $createReading($household, 175, '2026-09-20 08:00:00');
+            $createReading($deviceAccount, 1000, '2026-09-20 08:00:00');
+
+            Sanctum::actingAs($admin);
+
+            $this->getJson('/api/reports/consumption')
+                ->assertOk()
+                ->assertJsonPath('data.monthly_comparison.previous_month.label', 'August 2026')
+                ->assertJsonPath('data.monthly_comparison.previous_month.total_liters', 200)
+                ->assertJsonPath('data.monthly_comparison.previous_month.reading_count', 1)
+                ->assertJsonPath('data.monthly_comparison.current_month.label', 'September 2026')
+                ->assertJsonPath('data.monthly_comparison.current_month.total_liters', 300)
+                ->assertJsonPath('data.monthly_comparison.current_month.reading_count', 2)
+                ->assertJsonPath('data.monthly_comparison.current_month.is_month_to_date', true)
+                ->assertJsonPath('data.monthly_comparison.change_percent', 50)
+                ->assertJsonPath('data.monthly_comparison.direction', 'increase');
+        });
     }
 
     public function test_device_token_can_upload_water_data(): void

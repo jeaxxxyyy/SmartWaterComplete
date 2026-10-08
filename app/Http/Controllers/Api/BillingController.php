@@ -103,6 +103,7 @@ class BillingController extends Controller
     {
         $validated = $request->validate([
             'user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'threshold_liters' => ['required', 'numeric', 'min:0'],
             'percentage_threshold' => ['required', 'numeric', 'min:0.01', 'max:10000'],
             'notification_behavior' => ['required', Rule::in(['household', 'household_admin', 'disabled'])],
             'consumption_alert_enabled' => ['sometimes', 'boolean'],

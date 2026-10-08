@@ -21,6 +21,8 @@
 extern float flowRate;
 extern float intervalLiters;
 extern float totalLiters;
+extern float serverPeriodLiters;
+extern float serverWaterLimitLiters;
 
 extern float pendingFlowRate;
 extern float pendingLiters;

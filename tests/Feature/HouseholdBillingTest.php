@@ -8,8 +8,8 @@ use App\Models\Device;
 use App\Models\User;
 use App\Models\WaterReading;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Laravel\Sanctum\Sanctum;
 use Illuminate\Support\Str;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class HouseholdBillingTest extends TestCase
@@ -174,6 +174,36 @@ class HouseholdBillingTest extends TestCase
             ->assertJsonPath('data.reading_count', 0);
     }
 
+    public function test_latest_metered_period_is_shown_until_the_new_month_receives_a_reading(): void
+    {
+        $this->travelTo('2026-09-01 08:00:00');
+        $household = User::factory()->create();
+        $meter = $this->createMeter($household);
+        Billing::create([
+            'water_rate' => 40,
+            'fixed_monthly_charge' => 200,
+            'effective_date' => '2026-08-24',
+            'is_active' => true,
+        ]);
+        WaterReading::create([
+            'user_id' => $household->id,
+            'device_id' => $meter->id,
+            'flow_rate' => 0,
+            'liters_used' => 440,
+            'cubic_meter' => 0.44,
+            'recorded_at' => '2026-08-30 12:00:00',
+        ]);
+        Sanctum::actingAs($household);
+
+        $this->getJson('/api/household-billing')
+            ->assertOk()
+            ->assertJsonPath('data.period.label', 'August 2026')
+            ->assertJsonPath('data.period.is_current', false)
+            ->assertJsonPath('data.record_type', 'estimated')
+            ->assertJsonPath('data.reading_count', 1)
+            ->assertJsonPath('data.estimate.amount', 217.6);
+    }
+
     public function test_no_active_rate_returns_a_specific_error_and_can_succeed_after_retry(): void
     {
         $household = User::factory()->create();
@@ -256,6 +286,35 @@ class HouseholdBillingTest extends TestCase
         Sanctum::actingAs($household);
 
         $this->getJson('/api/household-billing')->assertNotFound();
+    }
+
+    public function test_subsidy_larger_than_usage_and_fixed_charge_cannot_produce_a_negative_bill(): void
+    {
+        $household = User::factory()->create();
+        $meter = $this->createMeter($household);
+        Billing::create([
+            'water_rate' => 10,
+            'fixed_monthly_charge' => 5,
+            'subsidy_deduction' => 100,
+            'effective_date' => now()->startOfMonth(),
+            'is_active' => true,
+        ]);
+        WaterReading::create([
+            'user_id' => $household->id,
+            'device_id' => $meter->id,
+            'flow_rate' => 0,
+            'liters_used' => 1000,
+            'cubic_meter' => 1,
+            'recorded_at' => now()->subHour(),
+        ]);
+        Sanctum::actingAs($household);
+
+        $this->getJson('/api/household-billing')
+            ->assertOk()
+            ->assertJsonPath('data.calculation.usage_charge', 10)
+            ->assertJsonPath('data.calculation.fixed_monthly_charge', 5)
+            ->assertJsonPath('data.calculation.subsidy_deduction', 100)
+            ->assertJsonPath('data.calculation.current_charge', 0);
     }
 
     private function createMeter(User $household): Device

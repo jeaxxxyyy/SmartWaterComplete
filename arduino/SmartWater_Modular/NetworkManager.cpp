@@ -8,9 +8,7 @@
 void connectWifi() {
   if (WiFi.status() == WL_CONNECTED) return;
 
-  Serial.println();
-  Serial.print("Connecting to WiFi: ");
-  Serial.println(WIFI_SSID);
+  Serial.println("[Wi-Fi] Connecting...");
 
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
@@ -20,20 +18,14 @@ void connectWifi() {
   for (int attempt = 0;
        WiFi.status() != WL_CONNECTED && attempt < 30;
        ++attempt) {
-    Serial.print(".");
     delay(500);
   }
 
-  Serial.println();
-
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("WiFi connected.");
-    Serial.print("M5Stack IP: ");
+    Serial.print("[Wi-Fi] Connected | IP: ");
     Serial.println(WiFi.localIP());
-    Serial.print("Laravel base URL: ");
-    Serial.println(SMARTWATER_SERVER_URL);
   } else {
-    Serial.println("WiFi connection failed.");
+    Serial.println("[Wi-Fi] Connection failed. Readings will stay saved on the meter.");
   }
 }
 
