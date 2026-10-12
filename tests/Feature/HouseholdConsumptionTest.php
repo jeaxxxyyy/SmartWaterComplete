@@ -60,6 +60,8 @@ class HouseholdConsumptionTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.label', 'MONTHLY CONSUMPTION')
             ->assertJsonCount(12, 'data.trend')
+            ->assertJsonPath('data.trend.0.period', '2025-09')
+            ->assertJsonPath('data.trend.11.period', '2026-08')
             ->assertJsonPath('data.week_starts_on', 'Monday');
     }
 

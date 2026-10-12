@@ -1,0 +1,170 @@
+{
+  "input": "C:\\laragon\\capstone\\SmartWater_Update\\Smart-Water-Consumption-Monitoring-Revised.docx",
+  "fonts_by_char_count": {
+    "Arial": 90453
+  },
+  "direct_run_formatting_runs": 3265,
+  "direct_paragraph_formatting_paragraphs": 2254,
+  "heading_like_paragraphs_not_heading_style": [
+    {
+      "para_index": 1,
+      "text": "CAPSTONE PROJECT",
+      "style": "Normal"
+    },
+    {
+      "para_index": 3,
+      "text": "SMART WATER CONSUMPTION MONITORING SYSTEM",
+      "style": "Normal"
+    },
+    {
+      "para_index": 5,
+      "text": "GROUP 4",
+      "style": "Normal"
+    },
+    {
+      "para_index": 12,
+      "text": "MEMBERS",
+      "style": "Normal"
+    },
+    {
+      "para_index": 25,
+      "text": "TABLE OF CONTENTS",
+      "style": "Normal"
+    },
+    {
+      "para_index": 27,
+      "text": "Chapter                                        \t\t  Page",
+      "style": "Normal"
+    },
+    {
+      "para_index": 36,
+      "text": "3.1.1 Smart Water Consumption Monitoring",
+      "style": "Normal (Web)"
+    },
+    {
+      "para_index": 110,
+      "text": "Chapter II",
+      "style": "Chapter Label"
+    },
+    {
+      "para_index": 134,
+      "text": "Chapter III",
+      "style": "Chapter Label"
+    },
+    {
+      "para_index": 173,
+      "text": "M5Stack CoreS3 ESP32 IoT Development Kit",
+      "style": "Normal (Web)"
+    },
+    {
+      "para_index": 176,
+      "text": "YF-S201 Water Flow Sensor",
+      "style": "Normal (Web)"
+    },
+    {
+      "para_index": 178,
+      "text": "Built-in Touchscreen Display",
+      "style": "Normal (Web)"
+    },
+    {
+      "para_index": 180,
+      "text": "Built-in Buttons",
+      "style": "Normal (Web)"
+    },
+    {
+      "para_index": 182,
+      "text": "Breadboard",
+      "style": "Normal (Web)"
+    },
+    {
+      "para_index": 184,
+      "text": "Jumper Wires",
+      "style": "Normal (Web)"
+    },
+    {
+      "para_index": 186,
+      "text": "Water Hose and Pipe Connectors",
+      "style": "Normal (Web)"
+    },
+    {
+      "para_index": 188,
+      "text": "Power Supply",
+      "style": "Normal (Web)"
+    },
+    {
+      "para_index": 190,
+      "text": "Software Technologies",
+      "style": "Normal (Web)"
+    },
+    {
+      "para_index": 191,
+      "text": "Arduino IDE",
+      "style": "Normal (Web)"
+    },
+    {
+      "para_index": 193,
+      "text": "Visual Studio Code",
+      "style": "Normal (Web)"
+    }
+  ],
+  "examples": {
+    "direct_paragraph_formatting": [
+      {
+        "para_index": 1,
+        "text": "CAPSTONE PROJECT",
+        "style": "Normal"
+      },
+      {
+        "para_index": 2,
+        "text": "",
+        "style": "Normal"
+      },
+      {
+        "para_index": 3,
+        "text": "SMART WATER CONSUMPTION MONITORING SYSTEM",
+        "style": "Normal"
+      },
+      {
+        "para_index": 4,
+        "text": "",
+        "style": "Normal"
+      },
+      {
+        "para_index": 5,
+        "text": "GROUP 4",
+        "style": "Normal"
+      }
+    ],
+    "direct_run_formatting": [
+      {
+        "para_index": 1,
+        "run_text": "CAPSTONE PROJECT",
+        "style": "Normal"
+      },
+      {
+        "para_index": 3,
+        "run_text": "SMART WATER CONSUMPTION MONITORING SYSTEM",
+        "style": "Normal"
+      },
+      {
+        "para_index": 5,
+        "run_text": "GROUP 4",
+        "style": "Normal"
+      },
+      {
+        "para_index": 12,
+        "run_text": "MEMBERS",
+        "style": "Normal"
+      },
+      {
+        "para_index": 13,
+        "run_text": "CENITA, ZEUS GYRO M.",
+        "style": "Normal"
+      }
+    ]
+  },
+  "notes": [
+    "Direct formatting is not always wrong, but it often causes inconsistent output when templates change.",
+    "Heading-like paragraphs not using Heading styles can break TOC and accessibility."
+  ]
+}

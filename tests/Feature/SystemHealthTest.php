@@ -59,15 +59,12 @@ class SystemHealthTest extends TestCase
         $this->getJson('/api/system-health')->assertForbidden();
     }
 
-    public function test_admin_dashboard_exposes_system_health_status(): void
+    public function test_admin_dashboard_only_exposes_a_plain_language_meter_data_alert(): void
     {
         $this->get('/admin')
             ->assertOk()
-            ->assertSee('Application and data health')
-            ->assertSee('data-admin-system-health-status', false)
-            ->assertSee('data-admin-system-database', false)
-            ->assertSee('data-admin-system-telemetry', false)
-            ->assertSee('data-admin-system-integrity', false)
-            ->assertSee('data-admin-system-failed-jobs', false);
+            ->assertSee('Meter data needs attention')
+            ->assertSee('data-admin-telemetry-alert', false)
+            ->assertDontSee('Application and data health');
     }
 }

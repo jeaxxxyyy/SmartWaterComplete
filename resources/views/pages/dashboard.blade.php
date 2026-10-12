@@ -25,7 +25,10 @@
                 <button class="notification-dropdown-footer" type="button" data-household-nav="notifications">View all notifications</button>
             </section>
         </div>
-        <span class="account-role-badge" data-account-role>Household User</span>
+        <button class="household-account-menu" type="button" data-household-nav="settings" aria-label="Open account settings">
+            <i class="bi bi-person-circle" aria-hidden="true"></i>
+            <span data-account-role>Household User</span>
+        </button>
         @include('components.theme-toggle', ['class' => 'site-theme-toggle'])
     </div>
 @endsection
@@ -44,14 +47,17 @@
         <button type="button" class="is-active" data-household-nav="dashboard" aria-current="page" title="Dashboard"><span>@include('components.ui-icon', ['name' => 'dashboard']) <span class="sidebar-nav-label">Dashboard</span></span></button>
         <button type="button" data-household-nav="live-monitoring" title="Live Monitoring"><span>@include('components.ui-icon', ['name' => 'monitoring']) <span class="sidebar-nav-label">Live Monitoring</span></span></button>
         <button type="button" data-household-nav="history" title="Consumption History"><span>@include('components.ui-icon', ['name' => 'history']) <span class="sidebar-nav-label">Consumption History</span></span></button>
-        <button type="button" data-household-nav="billing" title="Estimated Billing"><span>@include('components.ui-icon', ['name' => 'billing']) <span class="sidebar-nav-label">Estimated Billing</span></span></button>
+        <button type="button" data-household-nav="billing" title="My Bill"><span>@include('components.ui-icon', ['name' => 'billing']) <span class="sidebar-nav-label">My Bill</span></span></button>
         <button type="button" data-household-nav="requests" title="Messages"><span><i class="bi bi-chat-square-text" aria-hidden="true"></i> <span class="sidebar-nav-label">Messages</span></span></button>
         <button type="button" data-household-nav="leak" title="Leak Detection"><span>@include('components.ui-icon', ['name' => 'leak']) <span class="sidebar-nav-label">Leak Detection</span></span></button>
         <button type="button" data-household-nav="notifications" title="Notifications"><span>@include('components.ui-icon', ['name' => 'notifications']) <span class="sidebar-nav-label">Notifications</span></span><span class="sidebar-count" data-household-alert-count aria-hidden="true" hidden></span></button>
-        <button type="button" data-household-nav="settings" title="Account Settings"><span>@include('components.ui-icon', ['name' => 'settings']) <span class="sidebar-nav-label">Account Settings</span></span></button>
     </nav>
     <div class="household-sidebar-account">
         <span class="subtle" data-profile-email>Signed-in household</span>
+        <button class="household-sidebar-account-settings" type="button" data-household-nav="settings" title="Account Settings">
+            @include('components.ui-icon', ['name' => 'settings'])
+            <span>Account Settings</span>
+        </button>
         <button class="household-sidebar-logout" type="button" data-logout>Logout</button>
     </div>
 @endsection
@@ -73,26 +79,33 @@
                     <span class="status-pill" data-dashboard-live-state>Checking meter</span>
                     <span class="dashboard-updated" data-last-updated-label>Last updated: Waiting for data</span>
                 </div>
-                <div class="household-dashboard-controls">
-                    <div class="analytics-range-control">
-                        <select class="filter-input analytics-range-select" data-household-analytics-range aria-label="Household analytics period" aria-controls="household-custom-range" aria-expanded="false">
-                            <option value="last_7_days">Last 7 days</option>
-                            <option value="last_30_days" selected>Last 30 days</option>
-                            <option value="last_3_months">Last 3 months</option>
-                            <option value="last_12_months">Last 12 months</option>
-                            <option value="custom">Custom range</option>
-                        </select>
-                        <button class="analytics-custom-toggle" type="button" data-household-analytics-custom-toggle aria-controls="household-custom-range" aria-expanded="false" aria-label="Choose a custom date range" title="Choose a custom date range">@include('components.ui-icon', ['name' => 'calendar'])</button>
-                        <div class="analytics-custom-range" id="household-custom-range" data-household-analytics-custom hidden>
-                            <strong>Custom reporting period</strong>
-                            <label><span>From</span><input type="date" class="filter-input" data-household-analytics-from></label>
-                            <label><span>To</span><input type="date" class="filter-input" data-household-analytics-to></label>
-                        </div>
-                    </div>
-                    <button class="button button-secondary dashboard-refresh-button" type="button" data-refresh aria-label="Refresh dashboard data">@include('components.ui-icon', ['name' => 'refresh']) <span data-refresh-label>Refresh</span></button>
-                </div>
             </div>
         </header>
+
+        <section class="household-start-panel" aria-labelledby="household-start-title">
+            <div class="household-start-copy">
+                <span class="household-start-icon" aria-hidden="true">@include('components.ui-icon', ['name' => 'dashboard'])</span>
+                <div>
+                    <p class="eyebrow">Start here</p>
+                    <h2 id="household-start-title">What would you like to do?</h2>
+                    <p>Jump to the most common household tasks without searching through the workspace.</p>
+                </div>
+            </div>
+            <div class="household-start-actions" aria-label="Common household actions">
+                <button class="household-start-action is-primary" type="button" data-household-nav="live-monitoring">
+                    @include('components.ui-icon', ['name' => 'monitoring'])
+                    <span><strong>Check live usage</strong><small>See current flow and readings</small></span>
+                </button>
+                <button class="household-start-action" type="button" data-household-nav="billing">
+                    @include('components.ui-icon', ['name' => 'billing'])
+                    <span><strong>Review my bill</strong><small>View estimate and statements</small></span>
+                </button>
+                <button class="household-start-action is-attention" type="button" data-household-nav="requests">
+                    <i class="bi bi-chat-square-text" aria-hidden="true"></i>
+                    <span><strong>Get help or report an issue</strong><small>Message the municipal team</small></span>
+                </button>
+            </div>
+        </section>
 
         <section class="household-kpi-grid household-kpi-overview metric-overview-grid" aria-label="Household summary">
             <article class="metric-card metric-card-primary">
@@ -128,27 +141,6 @@
                 <strong class="mint" data-leak-summary>Loading…</strong>
                 <small data-leak-state>Checking the latest reading.</small>
             </article>
-            <article class="metric-card">
-                <div class="metric-card-top">
-                    <div class="metric-card-heading">
-                        <span class="metric-card-icon" aria-hidden="true">@include('components.ui-icon', ['name' => 'connection'])</span>
-                        <h3 class="metric-card-label">Meter connection</h3>
-                    </div>
-                    <span class="metric-card-badge metric-card-badge-neutral" data-connection-badge>Checking</span>
-                </div>
-                <strong data-connection-summary>Loading…</strong>
-                <small data-connection-state>Checking meter and server connectivity.</small>
-            </article>
-            <article class="metric-card">
-                <div class="metric-card-top">
-                    <div class="metric-card-heading">
-                        <span class="metric-card-icon" aria-hidden="true">@include('components.ui-icon', ['name' => 'notifications'])</span>
-                        <h3 class="metric-card-label">Notifications</h3>
-                    </div>
-                </div>
-                <strong class="rose" data-stat-alerts>Loading…</strong>
-                <small data-notification-state>Checking your notification inbox.</small>
-            </article>
         </section>
 
         <section class="household-dashboard-grid">
@@ -172,6 +164,62 @@
             </article>
         </section>
 
+        <details class="household-dashboard-details">
+            <summary>
+                <span>
+                    <strong>More dashboard details</strong>
+                    <small>Usage comparison, meter activity, and recent readings</small>
+                </span>
+                <span class="household-dashboard-details-toggle" aria-hidden="true">Show</span>
+            </summary>
+
+            <article class="panel household-goal-card">
+                <div class="panel-head">
+                    <div>
+                        <p class="eyebrow">Monthly water-use goal</p>
+                        <h2>Set a target and stay on track</h2>
+                        <p class="field-hint">We estimate your end-of-month usage from your current meter readings.</p>
+                    </div>
+                    <span class="status-pill" data-goal-status>Goal not set</span>
+                </div>
+                <form class="household-goal-form" data-consumption-goal-form>
+                    <input type="hidden" name="month">
+                    <label>
+                        <span>Monthly target (liters)</span>
+                        <input type="number" name="target_liters" min="1" step="1" inputmode="numeric" placeholder="Example: 10000" required>
+                    </label>
+                    <button class="button button-primary" type="submit">Save goal</button>
+                    <div class="form-feedback" data-goal-feedback role="status" aria-live="polite" hidden></div>
+                </form>
+                <div class="household-goal-progress" data-goal-progress>
+                    <div class="dashboard-empty-state"><strong>Loading goal...</strong></div>
+                </div>
+            </article>
+
+            <section class="household-secondary-metrics" aria-label="Additional household status">
+                <article class="metric-card">
+                    <div class="metric-card-top">
+                        <div class="metric-card-heading">
+                            <span class="metric-card-icon" aria-hidden="true">@include('components.ui-icon', ['name' => 'connection'])</span>
+                            <h3 class="metric-card-label">Meter connection</h3>
+                        </div>
+                        <span class="metric-card-badge metric-card-badge-neutral" data-connection-badge>Checking</span>
+                    </div>
+                    <strong data-connection-summary>Loading…</strong>
+                    <small data-connection-state>Checking meter and server connectivity.</small>
+                </article>
+                <article class="metric-card">
+                    <div class="metric-card-top">
+                        <div class="metric-card-heading">
+                            <span class="metric-card-icon" aria-hidden="true">@include('components.ui-icon', ['name' => 'notifications'])</span>
+                            <h3 class="metric-card-label">Notifications</h3>
+                        </div>
+                    </div>
+                    <strong class="rose" data-stat-alerts>Loading…</strong>
+                    <small data-notification-state>Checking your notification inbox.</small>
+                </article>
+            </section>
+
         <article class="panel side-card household-analytics-card">
             <div class="panel-head household-analytics-head">
                 <div>
@@ -193,10 +241,7 @@
                 <section class="analytics-summary-group" aria-labelledby="analytics-usage-title">
                     <div class="analytics-group-heading">
                         <span class="analytics-group-icon">@include('components.ui-icon', ['name' => 'usage'])</span>
-                        <div>
-                            <h3 id="analytics-usage-title">Usage snapshot</h3>
-                            <p>Consumption and cost for this range</p>
-                        </div>
+                        <div><h3 id="analytics-usage-title">Usage snapshot</h3><p>Consumption and cost for this range</p></div>
                     </div>
                     <dl class="analytics-metric-list">
                         <div><dt>Latest day</dt><dd data-household-daily-consumption>--</dd></div>
@@ -205,14 +250,10 @@
                         <div><dt>Estimated bill</dt><dd data-household-analytics-bill>--</dd></div>
                     </dl>
                 </section>
-
                 <section class="analytics-summary-group" aria-labelledby="analytics-comparison-title">
                     <div class="analytics-group-heading">
                         <span class="analytics-group-icon">@include('components.ui-icon', ['name' => 'history'])</span>
-                        <div>
-                            <h3 id="analytics-comparison-title">Period comparison</h3>
-                            <p>How this range compares over time</p>
-                        </div>
+                        <div><h3 id="analytics-comparison-title">Period comparison</h3><p>How this range compares over time</p></div>
                     </div>
                     <dl class="analytics-metric-list">
                         <div><dt>Previous period usage</dt><dd data-household-previous-period>--</dd></div>
@@ -220,14 +261,10 @@
                         <div><dt>Highest usage day</dt><dd data-household-highest-usage>--</dd></div>
                     </dl>
                 </section>
-
                 <section class="analytics-summary-group" aria-labelledby="analytics-meter-title">
                     <div class="analytics-group-heading">
                         <span class="analytics-group-icon">@include('components.ui-icon', ['name' => 'safety'])</span>
-                        <div>
-                            <h3 id="analytics-meter-title">Meter activity</h3>
-                            <p>Reading health and leak signals</p>
-                        </div>
+                        <div><h3 id="analytics-meter-title">Meter activity</h3><p>Reading health and leak signals</p></div>
                     </div>
                     <dl class="analytics-metric-list">
                         <div><dt>Leak warnings</dt><dd data-household-leak-warning-count>--</dd></div>
@@ -257,7 +294,6 @@
                     </div>
                 </div>
             </article>
-
             <article class="panel activity-panel">
                 <div class="panel-head">
                     <div>
@@ -278,6 +314,7 @@
                 </div>
             </article>
         </section>
+        </details>
     </section>
 
     <section class="dashboard-view" data-household-view="live-monitoring">
@@ -286,16 +323,6 @@
                 <p class="eyebrow">Live Water Monitoring</p>
                 <h2>Real-time flow rate and consumption</h2>
             </div>
-            <form class="filter-bar" data-reading-filters>
-                <input type="date" name="from" class="filter-input" aria-label="From date">
-                <input type="date" name="to" class="filter-input" aria-label="To date">
-                <select name="per_page" class="filter-input" aria-label="Rows per page">
-                    <option value="5">5 per page</option>
-                    <option value="10" selected>10 per page</option>
-                    <option value="25">25 per page</option>
-                </select>
-                <button class="button button-primary" type="submit">Apply</button>
-            </form>
         </section>
 
         <article class="panel panel-table household-data-panel">
@@ -340,7 +367,7 @@
                 <div><span>Last reading</span><strong data-live-last-reading>--</strong></div>
             </div>
             <p class="live-chart-feedback" data-live-chart-feedback role="status" aria-live="polite" hidden></p>
-            <div class="chart-legend">
+            <div class="chart-legend" data-live-chart-legend>
                 <span><i class="legend-dot usage-dot"></i>Interval consumption (L)</span>
             </div>
             <div class="usage-chart live-consumption-chart" data-live-consumption-chart>
@@ -363,7 +390,7 @@
                     <div>
                         <p class="eyebrow">Consumption History</p>
                         <h2>Track usage, trends, and billing estimates</h2>
-                        <p>Refine the records by date or meter, then export the current view.</p>
+                        <p>Refine your records by date, then export the current view.</p>
                     </div>
                 </div>
                 <div class="history-export-actions" aria-label="Export consumption history">
@@ -380,17 +407,12 @@
                     <span>To date</span>
                     <span class="history-filter-control"><i class="bi bi-calendar-check" aria-hidden="true"></i><input type="date" name="to"></span>
                 </label>
-                <label class="history-filter-field history-filter-search">
-                    <span>Search records</span>
-                    <span class="history-filter-control"><i class="bi bi-search" aria-hidden="true"></i><input type="search" name="search" placeholder="Meter name or reading ID"></span>
-                </label>
                 <label class="history-filter-field history-filter-rows">
                     <span>Rows</span>
                     <span class="history-filter-control"><i class="bi bi-list-ul" aria-hidden="true"></i><select name="per_page"><option value="10">10</option><option value="25">25</option><option value="50">50</option></select></span>
                 </label>
                 <div class="history-filter-buttons">
                     <button class="button button-primary" type="submit"><i class="bi bi-funnel" aria-hidden="true"></i><span>Apply filters</span></button>
-                    <button class="button button-ghost" type="reset"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i><span>Reset</span></button>
                 </div>
             </form>
         </section>
@@ -509,6 +531,17 @@
                 <strong data-billing-balance>--</strong>
                 <small>Finalized balance when available</small>
             </article>
+            <article class="metric-card" data-payment-status-card>
+                <div class="metric-card-top"><span class="metric-card-icon" aria-hidden="true"><i class="bi bi-check2-circle"></i></span><span class="metric-card-badge metric-card-badge-neutral" data-payment-status-badge>Payment</span></div>
+                <span class="metric-card-label">Payment status</span>
+                <strong data-payment-status>--</strong>
+                <small data-payment-status-detail>Official status appears after verification.</small>
+            </article>
+        </section>
+
+        <section class="panel household-billing-calculation">
+            <div class="panel-head"><div><p class="eyebrow">Payment instructions</p><h2>Pay at the municipal water office</h2></div></div>
+            <p class="field-hint">Bring your statement number to the municipal water office. Authorized staff will accept your cash payment, issue an official receipt, and update this page immediately.</p>
         </section>
 
         <section class="household-billing-grid">
@@ -623,7 +656,7 @@
                     <span class="household-section-icon" aria-hidden="true"><i class="bi bi-bell"></i></span>
                     <div><p class="eyebrow">Notifications</p><h2>Inbox and service updates</h2><p>Important account, billing, and meter alerts appear here.</p></div>
                 </div>
-                <button type="button" class="button button-secondary" data-clear-notifications disabled>Clear all</button>
+                <button type="button" class="button button-secondary" data-clear-notifications disabled>Mark all as read</button>
             </div>
             <div class="notification-list" data-notifications-list>
                 <div class="notification-page-empty">
@@ -645,9 +678,8 @@
                 <div class="panel-head"><div><p class="eyebrow">New message</p><h2>How can we help?</h2></div><i class="bi bi-send" aria-hidden="true"></i></div>
                 <form class="stack-form" data-service-request-form>
                     <label>Category<select name="category" required><option value="billing_question">Billing question</option><option value="billing_dispute">Billing dispute</option><option value="suspected_leak">Suspected leak</option><option value="account_update">Account update</option><option value="service_interruption">Service interruption</option><option value="meter_inspection">Meter inspection request</option><option value="general_inquiry">General inquiry</option></select></label>
-                    <label>Subject<input type="text" name="subject" maxlength="150" required></label>
-                    <label>Details<textarea name="description" maxlength="5000" rows="5" required></textarea></label>
-                    <label>Related statement<select name="billing_statement_id" data-request-statement><option value="">Not related to a statement</option></select></label>
+                    <label>Describe your concern<textarea name="description" maxlength="5000" rows="5" placeholder="Tell us what happened or what help you need." required></textarea></label>
+                    <label data-request-statement-field>Related statement <span class="subtle">(optional)</span><select name="billing_statement_id" data-request-statement><option value="">Choose a statement</option></select></label>
                     <div class="form-feedback" data-service-request-feedback role="status" aria-live="polite" hidden></div>
                     <button class="button button-primary" type="submit">Send message</button>
                 </form>
@@ -725,18 +757,15 @@
             <article class="panel account-settings-card notification-preferences-card">
                 <div class="account-settings-card-head">
                     <span class="account-settings-card-icon" aria-hidden="true"><i class="bi bi-bell-slash"></i></span>
-                    <div><p class="eyebrow">Household preferences</p><h2>Notification &amp; Display Preferences</h2><p>Choose which in-app notices you receive, set notification quiet hours, select a language, and reduce dashboard data use. Critical account-security notices remain enabled.</p></div>
+                    <div><p class="eyebrow">Household preferences</p><h2>Notifications &amp; display</h2><p>Choose regular updates, manage leak alerts, and adjust how the workspace works for you.</p></div>
                 </div>
                 <form class="stack-form compact-settings-form" data-notification-preferences-form>
-                    <label class="admin-checkbox-field"><span>Municipal announcements</span><span><input type="checkbox" name="announcements"> In-app</span></label>
-                    <label class="admin-checkbox-field"><span>Billing updates</span><span><input type="checkbox" name="billing_updates"> In-app</span></label>
-                    <label class="admin-checkbox-field"><span>Consumption alerts</span><span><input type="checkbox" name="consumption_alerts"> In-app</span></label>
-                    <label class="admin-checkbox-field"><span>Leak alerts</span><span><input type="checkbox" name="leak_alerts"> In-app</span></label>
-                    <label class="admin-checkbox-field"><span>Message updates</span><span><input type="checkbox" name="service_request_updates"> In-app</span></label>
+                    <label class="preference-toggle"><input type="checkbox" name="regular_notifications"><span><strong>Regular updates</strong><small>Announcements, billing, water use, and messages</small></span></label>
+                    <label class="preference-toggle preference-toggle-alert"><input type="checkbox" name="leak_alerts"><span><strong>Leak alerts</strong><small>Potential leaks and urgent meter warnings</small></span></label>
                     <div class="form-grid-two"><label>Quiet hours start<input type="time" name="quiet_hours_start"></label><label>Quiet hours end<input type="time" name="quiet_hours_end"></label></div>
                     <label>Language<select name="preferred_locale"><option value="en">English</option><option value="fil">Filipino</option></select></label>
                     <label class="admin-checkbox-field"><span>Low-bandwidth mode</span><span><input type="checkbox" name="low_bandwidth_mode"> Reduce polling and motion</span></label>
-                    <button class="button button-ghost" type="button" data-install-app hidden>Install Smart Water on this device</button>
+                    <button class="link-button account-install-link" type="button" data-install-app hidden>Install Smart Water on this device</button>
                     <div class="form-feedback" data-preferences-feedback role="status" aria-live="polite" hidden></div>
                     <button class="button button-primary" type="submit">Save preferences</button>
                 </form>

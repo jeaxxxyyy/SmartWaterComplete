@@ -116,6 +116,21 @@ class NotificationController extends Controller
         ]);
     }
 
+    public function markAllAsRead(Request $request)
+    {
+        $updated = Notification::query()
+            ->delivered()
+            ->where('user_id', $request->user()->id)
+            ->whereNull('user_deleted_at')
+            ->where('is_read', false)
+            ->update(['is_read' => true]);
+
+        return response()->json([
+            'message' => $updated === 1 ? '1 notification marked as read.' : "{$updated} notifications marked as read.",
+            'data' => ['updated_count' => $updated],
+        ]);
+    }
+
     public function destroyReceived(Request $request, Notification $notification)
     {
         if ($notification->user_id !== $request->user()?->id) {

@@ -24,6 +24,8 @@ const formatNumber = (value, digits = 2) =>
     });
 
 let activeCurrency = 'PHP';
+let consumptionBaselineRefreshTimer = null;
+let consumptionBaselineRefreshInFlight = false;
 
 const formatCurrency = (value, currency = activeCurrency) =>
     `${currency} ${Number(value ?? 0).toLocaleString(undefined, {
@@ -57,6 +59,15 @@ const formatDateTime = (value) => {
     return new Date(value).toLocaleString(undefined, {
         dateStyle: 'medium',
         timeStyle: 'short',
+    });
+};
+
+const formatLiveReadingDateTime = (value) => {
+    if (!value) return '--';
+
+    return new Date(value).toLocaleString(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'medium',
     });
 };
 
@@ -934,6 +945,7 @@ const isDashboardCacheable = (url, options = {}) => {
     const method = String(options.method ?? 'GET').toUpperCase();
     const dashboardContext = options.cacheScope === 'dashboard' || page === 'household' || page === 'admin';
     const excluded = url === '/api/me'
+        || url === '/api/account'
         || url.startsWith('/api/live-')
         || url.startsWith('/api/system-health')
         || url.startsWith('/api/exports/');
@@ -1503,6 +1515,23 @@ const renderLiveConsumptionChart = (readings = []) => {
 
     const chart = ensureLiveChart(container);
     const rows = Array.isArray(readings) ? readings : [];
+    const hasConsumption = rows.some((reading) => Number(reading?.liters_used ?? 0) > 0);
+    const legend = container.closest('.chart-panel')?.querySelector('[data-live-chart-legend]');
+
+    if (!hasConsumption) {
+        const hasReadings = rows.length > 0;
+        chart.shell.hidden = true;
+        chart.empty.hidden = false;
+        chart.empty.innerHTML = hasReadings
+            ? '<strong>No water use recorded in these readings.</strong><span>The meter is reporting normally; no water flowed during this time.</span>'
+            : '<strong>No live readings received yet.</strong><span>Connect the meter and wait for it to send a reading.</span>';
+        chart.note.hidden = true;
+        if (legend) legend.hidden = true;
+        container.classList.add('is-empty');
+        return;
+    }
+
+    if (legend) legend.hidden = false;
     const plotWidth = chart.width - chart.padding.left - chart.padding.right;
     const plotHeight = chart.height - chart.padding.top - chart.padding.bottom;
     const maxValue = Math.max(...rows.map((reading) => Number(reading.liters_used ?? 0)), 0);
@@ -1554,7 +1583,7 @@ const renderLiveConsumptionChart = (readings = []) => {
     chart.shell.hidden = rows.length === 0;
     chart.empty.hidden = rows.length !== 0;
     chart.note.hidden = rows.length !== 1;
-    container.classList.toggle('is-empty', rows.length === 0);
+    container.classList.remove('is-empty');
 };
 
 const renderLiveConsumptionSummary = (response) => {
@@ -1865,6 +1894,7 @@ const showHouseholdView = (target) => {
     }
     if (target === 'dashboard') {
         loadDashboard();
+        loadConsumptionGoal();
     } else {
         stopDashboardPolling();
     }
@@ -1901,6 +1931,8 @@ const showAdminView = (target, shouldUpdateHash = true) => {
         }
     }
     if (target === 'service-requests') loadAdminServiceRequests();
+    if (target === 'water-rates') startConsumptionBaselineRefresh();
+    else stopConsumptionBaselineRefresh();
 
     if (adminSidebar?.classList.contains('show')) {
         window.bootstrap?.Offcanvas.getInstance(adminSidebar)?.hide();
@@ -2097,7 +2129,7 @@ const renderReadings = (items) => {
 
             return `
                 <div class="table-row">
-                    <span>${formatDateTime(reading.recorded_at)}</span>
+                    <span>${formatLiveReadingDateTime(reading.recorded_at)}</span>
                     <span>${formatNumber(reading.flow_rate)} L/min</span>
                     <span>${formatCubicMeters(reading.liters_used)}</span>
                     <span>${formatCurrency(reading.estimated_bill)}</span>
@@ -2280,7 +2312,7 @@ const renderNotifications = (items, selector = '[data-notifications-list]') => {
     const isPreview = selector === '[data-dashboard-notifications-list]';
     if (!isPreview) {
         const clearButton = $('[data-clear-notifications]');
-        if (clearButton) clearButton.disabled = !items?.length;
+        if (clearButton) clearButton.disabled = !items?.some((item) => !item.is_read);
     }
 
     if (!items?.length) {
@@ -2296,6 +2328,11 @@ const renderNotifications = (items, selector = '[data-notifications-list]') => {
     const markup = (isPreview ? items.slice(0, 3) : items)
         .map((notification) => {
             const label = notificationTypeLabel(notification.type);
+            const isLeakAlert = ['leak_alert', 'possible_leak'].includes(notification.type);
+            const actions = isPreview ? '' : `<div class="notification-card-actions">
+                ${isLeakAlert ? '<button type="button" class="link-button" data-view-leak-alert>View leak details</button>' : ''}
+                <button type="button" class="link-button notification-remove-button" data-delete-received-notification="${notification.id}">Remove</button>
+            </div>`;
 
             return `
             <article class="notification-card${isPreview ? ' dashboard-notification-card' : ''}" data-notification-id="${notification.id}" data-notification-read="${notification.is_read ? '1' : '0'}" tabindex="0">
@@ -2306,7 +2343,7 @@ const renderNotifications = (items, selector = '[data-notifications-list]') => {
                 <p class="notification-tag">${escapeHtml(label)}</p>
                 <p>${escapeHtml(notification.message)}</p>
                 <small>${formatCompactDateTime(notification.sent_at ?? notification.created_at)}</small>
-                ${isPreview ? '' : `<button type="button" class="link-button rose" data-delete-received-notification="${notification.id}">Delete</button>`}
+                ${actions}
             </article>
         `;
         })
@@ -2444,10 +2481,18 @@ const bindNotificationReadTracking = (container) => {
     if (container.dataset.readTrackingBound !== '1') {
         container.dataset.readTrackingBound = '1';
         container.addEventListener('click', async (event) => {
+            const leakButton = event.target.closest('[data-view-leak-alert]');
+            if (leakButton) {
+                event.stopPropagation();
+                await markNotificationRead(leakButton.closest('[data-notification-id]'));
+                showHouseholdView('leak');
+                return;
+            }
             const deleteButton = event.target.closest('[data-delete-received-notification]');
             if (deleteButton) {
                 event.stopPropagation();
                 if (notificationMutationInFlight) return;
+                if (!window.confirm('Remove this notification from your inbox?')) return;
 
                 const notificationId = String(deleteButton.dataset.deleteReceivedNotification);
                 const previousNotifications = householdNotifications;
@@ -2457,7 +2502,7 @@ const bindNotificationReadTracking = (container) => {
 
                 try {
                     await requestJson(`/api/notifications/received/${notificationId}`, { method: 'DELETE' });
-                    showToast('Notification deleted successfully.');
+                    showToast('Notification removed from your inbox.');
                 } catch (error) {
                     applyHouseholdNotifications(previousNotifications);
                     if (!handleAuthFailure(error)) showToast(errorMessage(error, 'Could not delete the notification.'), 'error');
@@ -2717,6 +2762,20 @@ const renderHouseholdBilling = (billing) => {
         ? (billing.rate_effective_date ? `Effective ${billing.rate_effective_date}` : 'Effective for this billing period')
         : 'No active rate configured');
     setText('[data-billing-balance]', calculation.remaining_balance === null || calculation.remaining_balance === undefined ? 'Not finalized' : formatCurrency(calculation.remaining_balance, currency));
+    const currentStatement = (billing?.history ?? []).find((item) => Number(item.id) === Number(billing?.statement_id));
+    const pendingPayment = currentStatement?.payments?.find((payment) => payment.status === 'pending');
+    const paymentStatus = pendingPayment ? 'Pending verification' : (billing?.statement_status ?? (type === 'estimated' ? 'Estimated' : 'Unpaid'));
+    setText('[data-payment-status]', String(paymentStatus).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()));
+    setText('[data-payment-status-detail]', pendingPayment ? `Submitted ${formatCurrency(pendingPayment.amount, currency)}; staff must verify it before your balance changes.` : currentStatement?.status === 'paid' ? `Paid ${currentStatement.payments?.find((payment) => payment.status === 'confirmed')?.received_at ? `on ${formatDateTime(currentStatement.payments.find((payment) => payment.status === 'confirmed').received_at)}` : ''}` : currentStatement?.due_date ? `Due ${currentStatement.due_date}.` : 'No finalized statement is available yet.');
+    const statusBadge = $('[data-payment-status-badge]');
+    if (statusBadge) { statusBadge.textContent = pendingPayment ? 'Pending' : String(paymentStatus).replaceAll('_', ' '); statusBadge.className = `metric-card-badge ${paymentStatus === 'paid' ? 'status-chip-soft' : pendingPayment ? 'status-chip-alert' : 'metric-card-badge-neutral'}`; }
+    const paymentForm = $('[data-household-payment-form]');
+    if (paymentForm) {
+        paymentForm.elements.billing_statement_id.value = currentStatement?.id ?? '';
+        const canSubmit = Boolean(currentStatement?.id) && !pendingPayment && ['unpaid', 'partial', 'overdue'].includes(currentStatement.status);
+        paymentForm.querySelectorAll('input, select, textarea, button').forEach((field) => { if (field.name !== 'billing_statement_id') field.disabled = !canSubmit; });
+        if (canSubmit) paymentForm.elements.amount.max = Number(currentStatement.remaining_balance).toFixed(2);
+    }
     setText('[data-billing-record-type]', `${recordTypeLabel} · ${periodLabel}`);
     setText(
         '[data-billing-explanation]',
@@ -2790,8 +2849,10 @@ const renderHouseholdBilling = (billing) => {
     if (historyContainer) {
         historyContainer.innerHTML = history.length
             ? history.map((item) => {
-                const receipts = (item.payments ?? []).map((payment) => `<button class="link-button" type="button" data-download-receipt="${escapeHtml(payment.id)}">${escapeHtml(payment.receipt_number)}</button>`).join('');
-                return `<tr><td><strong>${escapeHtml(item.statement_number ?? 'Statement')}</strong><small>${escapeHtml(item.billing_month ? new Date(item.billing_month).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : '—')}</small></td><td>${formatCubicMeterValue(item.total_cubic_meter)}</td><td>${formatCurrency(item.current_charge, item.currency)}</td><td>${formatCurrency(item.remaining_balance, item.currency)}</td><td><span class="status-chip ${item.status === 'paid' ? 'status-chip-soft' : 'status-chip-alert'}">${escapeHtml(String(item.status ?? 'Unknown').replaceAll('_', ' '))}</span><small>${item.due_date ? `Due ${escapeHtml(item.due_date)}` : ''}</small></td><td><button class="link-button" type="button" data-download-statement="${escapeHtml(item.id)}">Statement PDF</button>${receipts || '<small>No receipts</small>'}</td></tr>`;
+                const receipts = (item.payments ?? []).filter((payment) => payment.status === 'confirmed').map((payment) => `<button class="link-button" type="button" data-download-receipt="${escapeHtml(payment.id)}">${escapeHtml(payment.receipt_number)}</button>`).join('');
+                const pending = (item.payments ?? []).find((payment) => payment.status === 'pending');
+                const displayStatus = pending ? 'Pending verification' : String(item.status ?? 'Unknown').replaceAll('_', ' ');
+                return `<tr><td><strong>${escapeHtml(item.statement_number ?? 'Statement')}</strong><small>${escapeHtml(item.billing_month ? new Date(item.billing_month).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : '—')}</small></td><td>${formatCubicMeterValue(item.total_cubic_meter)}</td><td>${formatCurrency(item.current_charge, item.currency)}</td><td>${formatCurrency(item.remaining_balance, item.currency)}<small>Paid ${formatCurrency(item.amount_paid, item.currency)}</small></td><td><span class="status-chip ${item.status === 'paid' ? 'status-chip-soft' : pending ? 'status-chip-alert' : 'status-chip-alert'}">${escapeHtml(displayStatus)}</span><small>${item.due_date ? `Due ${escapeHtml(item.due_date)}` : ''}${pending ? ` · Ref ${escapeHtml(pending.reference_number ?? 'submitted')}` : ''}</small></td><td><button class="link-button" type="button" data-download-statement="${escapeHtml(item.id)}">Statement PDF</button>${receipts || '<small>No verified receipts</small>'}</td></tr>`;
             }).join('')
             : '<tr><td colspan="6"><div class="empty-state">No finalized billing statements are available yet.</div></td></tr>';
     }
@@ -2931,7 +2992,11 @@ const loadNotificationPreferences = async () => {
     try {
         const response = await requestJson('/api/notification-preferences');
         const preferences = response.data ?? {};
-        ['announcements', 'billing_updates', 'consumption_alerts', 'leak_alerts', 'service_request_updates', 'low_bandwidth_mode'].forEach((name) => {
+        const regularNotificationNames = ['announcements', 'billing_updates', 'consumption_alerts', 'service_request_updates'];
+        if (notificationPreferencesForm.elements.regular_notifications) {
+            notificationPreferencesForm.elements.regular_notifications.checked = regularNotificationNames.every((name) => preferences[name] !== false);
+        }
+        ['leak_alerts', 'low_bandwidth_mode'].forEach((name) => {
             if (notificationPreferencesForm.elements[name]) notificationPreferencesForm.elements[name].checked = preferences[name] !== false;
         });
         ['quiet_hours_start', 'quiet_hours_end', 'preferred_locale'].forEach((name) => {
@@ -3023,16 +3088,19 @@ const renderAdminAlerts = (items) => {
             + '<div><dt>Household notified</dt><dd>' + escapeHtml(formatDateTime(alert.notified_at ?? notification.sent_at)) + '</dd></div>'
             + '</div>'
             + '<small>Device status: ' + escapeHtml(device.status ?? 'Unknown') + ' · Connection: ' + escapeHtml(latest.device_connection_status ?? 'Not reported') + ' · Server: ' + escapeHtml(latest.server_connection_status ?? 'Not reported') + '</small>'
+            + '<div class="leak-alert-workspace">'
             + '<form class="stack-form leak-alert-update-form" data-leak-alert-update-form>'
-            + '<label>Status<select name="status" required>' + statusOptions + '</select></label>'
-            + '<label>Administrative notes<textarea name="notes" maxlength="2000" placeholder="Record investigation or resolution notes">' + escapeHtml(alert.notes ?? '') + '</textarea></label>'
-            + '<div class="button-row"><button class="button button-secondary" type="submit">Save alert status</button></div>'
+            + '<div class="leak-alert-workflow-heading"><div><p class="eyebrow">Investigation and resolution</p><p>Record the current state and staff findings.</p></div></div>'
+            + '<div class="leak-alert-workflow-fields"><label>Status<select name="status" required>' + statusOptions + '</select></label>'
+            + '<label>Administrative notes<textarea name="notes" maxlength="2000" placeholder="Record investigation or resolution notes">' + escapeHtml(alert.notes ?? '') + '</textarea></label></div>'
+            + '<div class="leak-alert-card-actions"><button class="button button-secondary" type="submit">Save alert status</button></div>'
             + '</form>'
             + '<form class="stack-form leak-alert-notify-form" data-leak-alert-notify-form>'
-            + '<label>Follow-up title<input type="text" name="title" maxlength="255" value="Follow-up: possible water leak" required></label>'
-            + '<label>Follow-up message<textarea name="message" maxlength="2000" required>Smart Water is following up on the possible leak detected by your meter. Please check your household plumbing and contact the municipal water office if the flow continues.</textarea></label>'
-            + '<button class="button button-primary" type="submit">Notify household</button>'
-            + '</form></article>';
+            + '<div class="leak-alert-workflow-heading"><div><p class="eyebrow">Household notification</p><p>Send a follow-up after reviewing the alert.</p></div></div>'
+            + '<div class="leak-alert-notify-fields"><label>Follow-up title<input type="text" name="title" maxlength="255" value="Follow-up: possible water leak" required></label>'
+            + '<label>Follow-up message<textarea name="message" maxlength="2000" required>Smart Water is following up on the possible leak detected by your meter. Please check your household plumbing and contact the municipal water office if the flow continues.</textarea></label></div>'
+            + '<div class="leak-alert-card-actions"><button class="button button-primary" type="submit">Notify household</button></div>'
+            + '</form></div></article>';
     }).join('');
 
     containers.forEach((container) => {
@@ -3983,7 +4051,7 @@ const renderAdminUsers = (usersResponse, { householdsOnly = false } = {}) => {
                     <span>${statusMarkup}</span>
                     <span class="table-actions">
                         ${householdsOnly ? `<button type="button" class="link-button" data-edit-user="${user.id}">Manage</button>` : ''}
-                        <button type="button" class="link-button rose" data-delete-user="${user.id}" data-user-name="${escapeHtml(formatPersonalDisplay(user.name))}">Delete</button>
+                        <button type="button" class="link-button rose admin-user-delete-button" data-delete-user="${user.id}" data-user-name="${escapeHtml(formatPersonalDisplay(user.name))}">Delete</button>
                     </span>
                 </div>
             `;
@@ -4351,20 +4419,30 @@ const renderMunicipalDevices = (items, container) => {
             <div class="notification-head">
                 <div>
                     <h4>${escapeHtml(device.asset_number)} · ${escapeHtml(device.name)}</h4>
-                    <p>${escapeHtml(householdName)} · ${escapeHtml(device.serial_number)}</p>
+                    <p>${escapeHtml(householdName)}</p>
                 </div>
                 <span class="status-chip ${healthClass}">${escapeHtml(health)}</span>
             </div>
-            <small>Lifecycle: ${escapeHtml(lifecycle)} · Maintenance: ${escapeHtml(maintenance)}</small>
-            <small>Last seen: ${escapeHtml(formatDateTime(device.last_seen_at))} · Last telemetry: ${escapeHtml(formatDateTime(device.last_telemetry_at))}</small>
-            <small>Firmware: ${escapeHtml(device.firmware_version ?? 'Not reported')} · Hardware: ${escapeHtml(device.hardware_id ?? 'Not commissioned')}</small>
-            <small>Installed: ${escapeHtml(device.installed_at ? formatDateTime(device.installed_at) : 'Not set')} · Address: ${escapeHtml(device.installation_address ?? 'Not set')}</small>
+            <div class="device-health-summary">
+                <span><strong>Last seen</strong>${escapeHtml(formatDateTime(device.last_seen_at))}</span>
+                <span><strong>Address</strong>${escapeHtml(device.installation_address ?? 'Not set')}</span>
+            </div>
             <div class="button-row">
-                ${lifecycle !== 'decommissioned' ? `<button type="button" class="button button-secondary" data-device-new-code="${escapeHtml(device.id)}">${lifecycle === 'suspended' ? 'Reactivate with new code' : 'New activation code'}</button>` : ''}
                 ${lifecycle === 'active' ? `<button type="button" class="button button-secondary" data-device-status="${escapeHtml(device.id)}" data-next-status="maintenance">Maintenance</button>` : ''}
                 ${lifecycle === 'maintenance' ? `<button type="button" class="button button-secondary" data-device-status="${escapeHtml(device.id)}" data-next-status="active">Return to service</button>` : ''}
                 ${lifecycle !== 'decommissioned' ? `<button type="button" class="link-button rose" data-device-decommission="${escapeHtml(device.id)}">Decommission</button>` : ''}
             </div>
+            <details class="device-technical-details">
+                <summary>Meter details</summary>
+                <div>
+                    <span><strong>Lifecycle</strong>${escapeHtml(lifecycle)} · Maintenance: ${escapeHtml(maintenance)}</span>
+                    <span><strong>Serial number</strong>${escapeHtml(device.serial_number)}</span>
+                    <span><strong>Last telemetry</strong>${escapeHtml(formatDateTime(device.last_telemetry_at))}</span>
+                    <span><strong>Firmware</strong>${escapeHtml(device.firmware_version ?? 'Not reported')} · Hardware: ${escapeHtml(device.hardware_id ?? 'Not commissioned')}</span>
+                    <span><strong>Installed</strong>${escapeHtml(device.installed_at ? formatDateTime(device.installed_at) : 'Not set')}</span>
+                    ${lifecycle !== 'decommissioned' ? `<button type="button" class="link-button" data-device-new-code="${escapeHtml(device.id)}">${lifecycle === 'suspended' ? 'Reactivate with a new activation code' : 'Create a new activation code'}</button>` : ''}
+                </div>
+            </details>
         </article>`;
     }).join('');
 };
@@ -4469,47 +4547,12 @@ const bindAdminDeviceActions = (container, activationResult) => {
     });
 };
 
-const formatAdminRefreshTime = (value = new Date()) => new Date(value).toLocaleString(undefined, {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-});
-
-const renderAdminOverviewAttention = (analytics) => {
-    const container = $('[data-admin-attention-list]');
-    if (!container) return;
-
-    const households = analytics.households ?? {};
-    const devices = analytics.devices ?? {};
-    const alerts = analytics.alerts ?? {};
-    const items = [
-        [Number(alerts.unresolved_leak_alerts ?? 0), 'Unresolved leak alerts', 'Review household leak investigations', 'leak-monitoring', 'bi-exclamation-triangle'],
-        [Number(devices.pending_activation ?? 0), 'Meters pending activation', 'Complete device commissioning', 'device-management', 'bi-cpu'],
-        [Number(devices.offline ?? 0), 'Offline meters', 'Check connection health and last-seen time', 'device-management', 'bi-wifi-off'],
-        [Number(households.inactive ?? 0) + Number(households.suspended ?? 0), 'Inactive or suspended households', 'Review account access and status', 'customer-management', 'bi-people'],
-    ].filter(([count]) => count > 0);
-
-    container.innerHTML = items.length
-        ? items.map(([count, title, description, target, icon]) => `<div class="admin-overview-list-item"><span class="admin-overview-list-icon"><i class="bi ${icon}" aria-hidden="true"></i></span><span><strong>${formatNumber(count, 0)} ${escapeHtml(title)}</strong><small>${escapeHtml(description)}</small></span><button class="link-button" type="button" data-admin-nav="${target}">Open</button></div>`).join('')
-        : '<div class="empty-state">No operational follow-ups require attention.</div>';
-
-    if (container.dataset.bound !== '1') {
-        container.dataset.bound = '1';
-        container.addEventListener('click', (event) => {
-            const button = event.target.closest('[data-admin-nav]');
-            if (button) showAdminView(button.dataset.adminNav);
-        });
-    }
-};
-
 const renderAdminOverviewActivity = (analytics) => {
     const container = $('[data-admin-activity-list]');
     if (!container) return;
 
     const activity = Array.isArray(analytics.recent?.administrative_actions)
-        ? analytics.recent.administrative_actions.slice(0, 6)
+        ? analytics.recent.administrative_actions.slice(0, 3)
         : [];
     container.innerHTML = activity.length
         ? activity.map((item) => {
@@ -4521,83 +4564,69 @@ const renderAdminOverviewActivity = (analytics) => {
 
 const renderAdminConsumptionBaselines = (items = [], threshold = 100) => {
     const container = $('[data-admin-consumption-baselines]');
-    const summary = $('[data-admin-consumption-baseline-summary]');
     if (!container) return;
 
     const comparisons = Array.isArray(items) ? items : [];
+    const hasAlertThreshold = Number.isFinite(threshold) && threshold > 0;
     const relevantCount = comparisons.filter((item) => {
         const latest = item.latest ?? {};
-        return !latest.is_baseline
+        return hasAlertThreshold && !latest.is_baseline
             && latest.change_percent !== null
             && Math.abs(Number(latest.change_percent)) >= threshold;
     }).length;
-    if (summary) {
-        summary.textContent = comparisons.length
-            ? `${relevantCount} alert${relevantCount === 1 ? '' : 's'} · ${comparisons.length} household${comparisons.length === 1 ? '' : 's'}`
-            : 'No baseline data';
-        applyStatusTone('[data-admin-consumption-baseline-summary]', relevantCount > 0 ? 'Attention' : 'Normal');
-    }
 
     if (!comparisons.length) {
-        container.innerHTML = '<div class="dashboard-empty-state"><strong>No consumption baseline yet</strong><span>A household appears here after its meter submits the first monthly reading.</span></div>';
+        container.innerHTML = '<div class="dashboard-empty-state"><strong>No household usage comparison yet</strong><span>Comparisons appear after meters submit monthly readings.</span></div>';
         return;
     }
 
-    container.innerHTML = comparisons.map((item) => {
-        const household = item.household ?? {};
-        const baseline = item.baseline ?? {};
-        const latest = item.latest ?? baseline;
-        const percentage = latest.usage_percentage === null ? null : Number(latest.usage_percentage ?? 100);
-        const change = latest.change_percent === null ? null : Number(latest.change_percent ?? 0);
-        const relevant = !latest.is_baseline && change !== null && Math.abs(change) >= threshold;
-        const directionIcon = change > 0 ? 'bi-arrow-up-right' : (change < 0 ? 'bi-arrow-down-right' : 'bi-dash');
-        const directionLabel = latest.is_baseline
-            ? 'Baseline established'
-            : (change === null ? 'Baseline has no measurable usage' : `${change > 0 ? '+' : ''}${formatNumber(change)}% from baseline`);
-        const history = (item.months ?? []).slice(-6).map((month) => `
-            <span class="consumption-baseline-chip${month.is_baseline ? ' is-baseline' : ''}">
-                <small>${escapeHtml(formatMonthLabel(month.month))}</small>
-                <strong>${month.usage_percentage === null ? '--' : `${formatNumber(month.usage_percentage)}%`}</strong>
-            </span>
-        `).join('');
-
-        return `
-            <article class="consumption-baseline-item${relevant ? ' requires-attention' : ''}">
-                <header>
-                    <span class="consumption-baseline-icon" aria-hidden="true"><i class="bi bi-speedometer2"></i></span>
-                    <span class="consumption-baseline-household">
-                        <strong>${escapeHtml(household.name ?? 'Household')}</strong>
-                        <small>${escapeHtml(household.account_number ?? 'No account number')}</small>
-                    </span>
-                    <span class="status-pill">${relevant ? 'Alert' : (latest.is_baseline ? 'Baseline' : 'Normal')}</span>
-                </header>
-                <div class="consumption-baseline-metrics">
-                    <span><small>First month</small><strong>100%</strong><em>${escapeHtml(formatMonthLabel(baseline.month))} · ${formatNumber(baseline.liters ?? 0)} L</em></span>
-                    <span><small>${escapeHtml(formatMonthLabel(latest.month))}</small><strong>${percentage === null ? '--' : `${formatNumber(percentage)}%`}</strong><em>${formatNumber(latest.liters ?? 0)} L</em></span>
-                    <span class="${change > 0 ? 'is-increase' : (change < 0 ? 'is-decrease' : '')}"><small>Change</small><strong><i class="bi ${directionIcon}" aria-hidden="true"></i> ${escapeHtml(directionLabel)}</strong><em>Alert threshold: ±${formatNumber(threshold)}%</em></span>
-                </div>
-                <div class="consumption-baseline-history" aria-label="Recent monthly percentages">${history}</div>
-            </article>
-        `;
-    }).join('');
+    const summary = relevantCount
+        ? `${relevantCount} consumption alert${relevantCount === 1 ? '' : 's'} need review.`
+        : 'No consumption alerts.';
+    const monitored = `${comparisons.length} household${comparisons.length === 1 ? '' : 's'} monitored.`;
+    container.innerHTML = `<div class="consumption-alert-summary${relevantCount ? ' requires-attention' : ''}">
+        <span class="consumption-alert-summary-icon" aria-hidden="true"><i class="bi ${relevantCount ? 'bi-exclamation-triangle' : 'bi-check-circle'}"></i></span>
+        <span><strong>${summary}</strong><small>${monitored}</small></span>
+    </div>`;
 };
 
 const loadAdminActionCenter = async () => {
     const list = $('[data-action-center-list]');
-    const metrics = $('[data-action-center-metrics]');
-    if (!list || !metrics) return;
+    if (!list) return;
     try {
         const response = await requestJson('/api/admin/action-center');
         const data = response.data ?? {};
         const summary = data.summary ?? {};
-        setText('[data-action-center-summary]', `${formatNumber(summary.total_attention ?? 0, 0)} requiring attention`);
-        metrics.innerHTML = [
-            ['Open messages', summary.open_service_requests ?? 0, 'service-requests'],
-            ['Overdue bills', summary.overdue_statements ?? 0, 'billing-management'],
-            ['Active leaks', summary.active_leaks ?? 0, 'leak-monitoring'],
-        ].map(([label, value, target]) => `<button type="button" data-admin-nav="${target}"><small>${label}</small><strong>${formatNumber(value, 0)}</strong></button>`).join('');
-        const supportedItems = (data.items ?? []).filter((item) => ['service-requests', 'billing-management', 'leak-monitoring', 'device-management', 'customer-management', 'consumption-monitoring'].includes(item.target));
-        list.innerHTML = supportedItems.length ? supportedItems.map((item) => `<article class="action-center-item is-${escapeHtml(item.severity)}"><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.description)}</small></span><span class="status-chip">${escapeHtml(String(item.status).replaceAll('_', ' '))}</span><button class="link-button" type="button" data-admin-nav="${escapeHtml(item.target)}">Open</button></article>`).join('') : '<div class="dashboard-empty-state"><strong>Action center clear</strong><span>No unresolved website workflow currently requires attention.</span></div>';
+        const actions = [
+            {
+                count: Number(summary.active_leaks ?? 0),
+                label: 'active leak',
+                target: 'leak-monitoring',
+                action: 'Review leaks',
+                detail: (count) => count ? `${count} leak${count === 1 ? '' : 's'} need review.` : 'No active leaks need action.',
+                severity: 'high',
+            },
+            {
+                count: Number(summary.open_service_requests ?? 0),
+                label: 'open message',
+                target: 'service-requests',
+                action: 'Open messages',
+                detail: (count) => count ? `${count} household message${count === 1 ? '' : 's'} await a response.` : 'No household messages need action.',
+                severity: 'normal',
+            },
+            {
+                count: Number(summary.overdue_statements ?? 0),
+                label: 'overdue bill',
+                target: 'billing-management',
+                action: 'View bills',
+                detail: (count) => count ? `${count} bill${count === 1 ? '' : 's'} need follow-up.` : 'No overdue bills need action.',
+                severity: 'normal',
+            },
+        ];
+        list.innerHTML = actions.map((item) => `<article class="action-center-item is-${item.count ? item.severity : 'normal'}">
+            <span><strong>${formatNumber(item.count, 0)} ${item.label}${item.count === 1 ? '' : 's'}</strong><small>${item.detail(item.count)}</small></span>
+            <button class="link-button" type="button" data-admin-nav="${item.target}">${item.action}</button>
+        </article>`).join('');
         const panel = $('.admin-action-center');
         if (panel && panel.dataset.bound !== '1') {
             panel.dataset.bound = '1';
@@ -4616,15 +4645,27 @@ const renderAdminServiceRequestDetail = (item) => {
     const container = $('[data-admin-service-request-detail]');
     if (!dialog || !container) return;
     setText('[data-admin-service-request-title]', `${item.reference_number} · ${item.subject}`);
-    const messages = (item.messages ?? []).map((message) => `<div class="service-request-message ${message.is_internal ? 'is-internal' : (message.author?.role === 'admin' ? 'is-staff' : 'is-household')}"><strong>${escapeHtml(message.is_internal ? 'Internal staff note' : (message.author?.role === 'admin' ? message.author.name : item.household?.name))}</strong><p>${escapeHtml(message.message)}</p><small>${escapeHtml(formatDateTime(message.created_at))}</small></div>`).join('');
-    container.innerHTML = `<div class="summary-list"><div><dt>Household</dt><dd>${escapeHtml(item.household?.name)} · ${escapeHtml(item.household?.account_number)}</dd></div><div><dt>Category</dt><dd>${escapeHtml(String(item.category).replaceAll('_', ' '))}</dd></div><div><dt>Priority</dt><dd>${escapeHtml(item.priority)}</dd></div><div><dt>Status</dt><dd>${escapeHtml(String(item.status).replaceAll('_', ' '))}</dd></div></div>
-        <p class="service-request-description">${escapeHtml(item.description)}</p><div class="service-request-thread">${messages}</div>
-        <form class="stack-form" data-admin-request-workflow="${escapeHtml(item.id)}">
-            <div class="form-grid-two"><label>Status<select name="status">${['open','acknowledged','in_progress','waiting_for_household','resolved','closed'].map((value) => `<option value="${value}" ${item.status === value ? 'selected' : ''}>${value.replaceAll('_', ' ')}</option>`).join('')}</select></label><label>Priority<select name="priority">${['low','normal','high','urgent'].map((value) => `<option value="${value}" ${item.priority === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label></div>
-            <button class="button button-secondary" type="submit" name="workflow_action" value="update">Update workflow</button>
-            <label>Reply or staff note<textarea name="message" maxlength="5000"></textarea></label>
-            <label class="admin-checkbox-field"><span>Internal note</span><span><input type="checkbox" name="is_internal" value="1"> Hide from household</span></label>
-            <button class="button button-primary" type="submit" name="workflow_action" value="reply">Add response</button>
+    const threadMessages = item.messages ?? [];
+    const initialMessageIndex = item.description
+        ? threadMessages.findIndex((message) => !message.is_internal && message.author?.role !== 'admin' && String(message.message ?? '').trim() === String(item.description).trim())
+        : -1;
+    const initialMessage = initialMessageIndex >= 0 ? threadMessages[initialMessageIndex] : null;
+    const messages = threadMessages.filter((_, index) => index !== initialMessageIndex).map((message) => `<div class="service-request-message ${message.is_internal ? 'is-internal' : (message.author?.role === 'admin' ? 'is-staff' : 'is-household')}"><strong>${escapeHtml(message.is_internal ? 'Internal staff note' : (message.author?.role === 'admin' ? message.author.name : item.household?.name))}</strong><p>${escapeHtml(message.message)}</p><small>${escapeHtml(formatDateTime(message.created_at))}</small></div>`).join('');
+    const conversation = messages ? `<section class="service-request-conversation"><p class="eyebrow">Conversation</p><div class="service-request-thread">${messages}</div></section>` : '';
+    container.innerHTML = `<div class="service-request-meta"><div><span>Household</span><strong>${escapeHtml(item.household?.name)} · ${escapeHtml(item.household?.account_number)}</strong></div><div><span>Category</span><strong>${escapeHtml(String(item.category).replaceAll('_', ' '))}</strong></div><div><span>Priority</span><strong>${escapeHtml(item.priority)}</strong></div><div><span>Status</span><strong>${escapeHtml(String(item.status).replaceAll('_', ' '))}</strong></div></div>
+        ${item.description ? `<section class="service-request-concern"><p class="eyebrow">Household concern</p><p>${escapeHtml(item.description)}</p>${initialMessage?.created_at ? `<small>Submitted ${escapeHtml(formatDateTime(initialMessage.created_at))}</small>` : ''}</section>` : ''}
+        ${conversation}
+        <form class="stack-form admin-service-request-workflow" data-admin-request-workflow="${escapeHtml(item.id)}">
+            <section class="admin-request-workflow-section">
+                <div class="admin-request-workflow-heading"><div><p class="eyebrow">Request management</p><p>Update the handling status and priority.</p></div><button class="button button-secondary" type="submit" name="workflow_action" value="update">Save changes</button></div>
+                <div class="form-grid-two"><label>Status<select name="status">${['open','acknowledged','in_progress','waiting_for_household','resolved','closed'].map((value) => `<option value="${value}" ${item.status === value ? 'selected' : ''}>${value.replaceAll('_', ' ')}</option>`).join('')}</select></label><label>Priority<select name="priority">${['low','normal','high','urgent'].map((value) => `<option value="${value}" ${item.priority === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label></div>
+            </section>
+            <section class="admin-request-reply-section">
+                <div><p class="eyebrow">Reply</p><p>Send a response to the household, or keep it as a staff-only note.</p></div>
+                <label>Message<textarea name="message" maxlength="5000" placeholder="Write a reply or staff note"></textarea></label>
+                <label class="admin-request-internal-note"><input type="checkbox" name="is_internal" value="1"><span><strong>Internal note</strong><small>Only staff can see this message.</small></span></label>
+                <button class="button button-primary" type="submit" name="workflow_action" value="reply">Send response</button>
+            </section>
         </form>`;
     if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', '');
 };
@@ -4637,8 +4678,11 @@ const loadAdminServiceRequests = async () => {
         const query = filter ? buildQuery(Object.fromEntries(new FormData(filter).entries())) : '';
         const response = await requestJson(`/api/service-requests${query}`);
         const items = responseItems(response);
-        setText('[data-admin-request-summary]', `${responsePaginator(response).total ?? items.length} message${items.length === 1 ? '' : 's'}`);
-        container.innerHTML = items.length ? items.map((item) => `<article class="admin-service-request-item"><span><strong>${escapeHtml(item.subject)}</strong><small>${escapeHtml(item.reference_number)} · ${escapeHtml(item.household?.name)} · ${escapeHtml(String(item.category).replaceAll('_', ' '))}</small></span><span class="status-chip">${escapeHtml(String(item.priority))}</span><span class="status-chip">${escapeHtml(String(item.status).replaceAll('_', ' '))}</span><button class="link-button" type="button" data-admin-request-open="${escapeHtml(item.id)}">Open</button></article>`).join('') : '<div class="dashboard-empty-state"><strong>No matching household messages</strong></div>';
+        container.innerHTML = items.length ? items.map((item) => {
+            const priority = String(item.priority ?? 'normal');
+            const priorityChip = ['high', 'urgent'].includes(priority) ? `<span class="status-chip status-chip-alert">${escapeHtml(priority)}</span>` : '';
+            return `<article class="admin-service-request-item"><span><strong>${escapeHtml(item.subject)}</strong><small>${escapeHtml(item.reference_number)} · ${escapeHtml(item.household?.name)} · ${escapeHtml(String(item.category).replaceAll('_', ' '))}</small></span>${priorityChip}<span class="status-chip">${escapeHtml(String(item.status).replaceAll('_', ' '))}</span><button class="link-button" type="button" data-admin-request-open="${escapeHtml(item.id)}">Open</button></article>`;
+        }).join('') : '<div class="dashboard-empty-state"><strong>No matching household messages</strong></div>';
     } catch (error) {
         if (!handleAuthFailure(error)) container.innerHTML = '<div class="dashboard-empty-state is-error"><strong>Household messages unavailable</strong></div>';
     }
@@ -4751,6 +4795,8 @@ const billingStatusLabel = (status) => ({
     estimated: 'Estimated',
     unpaid: 'Unpaid',
     partial: 'Partial',
+    overdue: 'Overdue',
+    cancelled: 'Cancelled',
     paid: 'Paid',
 }[status] ?? String(status ?? 'Unknown').replaceAll('_', ' '));
 
@@ -4769,21 +4815,18 @@ const renderBillingRecords = (response) => {
     } else {
         container.innerHTML = records.map((record) => {
             const household = record.household ?? {};
-            const typeLabel = record.record_type === 'finalized' ? 'Finalized' : 'Estimated';
-            const typeClass = record.record_type === 'finalized' ? 'status-chip-soft' : 'status-chip-muted';
             const statusClass = record.status === 'paid' ? 'status-chip-soft' : record.status === 'estimated' ? 'status-chip-muted' : 'status-chip-alert';
             const key = escapeHtml(String(record.id));
             const actions = record.record_type === 'finalized'
-                ? `<button type="button" class="link-button" data-billing-detail="${key}">Details</button><button type="button" class="link-button" data-admin-download-statement="${key}">Statement PDF</button>${['unpaid', 'partial'].includes(record.status) ? `<button type="button" class="link-button" data-billing-pay="${key}">Record payment</button>` : ''}`
-                : `<button type="button" class="link-button" data-billing-detail="${key}">Details</button><button type="button" class="link-button" data-billing-generate="${key}">Finalize month</button>`;
+                ? `<button type="button" class="link-button" data-billing-detail="${key}">View statement</button><button type="button" class="link-button" data-admin-download-statement="${key}">Download PDF</button>${['unpaid', 'partial'].includes(record.status) ? `<button type="button" class="link-button" data-billing-pay="${key}">Record payment</button>` : ''}`
+                : `<button type="button" class="link-button" data-billing-detail="${key}">View estimate</button><button type="button" class="link-button" data-billing-generate="${key}">Finalize bill</button>`;
 
             return `<div class="table-row billing-management-row">
                 <span><strong class="table-primary">${escapeHtml(formatPersonalDisplay(household.name))}</strong><small class="table-secondary">${escapeHtml(household.account_number ?? household.email ?? 'No account number')}</small></span>
                 <span>${escapeHtml(record.period?.label ?? '--')}</span>
-                <span><span class="status-chip ${typeClass}">${typeLabel}</span></span>
                 <span><strong class="table-primary">${formatCubicMeterValue(record.total_cubic_meter ?? 0)}</strong><small class="table-secondary">${formatNumber(record.total_liters ?? 0, 2)} L${record.reading_count ? ` · ${formatNumber(record.reading_count, 0)} readings` : ''}</small></span>
                 <span><strong class="table-primary">${formatCurrency(record.current_charge ?? 0, record.currency)}</strong><small class="table-secondary">Rate ${formatCurrency(record.water_rate ?? 0, record.currency)} / m³</small></span>
-                <span><span class="status-chip ${statusClass}">${escapeHtml(billingStatusLabel(record.status))}</span><small class="table-secondary">Balance ${formatCurrency(record.remaining_balance ?? 0, record.currency)}</small></span>
+                <span><span class="status-chip ${statusClass}">${escapeHtml(billingStatusLabel(record.status))}</span>${record.record_type === 'finalized' ? `<small class="table-secondary">Balance ${formatCurrency(record.remaining_balance ?? 0, record.currency)}</small>` : ''}</span>
                 <span class="table-actions">${actions}</span>
             </div>`;
         }).join('');
@@ -4833,7 +4876,7 @@ const renderBillingDetail = (data) => {
         <div><dt>Paid</dt><dd>${formatCurrency(record.amount_paid ?? 0, record.currency)}</dd></div>
         <div><dt>Remaining balance</dt><dd>${formatCurrency(record.remaining_balance ?? 0, record.currency)}</dd></div>
         <div><dt>Applicable rate</dt><dd>${formatCurrency(record.water_rate ?? 0, record.currency)} / m³</dd></div>
-    </div>${payments.length ? `<div class="billing-detail-readings"><p class="eyebrow">Payment receipts</p>${payments.map((payment) => `<button class="button button-ghost" type="button" data-admin-download-receipt="${escapeHtml(payment.id)}">${escapeHtml(payment.receipt_number)} · ${formatCurrency(payment.amount, record.currency)}</button>`).join('')}</div>` : ''}${readings.length ? `<div class="billing-detail-readings"><p class="eyebrow">Source readings</p><div class="table"><div class="table-head"><span>Recorded</span><span>Flow</span><span>Liters</span><span>Estimated</span></div>${readings.slice(0, 20).map((reading) => `<div class="table-row"><span>${escapeHtml(formatDateTime(reading.recorded_at))}</span><span>${formatNumber(reading.flow_rate)} L/min</span><span>${formatNumber(reading.liters_used, 2)} L</span><span>${formatCurrency(reading.estimated_bill, record.currency)}</span></div>`).join('')}</div></div>` : '<div class="empty-state">No source readings are attached to this finalized statement.</div>'}`;
+    </div>${payments.length ? `<div class="billing-detail-readings"><p class="eyebrow">Payment verification and receipts</p>${payments.map((payment) => `<div class="table-actions"><span>${escapeHtml(payment.receipt_number)} · ${formatCurrency(payment.amount, record.currency)} · ${escapeHtml(billingStatusLabel(payment.status))}</span>${payment.status === 'confirmed' ? `<button class="button button-ghost" type="button" data-admin-download-receipt="${escapeHtml(payment.id)}">Receipt</button><button class="link-button" type="button" data-payment-void="${escapeHtml(payment.id)}">Void</button>` : payment.status === 'pending' ? `<button class="button button-primary" type="button" data-payment-confirm="${escapeHtml(payment.id)}">Approve</button><button class="link-button" type="button" data-payment-reject="${escapeHtml(payment.id)}">Reject</button>` : `<small>${escapeHtml(payment.status_note ?? '')}</small>`}</div>`).join('')}</div>` : ''}${readings.length ? `<div class="billing-detail-readings"><p class="eyebrow">Source readings</p><div class="table"><div class="table-head"><span>Recorded</span><span>Flow</span><span>Liters</span><span>Estimated</span></div>${readings.slice(0, 20).map((reading) => `<div class="table-row"><span>${escapeHtml(formatDateTime(reading.recorded_at))}</span><span>${formatNumber(reading.flow_rate)} L/min</span><span>${formatNumber(reading.liters_used, 2)} L</span><span>${formatCurrency(reading.estimated_bill, record.currency)}</span></div>`).join('')}</div></div>` : '<div class="empty-state">No source readings are attached to this finalized statement.</div>'}`;
 };
 
 const openBillingDetail = async (record) => {
@@ -4917,8 +4960,21 @@ const bindBillingManagementActions = () => {
         billingDetailDialog.dataset.receiptsBound = '1';
         billingDetailDialog.addEventListener('click', async (event) => {
             const button = event.target.closest('[data-admin-download-receipt]');
-            if (!button) return;
-            try { await downloadAuthenticatedFile(`/api/billing-payments/${button.dataset.adminDownloadReceipt}/receipt`, 'payment-receipt.pdf'); } catch { showToast('Could not download this receipt.', 'error'); }
+            const confirmButton = event.target.closest('[data-payment-confirm]');
+            const rejectButton = event.target.closest('[data-payment-reject]');
+            const voidButton = event.target.closest('[data-payment-void]');
+            try {
+                if (button) { await downloadAuthenticatedFile(`/api/billing-payments/${button.dataset.adminDownloadReceipt}/receipt`, 'payment-receipt.pdf'); return; }
+                const action = confirmButton ? 'confirm' : rejectButton ? 'reject' : voidButton ? 'void' : null;
+                const id = confirmButton?.dataset.paymentConfirm ?? rejectButton?.dataset.paymentReject ?? voidButton?.dataset.paymentVoid;
+                if (!action || !id) return;
+                const note = action === 'confirm' ? '' : window.prompt(`Reason to ${action} this payment:`);
+                if (action !== 'confirm' && !note) return;
+                await requestJson(`/api/billing-payments/${id}/${action}`, { method: 'PATCH', body: JSON.stringify(note ? { note } : {}) });
+                showToast(`Payment ${action === 'confirm' ? 'approved' : action + 'ed'}.`);
+                closeBillingDetail();
+                await Promise.all([loadAdminBillingManagement(), loadAdminActionCenter()]);
+            } catch (error) { showToast(errorMessage(error, 'Could not update this payment.'), 'error'); }
         });
     }
     if (paymentForm && paymentForm.dataset.bound !== '1') {
@@ -5224,107 +5280,105 @@ const bindAdminReports = () => {
     }));
 };
 
-const renderAdminSystemHealth = (response) => {
-    const health = response?.data;
-    if (!health) {
-        setText('[data-admin-system-health-status]', 'Unavailable');
-        setText('[data-admin-system-database]', 'Unavailable');
-        setText('[data-admin-system-telemetry]', 'Unavailable');
-        setText('[data-admin-system-telemetry-detail]', 'Diagnostics could not be loaded.');
-        setText('[data-admin-system-integrity]', 'Unavailable');
-        setText('[data-admin-system-failed-jobs]', 'Unavailable');
-        applyStatusTone('[data-admin-system-health-status]', 'unavailable');
-        return;
-    }
+const formatTelemetryDelay = (ageSeconds) => {
+    const minutes = Math.max(0, Math.floor(Number(ageSeconds) / 60));
+    if (minutes < 60) return `${Math.max(1, minutes)} minute${minutes === 1 ? '' : 's'}`;
 
-    const isHealthy = health.status === 'healthy';
-    const ageSeconds = Number(health.telemetry?.age_seconds ?? 0);
-    const ageLabel = ageSeconds < 60
-        ? `${Math.max(0, Math.round(ageSeconds))}s ago`
-        : `${Math.round(ageSeconds / 60)}m ago`;
-    const integrityIssues = Number(health.integrity?.issue_count ?? 0);
-    const failedJobs = Number(health.queues?.failed_jobs ?? 0);
+    const hours = Math.floor(minutes / 60);
+    if (hours < 48) return `${hours} hour${hours === 1 ? '' : 's'}`;
 
-    setText('[data-admin-system-health-status]', isHealthy ? 'Healthy' : 'Attention required');
-    setText('[data-admin-system-database]', health.database?.status === 'connected' && health.database?.foreign_keys_enforced
-        ? `Connected · ${String(health.database.driver ?? '').toUpperCase()} · FK on`
-        : 'Database check failed');
-    setText('[data-admin-system-telemetry]', health.telemetry?.latest_reading_id ? ageLabel : 'No readings');
-    setText('[data-admin-system-telemetry-detail]', health.telemetry?.latest_reading_at
-        ? `Latest reading ${formatDateTime(health.telemetry.latest_reading_at)}.`
-        : 'No telemetry has been received.');
-    setText('[data-admin-system-integrity]', integrityIssues === 0 ? 'No issues' : `${integrityIssues} issue${integrityIssues === 1 ? '' : 's'}`);
-    setText('[data-admin-system-failed-jobs]', String(failedJobs));
-    applyStatusTone('[data-admin-system-health-status]', isHealthy ? 'healthy' : 'critical');
-    applyStatusTone('[data-admin-system-database]', health.database?.foreign_keys_enforced ? 'healthy' : 'critical');
-    applyStatusTone('[data-admin-system-integrity]', integrityIssues === 0 ? 'healthy' : 'critical');
-    applyStatusTone('[data-admin-system-failed-jobs]', failedJobs === 0 ? 'healthy' : 'critical');
+    const days = Math.floor(hours / 24);
+    return `${days} day${days === 1 ? '' : 's'}`;
 };
 
-const renderConsumptionAlertComparison = (comparison) => {
+const renderAdminTelemetryAlert = (response) => {
+    const alert = $('[data-admin-telemetry-alert]');
+    if (!alert) return;
+
+    const telemetry = response?.data?.telemetry;
+    const isDelayed = telemetry?.status === 'stale' || telemetry?.status === 'waiting';
+    alert.hidden = !isDelayed;
+    if (!isDelayed) return;
+
+    const message = telemetry?.latest_reading_at
+        ? `Meter data has not been received for ${formatTelemetryDelay(telemetry.age_seconds)}. Review meter connections.`
+        : 'No meter data has been received yet. Review meter connections.';
+    setText('[data-admin-telemetry-alert-message]', message);
+};
+
+const renderConsumptionAlertComparison = (items = []) => {
     const container = $('[data-consumption-alert-comparison]');
-    if (!container) return;
-
-    const previous = comparison?.previous_month ?? {};
-    const current = comparison?.current_month ?? {};
-    const previousLiters = Math.max(0, Number(previous.total_liters ?? 0));
-    const currentLiters = Math.max(0, Number(current.total_liters ?? 0));
-    const largestValue = Math.max(previousLiters, currentLiters);
-    const previousWidth = largestValue > 0 && previousLiters > 0 ? Math.max(3, (previousLiters / largestValue) * 100) : 0;
-    const currentWidth = largestValue > 0 && currentLiters > 0 ? Math.max(3, (currentLiters / largestValue) * 100) : 0;
-    const changePercent = comparison?.change_percent === null || comparison?.change_percent === undefined
-        ? null
-        : Number(comparison.change_percent);
-
-    setText('[data-consumption-previous-label]', previous.label ?? 'Previous month');
-    setText('[data-consumption-current-label]', current.label ?? 'Current month');
-    setText('[data-consumption-previous-value]', `${formatNumber(previousLiters, 2)} L`);
-    setText('[data-consumption-current-value]', `${formatNumber(currentLiters, 2)} L`);
-
-    const previousBar = $('[data-consumption-previous-bar]');
-    const currentBar = $('[data-consumption-current-bar]');
-    if (previousBar) previousBar.style.width = `${Math.min(100, previousWidth)}%`;
-    if (currentBar) currentBar.style.width = `${Math.min(100, currentWidth)}%`;
+    const chart = $('[data-consumption-alert-baseline-chart]');
+    if (!container || !chart) return;
+    const comparisons = Array.isArray(items) ? items : [];
 
     const changeBadge = $('[data-consumption-comparison-change]');
     if (changeBadge) {
         changeBadge.classList.remove('status-chip-muted', 'status-chip-soft', 'status-chip-alert', 'consumption-change-increase');
-        if (changePercent === null) {
-            changeBadge.textContent = currentLiters > 0 ? 'New usage this month' : 'No comparison data';
+        const comparedCount = comparisons.filter((item) => !item.latest?.is_baseline).length;
+        if (!comparisons.length) {
+            changeBadge.textContent = 'No baseline data';
             changeBadge.classList.add('status-chip-muted');
-        } else if (changePercent > 0) {
-            changeBadge.textContent = `↑ ${formatNumber(Math.abs(changePercent), 2)}%`;
-            changeBadge.classList.add('consumption-change-increase');
-        } else if (changePercent < 0) {
-            changeBadge.textContent = `↓ ${formatNumber(Math.abs(changePercent), 2)}%`;
-            changeBadge.classList.add('status-chip-soft');
         } else {
-            changeBadge.textContent = 'No change';
-            changeBadge.classList.add('status-chip-muted');
+            changeBadge.textContent = `${comparedCount} of ${comparisons.length} compared`;
+            changeBadge.classList.add(comparedCount ? 'status-chip-soft' : 'status-chip-muted');
         }
     }
 
-    const previousReadings = Number(previous.reading_count ?? 0);
-    const currentReadings = Number(current.reading_count ?? 0);
     setText(
         '[data-consumption-comparison-summary]',
-        previousReadings + currentReadings > 0
-            ? `${formatNumber(currentReadings, 0)} current-month and ${formatNumber(previousReadings, 0)} previous-month household readings are included.`
-            : 'No household water readings were recorded in either month.',
+        comparisons.length
+            ? 'Each bar compares a month’s recorded water use with that household’s July baseline. Percentages are shown above the bar, with the month and recorded liters below.'
+            : 'A household appears after its meter records monthly water use.',
     );
 
-    const chart = $('[data-consumption-comparison-chart]');
-    if (chart) {
-        const changeDescription = changePercent === null
-            ? 'A percentage change is unavailable because the previous month has no recorded usage.'
-            : changePercent === 0
-                ? 'Usage is unchanged from the previous month.'
-                : `${Math.abs(changePercent).toFixed(2)} percent ${changePercent > 0 ? 'higher' : 'lower'} than the previous month.`;
-        chart.setAttribute(
-            'aria-label',
-            `${previous.label ?? 'Previous month'}: ${previousLiters.toFixed(2)} liters. ${current.label ?? 'Current month'} month to date: ${currentLiters.toFixed(2)} liters. ${changeDescription}`,
-        );
+    chart.innerHTML = comparisons.length ? comparisons.map((item) => {
+        const household = item.household ?? {};
+        const baseline = item.baseline ?? {};
+        const months = Array.isArray(item.months) ? item.months : [];
+        const largestPercentage = Math.max(100, ...months.map((month) => Math.max(0, Number(month.usage_percentage ?? 0))));
+        const bars = months.map((month) => {
+            const percentage = month.usage_percentage === null ? null : Number(month.usage_percentage ?? 0);
+            const height = percentage === null ? 0 : Math.max(3, Math.min(100, (percentage / largestPercentage) * 100));
+            const status = month.is_baseline ? ' is-baseline' : (percentage > 100 ? ' is-above' : (percentage < 100 ? ' is-below' : ''));
+            return `<div class="consumption-month-bar${status}" title="${escapeHtml(formatMonthLabel(month.month))}: ${percentage === null ? 'percentage unavailable' : `${formatNumber(percentage)}%`} · ${formatNumber(month.liters ?? 0)} L">
+                <strong>${percentage === null ? '--' : `${formatNumber(percentage)}%`}</strong>
+                <div class="consumption-month-bar-column"><span style="height:${height}%"></span></div>
+                <small>${escapeHtml(formatMonthLabel(month.month))}</small>
+                <em>${formatNumber(month.liters ?? 0)} L</em>
+            </div>`;
+        }).join('');
+        return `<article class="consumption-vertical-chart-card">
+            <header><strong>${escapeHtml(household.name ?? 'Household')}</strong><small>July baseline: ${formatNumber(baseline.liters ?? 0)} L = 100%</small></header>
+            <div class="consumption-vertical-months" role="img" aria-label="${escapeHtml(household.name ?? 'Household')} monthly water use compared with the July baseline">${bars}</div>
+        </article>`;
+    }).join('') : '<div class="empty-state">No household baseline data yet.</div>';
+};
+
+const refreshConsumptionBaselines = async () => {
+    if (consumptionBaselineRefreshInFlight || document.visibilityState === 'hidden') return;
+    consumptionBaselineRefreshInFlight = true;
+    try {
+        const response = await requestJson('/api/analytics/consumption-baselines', { forceNetwork: true });
+        renderConsumptionAlertComparison(response.data ?? []);
+    } catch (error) {
+        if (!handleAuthFailure(error)) console.error('Could not refresh consumption baselines.', error);
+    } finally {
+        consumptionBaselineRefreshInFlight = false;
     }
+};
+
+const stopConsumptionBaselineRefresh = () => {
+    if (consumptionBaselineRefreshTimer !== null) {
+        window.clearInterval(consumptionBaselineRefreshTimer);
+        consumptionBaselineRefreshTimer = null;
+    }
+};
+
+const startConsumptionBaselineRefresh = () => {
+    stopConsumptionBaselineRefresh();
+    void refreshConsumptionBaselines();
+    consumptionBaselineRefreshTimer = window.setInterval(refreshConsumptionBaselines, 3000);
 };
 
 const loadAdmin = async () => {
@@ -5393,11 +5447,10 @@ const loadAdmin = async () => {
         const overviewHouseholdUsers = await loadEligibleHouseholds([deviceHouseholdSelect, householdSelect]);
         const municipalDevicesPromise = loadAdminDevices();
         const leakAlertsPromise = loadAdminLeakAlerts();
-        const [summaryResponse, analyticsResponse, billingResponse, consumptionResponse, systemHealthResponse] = await Promise.all([
+        const [summaryResponse, analyticsResponse, billingResponse, systemHealthResponse] = await Promise.all([
             requestJson('/api/summary'),
             requestJson(`/api/analytics/admin${analyticsQuery(adminAnalyticsRange, adminAnalyticsFrom, adminAnalyticsTo, 'last_12_months')}`),
             requestJson('/api/billing-settings', { forceNetwork: true }),
-            requestJson('/api/reports/consumption'),
             requestJson('/api/system-health').catch((error) => {
                 if (!handleAuthFailure(error)) console.error('System health request failed', error);
                 return null;
@@ -5419,8 +5472,6 @@ const loadAdmin = async () => {
             setValue(billingRatesForm, 'effective_date', billingFormSettings.effective_date ? String(billingFormSettings.effective_date).slice(0, 10) : '');
             setValue(billingRatesForm, 'currency', billingFormSettings.currency ?? 'PHP');
 
-            setValue(consumptionAlertForm, 'threshold_liters', billingFormSettings.threshold_liters ?? 15000);
-            setValue(consumptionAlertForm, 'percentage_threshold', billingFormSettings.consumption_change_threshold_percent ?? 100);
             setValue(consumptionAlertForm, 'notification_behavior', billingFormSettings.consumption_alert_behavior ?? 'household');
             if (consumptionAlertForm?.elements?.consumption_alert_enabled) consumptionAlertForm.elements.consumption_alert_enabled.checked = billingFormSettings.consumption_alert_enabled !== false;
 
@@ -5433,9 +5484,8 @@ const loadAdmin = async () => {
         }
         const summary = summaryResponse.data ?? {};
         const analytics = analyticsResponse.data ?? {};
-        const consumption = consumptionResponse.data ?? {};
-        renderConsumptionAlertComparison(consumption.monthly_comparison);
-        renderAdminSystemHealth(systemHealthResponse);
+        renderConsumptionAlertComparison(analytics.alerts?.consumption_baselines ?? []);
+        renderAdminTelemetryAlert(systemHealthResponse);
         const leakHouseholds = await leakAlertsPromise;
         const municipalDevices = await municipalDevicesPromise;
         await consumptionPromise;
@@ -5451,32 +5501,15 @@ const loadAdmin = async () => {
         setText('[data-admin-households]', analytics.households?.total ?? 0);
         setText('[data-admin-devices]', analytics.devices?.total ?? 0);
         setText('[data-admin-online-devices]', analytics.devices?.connected ?? 0);
-        setText('[data-admin-offline-devices]', analytics.devices?.offline ?? 0);
         setText('[data-admin-unresolved-leaks]', analytics.alerts?.unresolved_leak_alerts ?? 0);
         setText('[data-admin-liters]', totalConsumption);
         setText('[data-admin-billing-total]', estimatedBilling);
         setText('[data-admin-active-households]', analytics.households?.active ?? 0);
-        setText('[data-admin-inactive-households]', analytics.households?.inactive ?? 0);
-        setText('[data-admin-suspended-households]', analytics.households?.suspended ?? 0);
-        setText('[data-admin-assigned-devices]', analytics.devices?.assigned ?? 0);
         setText('[data-admin-pending-devices]', analytics.devices?.pending_activation ?? 0);
-        setText('[data-admin-waiting-devices]', analytics.devices?.waiting_for_first_reading ?? 0);
-        setText('[data-admin-analytics-timezone]', analytics.period?.timezone ?? 'UTC');
-        setText('[data-admin-last-refreshed]', formatAdminRefreshTime());
-        const overviewRangeLabels = {
-            last_7_days: 'Last 7 days',
-            last_30_days: 'Last 30 days',
-            last_3_months: 'Last 3 months',
-            last_12_months: 'Last 12 months',
-        };
-        setText('[data-admin-overview-period]', analytics.range === 'custom'
-            ? `${formatDateTime(analytics.period?.from)} – ${formatDateTime(analytics.period?.to)}`
-            : (overviewRangeLabels[analytics.range] ?? 'Selected period'));
-        renderAdminOverviewAttention(analytics);
         renderAdminOverviewActivity(analytics);
         renderAdminConsumptionBaselines(
             analytics.alerts?.consumption_baselines ?? [],
-            Number(billingSettings?.consumption_change_threshold_percent ?? 100),
+            Number.NaN,
         );
         renderMonthlyChart($('[data-admin-monthly-chart]'), summary.monthly_usage ?? [], {
             dataAvailable: summary.monthly_usage?.some((row) => Number(row.reading_count ?? 0) > 0) === true,
@@ -5487,8 +5520,8 @@ const loadAdmin = async () => {
             billingSummaryContainer.innerHTML = `
                 <div><dt>Water rate per m³</dt><dd>${billingSettings ? formatCurrency(billingSettings.water_rate) : '--'}</dd></div>
                 <div><dt>Fixed monthly charge</dt><dd>${billingSettings ? formatCurrency(billingSettings.fixed_monthly_charge ?? 0) : '--'}</dd></div>
-                <div><dt>Monthly usage limit</dt><dd>${billingSettings ? `${formatNumber(billingSettings.threshold_liters ?? 0)} L` : '--'}</dd></div>
-                <div><dt>Consumption change alert</dt><dd>${billingSettings ? `${formatNumber(billingSettings.consumption_change_threshold_percent ?? 100)}%` : '--'}</dd></div>
+                <div><dt>Consumption baseline</dt><dd>July = 100%</dd></div>
+                <div><dt>Monthly percentage report</dt><dd>${billingSettings?.consumption_alert_enabled === false ? 'Disabled' : 'Enabled'}</dd></div>
                 <div><dt>Leak threshold</dt><dd>${billingSettings ? `${formatNumber(billingSettings.leak_flow_rate_threshold ?? 0)} L/min` : '--'}</dd></div>
                 <div><dt>Quiet hours</dt><dd>${billingSettings ? `${billingSettings.quiet_hours_start}:00 - ${billingSettings.quiet_hours_end}:00` : '--'}</dd></div>
                 <div><dt>Households</dt><dd>${overviewHouseholdUsers.length}</dd></div>
@@ -5499,8 +5532,8 @@ const loadAdmin = async () => {
         const currentSummary = $('[data-water-rate-current-summary]');
         if (currentSummary) {
             currentSummary.innerHTML = billingSettings
-                ? `<div><dt>Current water rate</dt><dd>${formatCurrency(billingSettings.water_rate)} / m³</dd></div><div><dt>Effective date</dt><dd>${escapeHtml(billingSettings.effective_date ? formatDateTime(billingSettings.effective_date) : 'Immediately')}</dd></div><div><dt>Currency</dt><dd>${escapeHtml(billingSettings.currency ?? 'PHP')}</dd></div><div><dt>Monthly usage limit</dt><dd>${formatNumber(billingSettings.threshold_liters ?? 0)} L</dd></div><div><dt>Leak monitoring</dt><dd>${billingSettings.leak_alert_enabled === false ? 'Disabled' : `${formatNumber(billingSettings.leak_flow_rate_threshold ?? 0)} L/min`}</dd></div>`
-                : '<div><dt>Current water rate</dt><dd>Not configured</dd></div><div><dt>Effective date</dt><dd>--</dd></div><div><dt>Currency</dt><dd>PHP</dd></div><div><dt>Monthly usage limit</dt><dd>--</dd></div><div><dt>Leak monitoring</dt><dd>Not configured</dd></div>';
+                ? `<div><dt>Current water rate</dt><dd>${formatCurrency(billingSettings.water_rate)} / m³</dd></div><div><dt>Effective date</dt><dd>${escapeHtml(billingSettings.effective_date ? formatDateTime(billingSettings.effective_date) : 'Immediately')}</dd></div><div><dt>Leak monitoring</dt><dd>${billingSettings.leak_alert_enabled === false ? 'Disabled' : `${formatNumber(billingSettings.leak_flow_rate_threshold ?? 0)} L/min`}</dd></div>`
+                : '<div><dt>Current water rate</dt><dd>Not configured</dd></div><div><dt>Effective date</dt><dd>--</dd></div><div><dt>Leak monitoring</dt><dd>Not configured</dd></div>';
         }
 
         renderAdminAlerts(leakHouseholds);
@@ -5928,16 +5961,6 @@ const bootCommon = () => {
             historyState.per_page = Number(fields.per_page ?? 10);
             loadConsumptionHistory();
         });
-        historyFilterForm.addEventListener('reset', () => {
-            window.setTimeout(() => {
-                historyState.page = 1;
-                historyState.from = '';
-                historyState.to = '';
-                historyState.search = '';
-                historyState.per_page = 10;
-                loadConsumptionHistory();
-            }, 0);
-        });
     }
 
     $$('[data-history-export-csv]').forEach((button) => {
@@ -5973,24 +5996,6 @@ const bootCommon = () => {
             loadDashboard({ manual: true });
         }
 
-        if (page === 'admin') {
-            if (refreshButton) {
-                refreshButton.disabled = true;
-                refreshButton.classList.add('is-loading');
-                refreshButton.setAttribute('aria-busy', 'true');
-                refreshButton.setAttribute('aria-label', 'Refreshing administrator overview');
-            }
-            dashboardCacheForceNetwork = true;
-            loadAdmin().finally(() => {
-                dashboardCacheForceNetwork = false;
-                if (refreshButton) {
-                    refreshButton.disabled = false;
-                    refreshButton.classList.remove('is-loading');
-                    refreshButton.removeAttribute('aria-busy');
-                    refreshButton.setAttribute('aria-label', 'Refresh administrator overview');
-                }
-            });
-        }
     });
 
     householdAnalyticsRange?.addEventListener('change', () => {
@@ -6055,6 +6060,20 @@ const bootCommon = () => {
     });
     consumptionGoalForm?.elements?.month?.addEventListener('change', loadConsumptionGoal);
 
+    const syncServiceRequestBillingStatement = () => {
+        if (!serviceRequestForm) return;
+        const field = $('[data-request-statement-field]', serviceRequestForm);
+        const category = serviceRequestForm.elements.category?.value;
+        const isBillingRequest = category === 'billing_question' || category === 'billing_dispute';
+        if (field) field.hidden = !isBillingRequest;
+        if (!isBillingRequest && serviceRequestForm.elements.billing_statement_id) {
+            serviceRequestForm.elements.billing_statement_id.value = '';
+        }
+    };
+
+    syncServiceRequestBillingStatement();
+    serviceRequestForm?.elements.category?.addEventListener('change', syncServiceRequestBillingStatement);
+
     serviceRequestForm?.addEventListener('submit', async (event) => {
         event.preventDefault();
         const feedback = $('[data-service-request-feedback]');
@@ -6065,6 +6084,7 @@ const bootCommon = () => {
             if (!values.billing_statement_id) delete values.billing_statement_id;
             const response = await requestJson('/api/service-requests', { method: 'POST', body: JSON.stringify(values) });
             serviceRequestForm.reset();
+            syncServiceRequestBillingStatement();
             if (feedback) { feedback.hidden = false; feedback.classList.remove('is-error'); feedback.textContent = `${response.message} Reference: ${response.data.reference_number}`; }
             showToast(response.message);
             await loadHouseholdServiceRequests();
@@ -6104,7 +6124,9 @@ const bootCommon = () => {
         event.preventDefault();
         const feedback = $('[data-preferences-feedback]');
         const values = Object.fromEntries(new FormData(notificationPreferencesForm).entries());
-        ['announcements', 'billing_updates', 'consumption_alerts', 'leak_alerts', 'service_request_updates', 'low_bandwidth_mode'].forEach((name) => { values[name] = notificationPreferencesForm.elements[name].checked; });
+        const regularNotifications = notificationPreferencesForm.elements.regular_notifications.checked;
+        ['announcements', 'billing_updates', 'consumption_alerts', 'service_request_updates'].forEach((name) => { values[name] = regularNotifications; });
+        ['leak_alerts', 'low_bandwidth_mode'].forEach((name) => { values[name] = notificationPreferencesForm.elements[name].checked; });
         try {
             const response = await requestJson('/api/notification-preferences', { method: 'PUT', body: JSON.stringify(values) });
             applyLocale(response.data.preferred_locale);
@@ -6137,23 +6159,42 @@ const bootCommon = () => {
             if (receipt) await downloadAuthenticatedFile(`/api/billing-payments/${receipt.dataset.downloadReceipt}/receipt`, 'payment-receipt.pdf');
         } catch { showToast('Could not download this billing document.', 'error'); }
     });
+    $('[data-household-payment-form]')?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const statementId = form.elements.billing_statement_id.value;
+        const feedback = $('[data-household-payment-feedback]');
+        if (!statementId) return;
+        try {
+            const headers = authHeaders();
+            delete headers['Content-Type'];
+            const response = await fetch(`/api/billing-statements/${statementId}/payment-submissions`, { method: 'POST', headers, body: new FormData(form) });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.message ?? 'Could not submit payment.');
+            form.reset();
+            if (feedback) { feedback.hidden = false; feedback.classList.remove('is-error'); feedback.textContent = payload.message; }
+            showToast(payload.message);
+            await loadHouseholdBilling({ force: true });
+        } catch (error) {
+            if (feedback) { feedback.hidden = false; feedback.classList.add('is-error'); feedback.textContent = errorMessage(error, 'Could not submit payment.'); }
+        }
+    });
 
     const clearNotificationsButton = $('[data-clear-notifications]');
     clearNotificationsButton?.addEventListener('click', async () => {
         if (notificationMutationInFlight) return;
-        if (!window.confirm('Clear every notification from your inbox?')) return;
 
         const previousNotifications = householdNotifications;
         notificationMutationInFlight = true;
         notificationMutationVersion++;
-        applyHouseholdNotifications([]);
+        applyHouseholdNotifications(previousNotifications.map((notification) => ({ ...notification, is_read: true })));
 
         try {
-            const response = await requestJson('/api/notifications/received/all', { method: 'DELETE' });
-            showToast(response.message ?? 'All notifications cleared successfully.');
+            const response = await requestJson('/api/notifications/read-all', { method: 'PATCH' });
+            showToast(response.message ?? 'Notifications marked as read.');
         } catch (error) {
             applyHouseholdNotifications(previousNotifications);
-            if (!handleAuthFailure(error)) showToast(errorMessage(error, 'Could not clear notifications.'), 'error');
+            if (!handleAuthFailure(error)) showToast(errorMessage(error, 'Could not mark notifications as read.'), 'error');
         } finally {
             notificationMutationInFlight = false;
         }

@@ -30,7 +30,7 @@ class ConsumptionChangeAlertTest extends TestCase
         [$household, $deviceIdentity] = $this->householdAndDevice();
         $this->settings(100);
         $this->previousReading($household, 100, '2026-06-15 12:00:00');
-        $this->previousReading($household, 800, '2026-07-15 12:00:00');
+        $this->previousReading($household, 100, '2026-07-15 12:00:00');
         Sanctum::actingAs($deviceIdentity, ['device-upload']);
 
         $this->postJson('/api/water-data', $this->payload('increase-1', 200))
@@ -42,9 +42,8 @@ class ConsumptionChangeAlertTest extends TestCase
         $this->assertSame(200.0, (float) $notice->metadata['usage_percentage']);
         $this->assertSame(200.0, (float) $notice->metadata['current_liters']);
         $this->assertSame(100.0, (float) $notice->metadata['baseline_liters']);
-        $this->assertSame('2026-06', $notice->metadata['baseline_month']);
-        $this->assertStringContainsString('notify the local waterworks', $notice->message);
-        $this->assertStringContainsString('first recorded month baseline', $notice->message);
+        $this->assertSame('2026-07', $notice->metadata['baseline_month']);
+        $this->assertSame('Your water use this month is 100.00% higher than your July baseline.', $notice->message);
 
         $this->postJson('/api/water-data', $this->payload('increase-2', 10))->assertCreated();
         $this->assertDatabaseCount('notifications', 1);
@@ -63,7 +62,7 @@ class ConsumptionChangeAlertTest extends TestCase
         $notice = Notification::query()->where('type', 'consumption_change')->firstOrFail();
         $this->assertSame('decrease', $notice->metadata['change_direction']);
         $this->assertSame(-100.0, (float) $notice->metadata['percentage_change']);
-        $this->assertStringContainsString('decreased by 100.00%', $notice->message);
+        $this->assertSame('Your water use this month is 100.00% lower than your July baseline.', $notice->message);
     }
 
     public function test_no_alert_is_sent_without_a_previous_month_baseline(): void
@@ -91,12 +90,12 @@ class ConsumptionChangeAlertTest extends TestCase
         $this->getJson('/api/analytics/admin?range=last_12_months')
             ->assertOk()
             ->assertJsonPath('data.alerts.consumption_baselines.0.household.name', 'Baseline Household')
-            ->assertJsonPath('data.alerts.consumption_baselines.0.baseline.month', '2026-06')
+            ->assertJsonPath('data.alerts.consumption_baselines.0.baseline.month', '2026-07')
             ->assertJsonPath('data.alerts.consumption_baselines.0.baseline.usage_percentage', 100)
-            ->assertJsonPath('data.alerts.consumption_baselines.0.months.1.usage_percentage', 150)
+            ->assertJsonPath('data.alerts.consumption_baselines.0.months.1.usage_percentage', 100)
             ->assertJsonPath('data.alerts.consumption_baselines.0.latest.month', '2026-08')
-            ->assertJsonPath('data.alerts.consumption_baselines.0.latest.usage_percentage', 50)
-            ->assertJsonPath('data.alerts.consumption_baselines.0.latest.change_percent', -50);
+            ->assertJsonPath('data.alerts.consumption_baselines.0.latest.usage_percentage', 33.33)
+            ->assertJsonPath('data.alerts.consumption_baselines.0.latest.change_percent', -66.67);
     }
 
     /** @return array{User, User} */

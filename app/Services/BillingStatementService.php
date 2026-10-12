@@ -55,7 +55,7 @@ class BillingStatementService
             ->whereDate('billing_month', $periodStart->toDateString())
             ->first();
         $amountPaid = $existingStatement
-            ? max((float) $existingStatement->amount_paid, (float) $existingStatement->payments()->sum('amount'))
+            ? max((float) $existingStatement->amount_paid, (float) $existingStatement->payments()->where('status', 'confirmed')->sum('amount'))
             : 0;
         $remainingBalance = max($openingBalance + $currentCharge - $amountPaid, 0);
 
@@ -77,7 +77,7 @@ class BillingStatementService
                 'current_charge' => $currentCharge,
                 'amount_paid' => $amountPaid,
                 'remaining_balance' => $remainingBalance,
-                'status' => $remainingBalance > 0 ? 'unpaid' : 'paid',
+                'status' => $remainingBalance <= 0 ? 'paid' : ($amountPaid > 0 ? 'partial' : 'unpaid'),
                 'generated_at' => now(),
                 'paid_at' => $remainingBalance <= 0 ? now() : null,
             ],

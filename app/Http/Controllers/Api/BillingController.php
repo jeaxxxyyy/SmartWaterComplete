@@ -103,16 +103,16 @@ class BillingController extends Controller
     {
         $validated = $request->validate([
             'user_id' => ['nullable', 'integer', 'exists:users,id'],
-            'threshold_liters' => ['required', 'numeric', 'min:0'],
-            'percentage_threshold' => ['required', 'numeric', 'min:0.01', 'max:10000'],
             'notification_behavior' => ['required', Rule::in(['household', 'household_admin', 'disabled'])],
             'consumption_alert_enabled' => ['sometimes', 'boolean'],
         ]);
 
-        $validated['consumption_change_threshold_percent'] = (float) $validated['percentage_threshold'];
+        // Consumption alerts are baseline reports, not an administrator-set usage cap.
+        $validated['threshold_liters'] = 0;
+        $validated['consumption_change_threshold_percent'] = 0;
         $validated['consumption_alert_unit'] = 'percentage';
         $validated['consumption_alert_behavior'] = $validated['notification_behavior'];
-        unset($validated['percentage_threshold'], $validated['notification_behavior']);
+        unset($validated['notification_behavior']);
 
         return $this->saveSection($request, $validated, 'consumption_alerts', 'Consumption alert settings saved successfully.');
     }

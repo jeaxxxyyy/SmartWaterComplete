@@ -249,7 +249,7 @@ class AnalyticsService
             ->values();
     }
 
-    private function consumptionBaselineComparisons(): Collection
+    public function consumptionBaselineComparisons(): Collection
     {
         $driver = DB::connection()->getDriverName();
         $monthExpression = $driver === 'sqlite'
@@ -278,11 +278,16 @@ class AnalyticsService
                 return null;
             }
 
-            $baseline = $rows->first();
+            // July is the municipality's reporting baseline when readings
+            // exist for that household. Older/newer accounts fall back to
+            // their first available month.
+            $julyMonth = Carbon::now(config('app.timezone'))->format('Y').'-07';
+            $baseline = $rows->firstWhere('month', $julyMonth) ?? $rows->first();
             $baselineLiters = (float) $baseline->total_liters;
-            $comparisons = $rows->map(function ($row, int $index) use ($baselineLiters): array {
+            $comparisons = $rows->map(function ($row) use ($baseline, $baselineLiters): array {
                 $liters = (float) $row->total_liters;
-                $percentage = $index === 0 ? 100.0 : ($baselineLiters > 0 ? ($liters / $baselineLiters) * 100 : null);
+                $isBaseline = $row->month === $baseline->month;
+                $percentage = $isBaseline ? 100.0 : ($baselineLiters > 0 ? ($liters / $baselineLiters) * 100 : null);
                 $change = $percentage === null ? null : $percentage - 100;
 
                 return [
@@ -291,12 +296,13 @@ class AnalyticsService
                     'reading_count' => (int) $row->reading_count,
                     'usage_percentage' => $percentage === null ? null : round($percentage, 2),
                     'change_percent' => $change === null ? null : round($change, 2),
-                    'direction' => $index === 0 ? 'baseline' : ($change > 0 ? 'increase' : ($change < 0 ? 'decrease' : 'unchanged')),
-                    'is_baseline' => $index === 0,
+                    'direction' => $isBaseline ? 'baseline' : ($change > 0 ? 'increase' : ($change < 0 ? 'decrease' : 'unchanged')),
+                    'is_baseline' => $isBaseline,
                 ];
             })->values();
+            $baselineComparison = $comparisons->firstWhere('is_baseline');
             $visibleComparisons = $comparisons->count() > 12
-                ? collect([$comparisons->first()])->concat($comparisons->slice(-11))->values()
+                ? collect([$baselineComparison])->concat($comparisons->slice(-11))->unique('month')->values()
                 : $comparisons;
 
             return [
@@ -305,7 +311,7 @@ class AnalyticsService
                     'name' => $user->name,
                     'account_number' => $user->account_number,
                 ],
-                'baseline' => $comparisons->first(),
+                'baseline' => $baselineComparison,
                 'latest' => $comparisons->last(),
                 'months' => $visibleComparisons,
             ];

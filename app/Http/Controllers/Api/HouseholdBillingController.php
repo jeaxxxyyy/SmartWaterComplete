@@ -150,6 +150,10 @@ class HouseholdBillingController extends Controller
                         'id' => $payment->id,
                         'receipt_number' => $payment->receipt_number,
                         'amount' => (float) $payment->amount,
+                        'status' => $payment->status,
+                        'payment_method' => $payment->payment_method,
+                        'reference_number' => $payment->reference_number,
+                        'status_note' => $payment->status_note,
                         'received_at' => $this->timestamp($payment->received_at),
                     ])->values(),
                 ])

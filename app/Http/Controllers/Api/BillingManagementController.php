@@ -25,9 +25,12 @@ class BillingManagementController extends Controller
         $validated = $request->validate([
             'search' => ['nullable', 'string', 'max:255'],
             'bill_type' => ['nullable', 'in:all,estimated,finalized'],
-            'status' => ['nullable', 'in:all,estimated,unpaid,partial,paid'],
+            'status' => ['nullable', 'in:all,estimated,unpaid,partial,paid,overdue,cancelled'],
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date', 'after_or_equal:from'],
+            'payment_method' => ['nullable', 'in:cash'],
+            'payment_reference' => ['nullable', 'string', 'max:100'],
+            'payment_date' => ['nullable', 'date'],
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:50'],
         ]);
@@ -62,6 +65,9 @@ class BillingManagementController extends Controller
                 ->with(['user:id,name,email,account_number,address', 'payments'])
                 ->whereIn('user_id', $householdIds)
                 ->whereBetween('billing_month', [$from->toDateString(), $to->toDateString()])
+                ->when(! empty($validated['payment_method']), fn ($query) => $query->whereHas('payments', fn ($payments) => $payments->where('payment_method', $validated['payment_method'])))
+                ->when(! empty($validated['payment_reference']), fn ($query) => $query->whereHas('payments', fn ($payments) => $payments->where('reference_number', 'like', '%'.$validated['payment_reference'].'%')))
+                ->when(! empty($validated['payment_date']), fn ($query) => $query->whereHas('payments', fn ($payments) => $payments->whereDate('received_at', $validated['payment_date'])))
                 ->get();
 
             $records = $records->concat($statements->map(fn (BillingStatement $statement): array => $this->finalizedRecord($statement)));

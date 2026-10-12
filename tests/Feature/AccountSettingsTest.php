@@ -60,6 +60,29 @@ class AccountSettingsTest extends TestCase
             ->assertJsonPath('data.account_number', 'ACC-ORIGINAL-001');
     }
 
+    public function test_admin_contact_updates_are_visible_from_the_household_profile_endpoint(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $household = User::factory()->create([
+            'address' => 'Old Address',
+            'phone' => '09170000000',
+        ]);
+
+        Sanctum::actingAs($admin);
+        $this->putJson("/api/users/{$household->id}", [
+            'address' => 'New Household Address',
+            'phone' => '09998887777',
+        ])->assertOk()
+            ->assertJsonPath('data.address', 'New Household Address')
+            ->assertJsonPath('data.phone', '09998887777');
+
+        Sanctum::actingAs($household->fresh());
+        $this->getJson('/api/account')
+            ->assertOk()
+            ->assertJsonPath('data.address', 'New Household Address')
+            ->assertJsonPath('data.phone', '09998887777');
+    }
+
     public function test_admin_cannot_use_household_account_settings_endpoints(): void
     {
         Sanctum::actingAs(User::factory()->admin()->create());

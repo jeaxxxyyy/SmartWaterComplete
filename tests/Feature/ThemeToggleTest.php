@@ -82,14 +82,12 @@ class ThemeToggleTest extends TestCase
         $response = $this->get('/household');
 
         $response->assertOk()
-            ->assertSee('class="analytics-range-control"', false)
-            ->assertSee('id="household-custom-range"', false)
-            ->assertSee('data-household-analytics-custom-toggle', false)
-            ->assertSee('ui-icon-calendar', false)
-            ->assertSee('aria-expanded="false"', false)
-            ->assertSee('data-refresh-label', false)
-            ->assertSee('<span data-refresh-label>Refresh</span>', false)
-            ->assertSee('ui-icon-refresh', false);
+            ->assertDontSee('class="analytics-range-control"', false)
+            ->assertDontSee('id="household-custom-range"', false)
+            ->assertDontSee('data-household-analytics-custom-toggle', false)
+            ->assertDontSee('data-refresh-label', false)
+            ->assertDontSee('<span data-refresh-label>Refresh</span>', false)
+            ->assertDontSee('ui-icon-refresh', false);
 
         $document = new \DOMDocument;
         @$document->loadHTML($response->getContent());
@@ -150,7 +148,7 @@ class ThemeToggleTest extends TestCase
             ->assertDontSee('data-admin-notification-dropdown', false)
             ->assertDontSee('data-admin-notification-dropdown-list', false)
             ->assertDontSee('data-admin-notification-view-all', false)
-            ->assertSee('admin-refresh-button', false)
+            ->assertSee('data-admin-analytics-range', false)
             ->assertSee('admin-analytics-range-control', false)
             ->assertSee('admin-analytics-custom-range', false)
             ->assertSee('input-with-currency', false)
@@ -166,6 +164,16 @@ class ThemeToggleTest extends TestCase
             ->assertSee('data-admin-view="service-requests"', false)
             ->assertDontSee('data-admin-view="reports"', false)
             ->assertDontSee('data-admin-view="notifications"', false);
+    }
+
+    public function test_billing_detail_summary_has_a_compact_responsive_calculation_layout(): void
+    {
+        $styles = file_get_contents(resource_path('css/app.css'));
+
+        $this->assertStringContainsString('body.page[data-page="admin"] .billing-detail-summary {', $styles);
+        $this->assertStringContainsString('grid-template-columns: repeat(2, minmax(0, 1fr));', $styles);
+        $this->assertStringContainsString('body.page[data-page="admin"] .billing-detail-summary > div {', $styles);
+        $this->assertStringContainsString('@media (max-width: 575.98px)', $styles);
     }
 
     public function test_login_exposes_an_accessible_password_visibility_control(): void
@@ -250,7 +258,7 @@ class ThemeToggleTest extends TestCase
             "//*[contains(concat(' ', normalize-space(@class), ' '), ' metric-overview-grid ')]"
         );
 
-        $this->assertCount(4, $cards);
+        $this->assertCount(5, $cards);
         $this->assertCount(3, $overviewGrids);
     }
 }

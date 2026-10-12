@@ -67,6 +67,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/household-consumption', [HouseholdConsumptionController::class, 'show']);
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
+    Route::patch('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
     Route::delete('/notifications/received/all', [NotificationController::class, 'destroyAllReceived']);
     Route::delete('/notifications/received/{notification}', [NotificationController::class, 'destroyReceived']);
     Route::get('/billing-statements', [BillingStatementController::class, 'index']);
@@ -90,6 +91,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->post('/water-data', [Wate
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::get('/system-health', SystemHealthController::class);
     Route::get('/analytics/admin', [AnalyticsController::class, 'admin']);
+    Route::get('/analytics/consumption-baselines', [AnalyticsController::class, 'consumptionBaselines']);
     Route::post('/billing-settings', [BillingController::class, 'store']);
     Route::post('/billing-settings/rates', [BillingController::class, 'storeRates']);
     Route::post('/billing-settings/consumption-alerts', [BillingController::class, 'storeConsumptionAlerts']);
@@ -97,6 +99,7 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::post('/billing-statements/generate', [BillingStatementController::class, 'generate']);
     Route::patch('/billing-statements/{billingStatement}/paid', [BillingStatementController::class, 'markAsPaid']);
     Route::post('/billing-statements/{billingStatement}/payments', [BillingPaymentController::class, 'store']);
+    Route::patch('/billing-payments/{billingPayment}/void', [BillingPaymentController::class, 'void']);
     Route::get('/admin/action-center', AdminActionCenterController::class);
     Route::get('/billing-management', [BillingManagementController::class, 'index']);
     Route::get('/billing-management/{billingStatement}', [BillingManagementController::class, 'show']);

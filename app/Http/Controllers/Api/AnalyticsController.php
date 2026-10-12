@@ -36,6 +36,13 @@ class AnalyticsController extends Controller
         ]);
     }
 
+    public function consumptionBaselines()
+    {
+        return response()->json([
+            'data' => $this->analytics->consumptionBaselineComparisons(),
+        ]);
+    }
+
     private function resolveRange(Request $request, string $default): array
     {
         $validated = $request->validate([

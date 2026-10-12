@@ -22,9 +22,9 @@ class AnalyticsAndPrivacyTest extends TestCase
         $this->get('/admin')
             ->assertOk()
             ->assertSee('Operations Dashboard')
-            ->assertSee('Last refreshed:')
+            ->assertSee('Analytics period')
             ->assertSee('Pending activation')
-            ->assertSee('Needs attention')
+            ->assertSee('Municipal work requiring attention')
             ->assertDontSee('Run the Smart Water Monitoring System from a single operations console.');
     }
 

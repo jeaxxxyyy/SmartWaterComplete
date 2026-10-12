@@ -19,7 +19,7 @@
     --color-app-success: var(--success);
     --color-app-warning: var(--warning);
     --color-app-danger: var(--danger);
-    --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-sans: "Segoe UI", Tahoma, Arial, sans-serif;
 }
 
 /* Resident services, forecasting, and municipal action workflows */
@@ -157,13 +157,296 @@
 .service-request-message p { margin: .35rem 0; white-space: pre-wrap; }
 .service-request-message small { color: var(--muted); }
 
-.admin-action-center {
-    padding: 1.25rem;
+body.page[data-page="admin"] .admin-messages-header {
+    margin-bottom: 0.9rem;
 }
 
-.admin-action-center .action-center-metrics {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    margin-bottom: 1rem;
+body.page[data-page="admin"] .admin-messages-header h1 {
+    margin: 0.2rem 0 0.25rem;
+    font-size: clamp(1.45rem, 2vw, 1.85rem);
+    letter-spacing: -0.025em;
+}
+
+body.page[data-page="admin"] .admin-filter-bar {
+    display: grid;
+    grid-template-columns: minmax(14rem, 1.45fr) repeat(2, minmax(10rem, 0.9fr)) auto;
+    align-items: end;
+    gap: 0.6rem;
+}
+
+body.page[data-page="admin"] .admin-filter-bar :is(input, select) {
+    min-width: 0;
+    min-height: 2.75rem;
+}
+
+body.page[data-page="admin"] .admin-filter-bar .button {
+    min-width: 8rem;
+}
+
+body.page[data-page="admin"] .consumption-filter-panel .consumption-filter-form {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.9rem;
+}
+
+body.page[data-page="admin"] .consumption-filter-form :is(.consumption-filter-search, .consumption-filter-field, .consumption-filter-dates) {
+    display: grid;
+    gap: 0.32rem;
+    min-width: 0;
+}
+
+body.page[data-page="admin"] .consumption-filter-search {
+    grid-column: span 4;
+}
+
+body.page[data-page="admin"] .consumption-filter-field {
+    grid-column: span 2;
+}
+
+body.page[data-page="admin"] .consumption-filter-form :is(.consumption-filter-search, .consumption-filter-field) > span,
+body.page[data-page="admin"] .consumption-filter-dates label > span {
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-weight: 750;
+    letter-spacing: 0.035em;
+}
+
+body.page[data-page="admin"] .consumption-filter-dates {
+    grid-column: span 4;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.page[data-page="admin"] .consumption-filter-dates label {
+    display: grid;
+    gap: 0.32rem;
+    min-width: 0;
+}
+
+body.page[data-page="admin"] .consumption-filter-actions {
+    grid-column: span 4;
+    grid-template-columns: repeat(2, minmax(8.5rem, 1fr));
+    justify-content: start;
+}
+
+@media (min-width: 721px) and (max-width: 1099px) {
+    body.page[data-page="admin"] .consumption-filter-panel .consumption-filter-form {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body.page[data-page="admin"] .consumption-filter-search,
+    body.page[data-page="admin"] .consumption-filter-field,
+    body.page[data-page="admin"] .consumption-filter-dates,
+    body.page[data-page="admin"] .consumption-filter-actions {
+        grid-column: auto;
+    }
+}
+
+body.page[data-page="admin"] .service-request-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
+    margin: 0.9rem 0 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 0.8rem;
+    background: var(--surface-soft);
+}
+
+body.page[data-page="admin"] .service-request-meta > div {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+    padding: 0.68rem 0.8rem;
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+}
+
+body.page[data-page="admin"] .service-request-meta > div:nth-child(2n) {
+    border-right: 0;
+}
+
+body.page[data-page="admin"] .service-request-meta > div:nth-last-child(-n + 2) {
+    border-bottom: 0;
+}
+
+body.page[data-page="admin"] .service-request-meta span,
+body.page[data-page="admin"] .service-request-meta strong {
+    overflow-wrap: anywhere;
+}
+
+body.page[data-page="admin"] .service-request-meta span {
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-weight: 750;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+body.page[data-page="admin"] .service-request-meta strong {
+    color: var(--text);
+    font-size: 0.82rem;
+    line-height: 1.35;
+    text-transform: capitalize;
+}
+
+body.page[data-page="admin"] .service-request-concern,
+body.page[data-page="admin"] .service-request-conversation {
+    margin-top: 1rem;
+}
+
+body.page[data-page="admin"] .service-request-concern {
+    padding: 0.8rem 0.9rem;
+    border: 1px solid var(--line);
+    border-radius: 0.8rem;
+    background: var(--surface-soft);
+}
+
+body.page[data-page="admin"] .service-request-concern .eyebrow,
+body.page[data-page="admin"] .service-request-conversation .eyebrow {
+    margin: 0;
+}
+
+body.page[data-page="admin"] .service-request-concern > p:last-child {
+    margin: 0.35rem 0 0;
+    white-space: pre-wrap;
+}
+
+body.page[data-page="admin"] .service-request-concern small {
+    display: block;
+    margin-top: 0.45rem;
+    color: var(--muted);
+    font-size: 0.75rem;
+}
+
+body.page[data-page="admin"] .service-request-conversation .service-request-thread {
+    margin-top: 0.45rem;
+}
+
+body.page[data-page="admin"] .admin-service-request-workflow {
+    gap: 0.9rem;
+    margin-top: 1rem;
+}
+
+body.page[data-page="admin"] :is(.admin-request-workflow-section, .admin-request-reply-section) {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.9rem;
+    border: 1px solid var(--line);
+    border-radius: 0.85rem;
+    background: var(--surface-soft);
+}
+
+body.page[data-page="admin"] .admin-request-workflow-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+}
+
+body.page[data-page="admin"] .admin-request-workflow-heading .eyebrow,
+body.page[data-page="admin"] .admin-request-reply-section .eyebrow {
+    margin: 0;
+}
+
+body.page[data-page="admin"] :is(.admin-request-workflow-heading, .admin-request-reply-section) > div > p:last-child {
+    margin: 0.2rem 0 0;
+    color: var(--muted);
+    font-size: 0.78rem;
+}
+
+body.page[data-page="admin"] .admin-request-workflow-heading .button {
+    flex: 0 0 auto;
+    min-width: 8.75rem;
+}
+
+body.page[data-page="admin"] .admin-request-reply-section > .button {
+    justify-self: start;
+    min-width: 9.5rem;
+}
+
+body.page[data-page="admin"] .admin-request-internal-note {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-height: 3.15rem;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 0.7rem;
+    background: var(--surface-soft);
+}
+
+body.page[data-page="admin"] .admin-request-internal-note input {
+    width: 1rem;
+    min-height: 1rem;
+    margin: 0;
+    accent-color: var(--primary);
+}
+
+body.page[data-page="admin"] .admin-request-internal-note span {
+    display: grid;
+    gap: 0.1rem;
+}
+
+body.page[data-page="admin"] .admin-request-internal-note small {
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 500;
+}
+
+@media (max-width: 720px) {
+    body.page[data-page="admin"] .admin-filter-bar {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.page[data-page="admin"] .admin-filter-bar .button {
+        width: 100%;
+    }
+
+    body.page[data-page="admin"] .consumption-filter-panel .consumption-filter-form {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.page[data-page="admin"] .consumption-filter-search,
+    body.page[data-page="admin"] .consumption-filter-field,
+    body.page[data-page="admin"] .consumption-filter-dates,
+    body.page[data-page="admin"] .consumption-filter-actions {
+        grid-column: auto;
+    }
+
+    body.page[data-page="admin"] .consumption-filter-dates,
+    body.page[data-page="admin"] .consumption-filter-actions {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.page[data-page="admin"] .service-request-meta {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.page[data-page="admin"] .service-request-meta > div {
+        border-right: 0;
+    }
+
+    body.page[data-page="admin"] .service-request-meta > div:nth-last-child(-n + 2) {
+        border-bottom: 1px solid var(--line);
+    }
+
+    body.page[data-page="admin"] .service-request-meta > div:last-child {
+        border-bottom: 0;
+    }
+
+    body.page[data-page="admin"] .admin-request-workflow-heading {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    body.page[data-page="admin"] .admin-request-workflow-heading .button,
+    body.page[data-page="admin"] .admin-request-reply-section > .button {
+        width: 100%;
+    }
+}
+
+.admin-action-center {
+    padding: 1.25rem;
 }
 
 .action-center-item.is-urgent,
@@ -1877,7 +2160,8 @@ body {
     margin: 0;
     min-height: 100vh;
     line-height: 1.45;
-    font-family: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    /* Use the familiar Windows UI typeface throughout the household and admin tools. */
+    font-family: "Segoe UI", Tahoma, Arial, sans-serif;
     color: var(--text);
     background: var(--bg);
     background-attachment: fixed;
@@ -1936,7 +2220,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
     font: inherit;
 }
 
@@ -2190,17 +2475,7 @@ body[data-page="admin"] .site-header-container {
 }
 
 .admin-topbar-title {
-    display: grid;
-    min-width: 13rem;
-    gap: 0.1rem;
-}
-
-.admin-topbar-title span {
-    color: var(--admin-muted);
-    font-size: 0.7rem;
-    font-weight: 750;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    min-width: 8.5rem;
 }
 
 .admin-topbar-title strong {
@@ -2476,7 +2751,6 @@ body[data-page="admin"] .admin-overview-heading p:last-child {
 }
 
 body[data-page="admin"] .admin-overview-controls,
-body[data-page="admin"] .admin-refresh-control,
 body[data-page="admin"] .admin-analytics-controls {
     display: flex;
     flex-wrap: wrap;
@@ -2488,11 +2762,6 @@ body[data-page="admin"] .admin-overview-controls {
     justify-content: space-between;
     padding-top: 0.9rem;
     border-top: 1px solid #dceaf2;
-}
-
-body[data-page="admin"] .admin-refresh-control > span {
-    color: var(--admin-muted);
-    font-size: 0.82rem;
 }
 
 body[data-page="admin"] .admin-analytics-controls .field-hint {
@@ -2524,6 +2793,37 @@ body[data-page="admin"] .admin-overview-kpis .stat-card .link-button,
 body[data-page="admin"] .admin-overview-period-stats .stat-card .link-button {
     margin-top: auto;
     padding-top: 0.75rem;
+}
+
+body[data-page="admin"] .admin-telemetry-alert {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid color-mix(in srgb, var(--amber) 52%, var(--line));
+    border-radius: var(--admin-panel-radius);
+    background: color-mix(in srgb, var(--amber) 8%, var(--surface));
+}
+
+body[data-page="admin"] .admin-telemetry-alert-icon {
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    place-items: center;
+    border-radius: 999px;
+    color: #8a5600;
+    background: color-mix(in srgb, var(--amber) 24%, transparent);
+}
+
+body[data-page="admin"] .admin-telemetry-alert strong {
+    color: var(--text);
+}
+
+body[data-page="admin"] .admin-telemetry-alert p {
+    margin: 0.15rem 0 0;
+    color: var(--muted);
+    font-size: 0.82rem;
 }
 
 body[data-page="admin"] .admin-overview-lower-grid {
@@ -2597,6 +2897,39 @@ body[data-page="admin"] .consumption-baseline-list {
     display: grid;
     gap: 0.8rem;
     margin-top: 1rem;
+}
+
+body[data-page="admin"] .consumption-alert-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.85rem 0.95rem;
+    border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--line));
+    border-radius: 0.8rem;
+    background: color-mix(in srgb, var(--primary) 6%, var(--surface));
+}
+
+body[data-page="admin"] .consumption-alert-summary-icon {
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    place-items: center;
+    border-radius: 999px;
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+body[data-page="admin"] .consumption-alert-summary > span:last-child {
+    display: grid;
+    gap: 0.1rem;
+}
+
+body[data-page="admin"] .consumption-alert-summary small {
+    color: var(--muted);
+}
+
+body[data-page="admin"] .consumption-alert-summary.requires-attention {
+    border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
 }
 
 body[data-page="admin"] .consumption-baseline-item {
@@ -2883,6 +3216,16 @@ body[data-page="admin"] .billing-management-filter-panel {
     margin-bottom: 1rem;
 }
 
+body.page[data-page="admin"] .billing-management-filter-panel .filter-bar {
+    grid-template-columns: minmax(15rem, 1.65fr) repeat(2, minmax(10rem, 1fr)) repeat(2, minmax(10rem, 0.95fr)) minmax(9.5rem, 0.85fr);
+}
+
+body.page[data-page="admin"] .billing-filter-actions {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(9.5rem, 12rem) minmax(7.5rem, 9.5rem);
+    justify-content: start;
+}
+
 body[data-page="admin"] .billing-date-field {
     display: grid;
     min-width: 9rem;
@@ -2916,8 +3259,8 @@ body[data-page="admin"] .billing-management-error {
 
 body[data-page="admin"] .billing-management-table,
 body[data-page="admin"] .billing-management-row {
-    min-width: 1040px;
-    grid-template-columns: 1.35fr 1fr 0.85fr 1.1fr 1.1fr 1.15fr 1.55fr;
+    min-width: 900px;
+    grid-template-columns: 1.35fr 1fr 1.1fr 1.1fr 1.05fr 1.55fr;
 }
 
 body[data-page="admin"] .billing-management-row .table-actions {
@@ -3009,6 +3352,53 @@ body[data-page="admin"] .admin-notification-actions {
     backdrop-filter: blur(2px);
 }
 
+body.page[data-page="admin"] .service-request-dialog {
+    width: min(40rem, calc(100vw - 2rem));
+    max-height: min(88vh, 52rem);
+    padding: 1.1rem;
+    overflow-y: auto;
+}
+
+body.page[data-page="admin"] .service-request-dialog > .panel-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0.85rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.9rem;
+    border-bottom: 1px solid var(--line);
+}
+
+body.page[data-page="admin"] .service-request-dialog .panel-head h2 {
+    margin: 0.25rem 0 0;
+    font-size: clamp(1.1rem, 2vw, 1.35rem);
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+body.page[data-page="admin"] .service-request-dialog .panel-head .link-button {
+    min-height: 2.55rem;
+    padding-inline: 0.9rem;
+    white-space: nowrap;
+}
+
+body.page[data-page="admin"] .service-request-dialog [data-admin-service-request-detail] {
+    padding-bottom: 0.15rem;
+}
+
+@media (max-width: 560px) {
+    body.page[data-page="admin"] .service-request-dialog {
+        width: calc(100vw - 1rem);
+        padding: 0.85rem;
+    }
+
+    body.page[data-page="admin"] .service-request-dialog > .panel-head {
+        gap: 0.6rem;
+        margin-bottom: 0.8rem;
+        padding-bottom: 0.75rem;
+    }
+}
+
 .consumption-history-dialog {
     width: min(68rem, calc(100vw - 2rem));
     padding: 1.35rem;
@@ -3052,6 +3442,48 @@ body[data-page="admin"] .admin-notification-actions {
     width: 1rem;
     min-height: 1rem;
     accent-color: var(--primary);
+}
+
+.preference-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    min-height: 4.25rem;
+    padding: 0.75rem 0.85rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.preference-toggle input {
+    width: 1rem;
+    min-height: 1rem;
+    margin-top: 0.18rem;
+    accent-color: var(--primary);
+}
+
+.preference-toggle > span {
+    display: grid;
+    gap: 0.14rem;
+}
+
+.preference-toggle strong {
+    color: var(--text);
+    font-weight: 700;
+}
+
+.preference-toggle small {
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 500;
+    line-height: 1.35;
+}
+
+.account-install-link {
+    justify-self: start;
+    padding: 0.3rem 0;
+    color: var(--primary-dark);
+    font-size: 0.78rem;
 }
 
 .dialog-actions {
@@ -3722,7 +4154,6 @@ html.dark body[data-page="admin"] .admin-overview-controls { border-color: var(-
 html.dark body[data-page="admin"] .admin-overview-heading h1,
 html.dark body[data-page="admin"] .admin-overview-list-item strong { color: var(--text); }
 html.dark body[data-page="admin"] .admin-overview-heading p:last-child,
-html.dark body[data-page="admin"] .admin-refresh-control > span,
 html.dark body[data-page="admin"] .admin-overview-list-item small { color: var(--muted); }
 html.dark body[data-page="admin"] .admin-overview-list-item { border-color: var(--line); background: #143547; }
 html.dark body[data-page="admin"] .admin-overview-list-icon { color: #c7f1fb; background: #215367; }
@@ -4763,6 +5194,22 @@ html.dark body[data-page="admin"] .admin-sidebar-nav button.is-active { color: #
     color: var(--muted);
 }
 
+.notification-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    margin-top: 0.65rem;
+}
+
+.notification-remove-button {
+    color: var(--muted);
+}
+
+.notification-remove-button:hover,
+.notification-remove-button:focus-visible {
+    color: var(--danger);
+}
+
 .leak-banner {
     display: flex;
     flex-wrap: wrap;
@@ -5640,6 +6087,58 @@ body[data-page="household"] .app-shell {
     margin-left: auto;
 }
 
+/* The header has one clear task: open notifications. Keep account and theme controls quiet. */
+body[data-page="household"] .household-notification-button {
+    border-color: var(--primary);
+    color: #ffffff;
+    background: var(--primary);
+}
+
+body[data-page="household"] .household-notification-button:hover,
+body[data-page="household"] .household-notification-button:focus-visible {
+    border-color: var(--primary-dark);
+    color: #ffffff;
+    background: var(--primary-dark);
+}
+
+.household-account-menu {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.5rem;
+    gap: .38rem;
+    padding: .45rem .3rem;
+    border: 0;
+    border-radius: .65rem;
+    color: var(--muted);
+    background: transparent;
+    font: inherit;
+    font-size: .78rem;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.household-account-menu i { font-size: 1.05rem; }
+
+.household-account-menu:hover,
+.household-account-menu:focus-visible {
+    color: var(--primary-dark);
+    background: var(--surface-soft);
+}
+
+body[data-page="household"] .site-theme-toggle {
+    width: 2.35rem;
+    height: 2.35rem;
+    border-color: transparent;
+    border-radius: 999px;
+    background: transparent;
+}
+
+body[data-page="household"] .site-theme-toggle:hover,
+body[data-page="household"] .site-theme-toggle:focus-visible {
+    border-color: transparent;
+    background: var(--surface-soft);
+}
+
 body[data-page="household"] .household-account-button {
     width: 2.5rem;
     padding: 0.2rem;
@@ -5888,6 +6387,34 @@ body[data-page="household"] .household-account-copy {
     white-space: nowrap;
 }
 
+.household-sidebar-account-settings {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.62rem;
+    min-height: 2rem;
+    padding: 0.35rem 0;
+    border: 0;
+    border-radius: 0.55rem;
+    color: var(--muted);
+    background: transparent;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+}
+
+.household-sidebar-account-settings:hover,
+.household-sidebar-account-settings:focus-visible {
+    color: var(--primary-dark);
+    background: var(--surface-soft);
+}
+
+.household-sidebar-account-settings svg {
+    width: 1.05rem;
+    height: 1.05rem;
+}
+
 .household-sidebar-logout {
     padding: 0.5rem 0;
     border: 0;
@@ -6124,6 +6651,33 @@ body[data-page="household"] .dashboard-view {
     color: var(--primary-dark);
 }
 
+.household-start-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--line));
+    border-radius: 1rem;
+    background: color-mix(in srgb, var(--surface) 92%, #d9f3ef 8%);
+}
+.household-start-copy { display: flex; align-items: flex-start; gap: .75rem; max-width: 30rem; }
+.household-start-copy .eyebrow { margin: 0 0 .18rem; }
+.household-start-copy h2 { margin: 0; font-size: 1rem; }
+.household-start-copy p:last-child { margin: .25rem 0 0; color: var(--muted); font-size: .82rem; line-height: 1.45; }
+.household-start-icon { display: grid; width: 2.25rem; height: 2.25rem; flex: 0 0 2.25rem; place-items: center; border-radius: .72rem; color: #fff; background: linear-gradient(135deg, var(--primary), #16a39b); }
+.household-start-actions { display: grid; grid-template-columns: repeat(3, minmax(9rem, 1fr)); gap: .55rem; width: min(100%, 43rem); }
+.household-start-action { display: flex; min-width: 0; align-items: center; gap: .55rem; padding: .7rem; border: 1px solid var(--line); border-radius: .75rem; color: var(--text); background: var(--surface); cursor: pointer; text-align: left; transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+.household-start-action:hover, .household-start-action:focus-visible { border-color: var(--primary); box-shadow: 0 8px 18px rgb(15 118 110 / 12%); transform: translateY(-1px); }
+.household-start-action > :first-child { width: 1.1rem; height: 1.1rem; flex: 0 0 auto; color: var(--primary-dark); font-size: 1.05rem; }
+.household-start-action span { display: grid; min-width: 0; gap: .12rem; }
+.household-start-action strong { font-size: .77rem; line-height: 1.2; }
+.household-start-action small { overflow: hidden; color: var(--muted); font-size: .66rem; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.household-start-action.is-primary { border-color: var(--primary); color: #fff; background: var(--primary); }
+.household-start-action.is-primary > :first-child, .household-start-action.is-primary small { color: #d5fbf5; }
+.household-start-action.is-attention { border-color: color-mix(in srgb, var(--warning) 35%, var(--line)); }
+.household-start-action.is-attention > :first-child { color: var(--warning); }
+
 .household-kpi-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -6218,6 +6772,63 @@ body[data-page="household"] .dashboard-view {
     align-items: stretch;
     gap: 0.85rem;
 }
+
+/* Keep the dashboard scan-friendly while retaining every detail one click away. */
+.household-dashboard-details {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: .9rem;
+    background: var(--surface);
+}
+
+.household-dashboard-details > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .85rem 1rem;
+    color: var(--text);
+    cursor: pointer;
+    list-style: none;
+}
+
+.household-dashboard-details > summary::-webkit-details-marker { display: none; }
+.household-dashboard-details > summary > span:first-child { display: grid; gap: .12rem; }
+.household-dashboard-details > summary strong { font-size: .88rem; }
+.household-dashboard-details > summary small { color: var(--muted); font-size: .75rem; }
+
+.household-dashboard-details-toggle {
+    padding: .3rem .55rem;
+    border-radius: 999px;
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+    font-size: .7rem;
+    font-weight: 800;
+}
+
+.household-dashboard-details[open] > summary { border-bottom: 1px solid var(--line); }
+.household-dashboard-details[open] .household-dashboard-details-toggle { font-size: 0; }
+.household-dashboard-details[open] .household-dashboard-details-toggle::after { content: "Hide"; font-size: .7rem; }
+.household-dashboard-details > .household-goal-card { margin: .85rem; }
+.household-goal-form {
+    display: grid;
+    grid-template-columns: minmax(12rem, 1fr) auto;
+    align-items: end;
+    gap: .75rem;
+    margin-bottom: 1rem;
+}
+.household-goal-form label { display: grid; gap: .35rem; }
+.household-goal-form label > span { color: var(--muted); font-size: .75rem; font-weight: 750; }
+.household-goal-form .form-feedback { grid-column: 1 / -1; }
+.household-goal-progress { min-height: 3rem; }
+.household-secondary-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .85rem;
+    margin: .85rem;
+}
+.household-dashboard-details > .household-analytics-card { margin: .85rem; }
+.household-dashboard-details > .household-activity-grid { margin: 0 .85rem .85rem; }
 
 body[data-page="household"] .panel,
 body[data-page="household"] .metric-card {
@@ -6865,6 +7476,20 @@ body[data-page="household"] [data-household-monthly-chart]::after {
     line-height: 1.55;
 }
 
+/* A flat zero line is not a trend. Present an explanatory empty state instead. */
+.live-consumption-chart.is-empty {
+    display: grid;
+    min-height: 13rem;
+    place-items: center;
+    padding: 0;
+    overflow: visible;
+}
+
+.live-consumption-chart.is-empty::before,
+.live-consumption-chart.is-empty::after {
+    display: none;
+}
+
 body[data-page="household"] .household-usage-content.is-loading .chart-legend,
 body[data-page="household"] .household-usage-content.is-empty .chart-legend {
     display: none;
@@ -7215,6 +7840,9 @@ html.dark body[data-page="household"] .analytics-custom-toggle {
 }
 
 @media (max-width: 1100px) {
+    .household-start-panel { align-items: stretch; flex-direction: column; }
+    .household-start-actions { width: 100%; }
+
     .household-kpi-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -7226,6 +7854,13 @@ html.dark body[data-page="household"] .analytics-custom-toggle {
 }
 
 @media (max-width: 767px) {
+    .household-start-panel { padding: .9rem; }
+    .household-start-actions { grid-template-columns: 1fr; }
+    .household-dashboard-details > summary { align-items: flex-start; }
+    .household-dashboard-details > summary small { line-height: 1.35; }
+    .household-goal-form { grid-template-columns: 1fr; }
+    .household-secondary-metrics { grid-template-columns: 1fr; }
+
     body[data-page="household"] .app-shell {
         display: block;
         width: 100%;
@@ -8747,6 +9382,7 @@ html.dark .admin-notification-dropdown {
 .history-filter-panel {
     position: relative;
     isolation: isolate;
+    container-type: inline-size;
     overflow: hidden;
     padding: clamp(1.15rem, 2.2vw, 1.5rem);
     background:
@@ -8876,15 +9512,34 @@ body.page .history-filter-control :is(input, select):focus {
 }
 
 .history-filter-buttons {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
     gap: 0.5rem;
 }
 
 .history-filter-buttons .button {
+    min-width: 0;
     min-height: 2.7rem;
     gap: 0.42rem;
     padding-inline: 0.8rem;
     white-space: nowrap;
+}
+
+/* This card can become narrow beside the sidebar even on a wide screen. */
+@container (max-width: 34rem) {
+    .history-filter-form {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .history-filter-search {
+        grid-column: auto;
+    }
+
+    .history-filter-rows {
+        max-width: none;
+    }
+
 }
 
 html.dark .history-filter-panel {
@@ -9201,13 +9856,14 @@ body[data-page="household"] .household-consumption-selector {
 }
 
 body[data-page="household"] .household-consumption-selector button {
+    flex: 1 1 0;
     min-width: 0;
-    padding: 0.25rem 0.38rem;
+    padding: 0.25rem 0.2rem;
     border: 0;
     border-right: 1px solid var(--line);
     color: var(--muted);
     background: transparent;
-    font-size: 0.61rem;
+    font-size: 0.6rem;
     font-weight: 800;
     line-height: 1.2;
     white-space: nowrap;
@@ -9448,6 +10104,19 @@ body[data-page="household"] .household-kpi-overview {
     border: 0;
     background: transparent;
     box-shadow: none;
+}
+
+/* Four core cards should complete a row; avoid an isolated final card. */
+@media (min-width: 1200px) {
+    body[data-page="household"] .household-kpi-overview {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+    body[data-page="household"] .household-kpi-overview {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 body[data-page="household"] .household-kpi-overview > .metric-card {
@@ -10365,6 +11034,17 @@ body.page[data-page="admin"] .admin-sidebar-nav button.is-active {
     background: color-mix(in srgb, var(--primary) 10%, var(--surface));
 }
 
+body.page[data-page="admin"] .admin-sidebar-nav button:not(.is-active) {
+    border-color: transparent;
+    background: transparent;
+}
+
+body.page[data-page="admin"] .admin-sidebar-nav button:not(.is-active):hover {
+    border-color: transparent;
+    color: var(--primary-dark);
+    background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
 body.page[data-page="admin"] .admin-sidebar-logout {
     flex: 0 0 auto;
     border-color: var(--line);
@@ -10414,10 +11094,6 @@ body.page[data-page="admin"] :is(.field-hint, .subtle, .table-secondary, .notifi
 
 body.page[data-page="admin"] .panel-head {
     align-items: center;
-}
-
-body.page[data-page="admin"] .admin-refresh-control .button {
-    gap: 0.4rem;
 }
 
 body.page[data-page="admin"] .eyebrow {
@@ -10637,8 +11313,49 @@ body.page[data-page="admin"] .billing-management-table {
 
 body.page[data-page="admin"] .billing-management-table .table-head,
 body.page[data-page="admin"] .billing-management-row {
-    min-width: 58rem;
-    grid-template-columns: 1.3fr 0.9fr 0.72fr 1fr 1fr 0.85fr 1.05fr;
+    min-width: 54rem;
+    grid-template-columns: 1.3fr 0.9fr 1fr 1fr 0.85fr 1.05fr;
+}
+
+/* A calculation is easier to scan as compact label/value cards than as
+ * full-width rows. This also prevents values from being pushed to the far
+ * edge of the billing-detail dialog. */
+body.page[data-page="admin"] .billing-detail-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+    margin: 1rem 0 0;
+}
+
+body.page[data-page="admin"] .billing-detail-summary > div {
+    display: grid;
+    align-content: start;
+    justify-content: initial;
+    gap: 0.28rem;
+    min-width: 0;
+    padding: 0.75rem 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 0.75rem;
+    background: var(--surface-soft);
+}
+
+body.page[data-page="admin"] .billing-detail-summary dt {
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-weight: 750;
+    letter-spacing: 0.035em;
+    text-transform: uppercase;
+}
+
+body.page[data-page="admin"] .billing-detail-summary dd {
+    overflow-wrap: anywhere;
+    font-size: 0.9rem;
+}
+
+@media (max-width: 575.98px) {
+    body.page[data-page="admin"] .billing-detail-summary {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 body.page[data-page="admin"] :is(.consumption-monitoring-table, .consumption-monitoring-row) {
@@ -10705,6 +11422,44 @@ body.page[data-page="admin"] .admin-device-register-form > label {
     margin: 0;
 }
 
+body.page[data-page="admin"] .device-register-submit {
+    grid-column: 1 / -1;
+    justify-self: start;
+    width: auto;
+    min-width: 20rem;
+}
+
+body.page[data-page="admin"] .device-register-optional {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.85rem;
+    margin: 0;
+    padding: 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: var(--admin-control-radius);
+}
+
+body.page[data-page="admin"] .device-register-optional legend {
+    width: auto;
+    margin: 0;
+    padding: 0 0.3rem;
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+body.page[data-page="admin"] .device-register-optional label {
+    display: grid;
+    gap: 0.42rem;
+    margin: 0;
+}
+
+body.page[data-page="admin"] .device-register-optional label:first-of-type,
+body.page[data-page="admin"] .device-register-optional label:last-of-type {
+    grid-column: span 2;
+}
+
 body.page[data-page="admin"] .admin-device-register-form .admin-field-label {
     display: inline-flex;
     align-items: baseline;
@@ -10721,25 +11476,96 @@ body.page[data-page="admin"] .admin-device-register-form .admin-field-label .fie
     font-weight: 550;
 }
 
+@media (max-width: 1099px) {
+    body.page[data-page="admin"] .device-register-optional {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body.page[data-page="admin"] .device-register-optional label:first-of-type,
+    body.page[data-page="admin"] .device-register-optional label:last-of-type {
+        grid-column: span 1;
+    }
+}
+
+@media (max-width: 767px) {
+    body.page[data-page="admin"] .device-register-submit {
+        width: 100%;
+        min-width: 0;
+    }
+
+    body.page[data-page="admin"] .device-register-optional {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 body.page[data-page="admin"] .admin-device-list-card [data-municipal-devices] {
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr));
 }
 
 body.page[data-page="admin"] .device-health-card {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-content: start;
-    gap: 0.25rem;
+    gap: 0.75rem;
     min-width: 0;
 }
 
-body.page[data-page="admin"] .device-health-card > :is(.notification-head, .button-row) {
-    grid-column: 1 / -1;
+body.page[data-page="admin"] .device-health-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+body.page[data-page="admin"] .device-health-summary span,
+body.page[data-page="admin"] .device-technical-details span {
+    display: grid;
+    gap: 0.15rem;
+    color: var(--muted);
+    font-size: 0.78rem;
+    line-height: 1.4;
+}
+
+body.page[data-page="admin"] .device-health-summary strong,
+body.page[data-page="admin"] .device-technical-details strong {
+    color: var(--text);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
 body.page[data-page="admin"] .device-health-card .button-row {
-    margin-top: auto;
-    padding-top: 0.65rem;
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body.page[data-page="admin"] .device-technical-details {
+    border-top: 1px solid var(--line);
+    padding-top: 0.7rem;
+}
+
+body.page[data-page="admin"] .device-technical-details summary {
+    cursor: pointer;
+    color: var(--primary-dark);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+body.page[data-page="admin"] .device-technical-details > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem 0.9rem;
+    padding-top: 0.75rem;
+}
+
+body.page[data-page="admin"] .device-technical-details .link-button {
+    justify-self: start;
+    min-height: auto;
+    padding: 0.1rem 0;
+}
+
+@media (max-width: 640px) {
+    body.page[data-page="admin"] .device-health-summary,
+    body.page[data-page="admin"] .device-technical-details > div {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 /* Rate configuration uses full-width horizontal cards instead of three
@@ -10908,6 +11734,148 @@ body.page[data-page="admin"] .consumption-comparison-value {
     white-space: nowrap;
 }
 
+body.page[data-page="admin"] .consumption-baseline-chart {
+    max-height: 31rem;
+    overflow: auto;
+    padding-right: 0.2rem;
+}
+
+body.page[data-page="admin"] .consumption-vertical-chart-card {
+    display: grid;
+    gap: 0.7rem;
+    padding: 0.85rem;
+    border: 1px solid color-mix(in srgb, var(--line) 88%, var(--primary));
+    border-radius: 0.8rem;
+    background: var(--surface);
+}
+
+body.page[data-page="admin"] .consumption-vertical-chart-card > header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+body.page[data-page="admin"] .consumption-vertical-chart-card > header strong {
+    color: var(--text);
+    font-size: 0.9rem;
+}
+
+body.page[data-page="admin"] .consumption-vertical-chart-card > header small {
+    color: var(--muted);
+    font-size: 0.72rem;
+    text-align: right;
+}
+
+body.page[data-page="admin"] .consumption-vertical-months {
+    display: flex;
+    align-items: end;
+    gap: 0.75rem;
+    min-height: 14rem;
+    overflow-x: auto;
+    padding: 0.25rem 0.15rem 0.1rem;
+}
+
+body.page[data-page="admin"] .consumption-month-bar {
+    display: grid;
+    grid-template-rows: auto 8rem auto auto;
+    align-items: end;
+    gap: 0.24rem;
+    min-width: 4.6rem;
+    flex: 1 1 4.6rem;
+    text-align: center;
+}
+
+body.page[data-page="admin"] .consumption-month-bar > strong {
+    color: var(--text);
+    font-size: 0.76rem;
+    line-height: 1.1;
+}
+
+body.page[data-page="admin"] .consumption-month-bar-column {
+    position: relative;
+    display: flex;
+    align-items: end;
+    height: 8rem;
+    overflow: hidden;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0.35rem 0.35rem 0 0;
+    background: repeating-linear-gradient(to top, transparent 0, transparent 31px, color-mix(in srgb, var(--line) 55%, transparent) 32px);
+}
+
+body.page[data-page="admin"] .consumption-month-bar-column > span {
+    width: 100%;
+    min-height: 0;
+    border-radius: 0.35rem 0.35rem 0 0;
+    background: linear-gradient(180deg, #bfdbfe, #60a5fa);
+    transition: height 280ms ease;
+}
+
+body.page[data-page="admin"] .consumption-month-bar.is-baseline .consumption-month-bar-column > span {
+    background: linear-gradient(180deg, #dbeafe, #93c5fd);
+}
+
+body.page[data-page="admin"] .consumption-month-bar.is-above .consumption-month-bar-column > span {
+    background: linear-gradient(180deg, #93c5fd, #3b82f6);
+}
+
+body.page[data-page="admin"] .consumption-month-bar > small {
+    color: var(--text);
+    font-size: 0.69rem;
+    line-height: 1.15;
+}
+
+body.page[data-page="admin"] .consumption-month-bar > em {
+    color: var(--muted);
+    font-size: 0.66rem;
+    font-style: normal;
+    line-height: 1.15;
+    white-space: nowrap;
+}
+
+body.page[data-page="admin"] .consumption-baseline-bar-item {
+    display: grid;
+    grid-template-columns: minmax(10rem, 0.9fr) minmax(12rem, 2fr) minmax(6.5rem, auto);
+    align-items: center;
+    gap: 0.85rem;
+}
+
+body.page[data-page="admin"] .consumption-baseline-meter {
+    position: relative;
+    height: 0.8rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--line) 74%, var(--surface));
+}
+
+body.page[data-page="admin"] .consumption-baseline-meter > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--primary), var(--primary-strong));
+}
+
+body.page[data-page="admin"] .consumption-baseline-meter > i {
+    position: absolute;
+    top: -0.18rem;
+    bottom: -0.18rem;
+    left: 50%;
+    width: 2px;
+    background: color-mix(in srgb, var(--text) 70%, var(--surface));
+}
+
+body.page[data-page="admin"] .consumption-baseline-bar-item .consumption-comparison-value {
+    display: grid;
+    gap: 0.1rem;
+    text-align: right;
+}
+
+body.page[data-page="admin"] .consumption-baseline-bar-item .consumption-comparison-value small {
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
 body.page[data-page="admin"] .consumption-alert-comparison > .field-hint {
     margin: 0;
 }
@@ -11003,18 +11971,6 @@ body.page[data-page="admin"] .admin-search input:focus-visible {
     color: var(--text);
     background: transparent !important;
     box-shadow: none !important;
-}
-
-body.page[data-page="admin"] .admin-refresh-button {
-    display: inline-flex;
-    width: 6.35rem;
-    min-width: 6.35rem;
-    justify-content: center;
-    white-space: nowrap;
-}
-
-body.page[data-page="admin"] .admin-refresh-button.is-loading .admin-refresh-icon {
-    animation: dashboard-refresh-spin 700ms linear infinite;
 }
 
 body.page[data-page="admin"] .admin-analytics-period-field {
@@ -11171,8 +12127,114 @@ body.page[data-page="admin"] .leak-alert-notify-form {
     align-items: end;
 }
 
+body.page[data-page="admin"] .leak-alert-update-form .admin-field-label {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.28rem;
+    color: var(--text);
+    font-size: 0.92rem;
+    font-weight: 650;
+    line-height: 1.25;
+}
+
+body.page[data-page="admin"] .leak-quiet-hours-fields label {
+    min-width: 0;
+}
+
+body.page[data-page="admin"] .leak-quiet-hours-fields .field-hint {
+    margin: 0;
+}
+
 body.page[data-page="admin"] .leak-alert-notify-form {
     grid-template-columns: minmax(14rem, 0.8fr) minmax(18rem, 1.4fr) auto;
+}
+
+body.page[data-page="admin"] .leak-alert-workspace {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 0.9rem;
+    margin-top: 1rem;
+}
+
+body.page[data-page="admin"] :is(.leak-alert-update-form, .leak-alert-notify-form) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 0.8rem;
+    margin: 0;
+    padding: 0.9rem;
+    border: 1px solid var(--line);
+    border-radius: 0.85rem;
+    background: var(--surface);
+}
+
+body.page[data-page="admin"] .leak-alert-workflow-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+body.page[data-page="admin"] .leak-alert-workflow-heading .eyebrow {
+    margin: 0;
+}
+
+body.page[data-page="admin"] .leak-alert-workflow-heading p:last-child {
+    margin: 0.22rem 0 0;
+    color: var(--muted);
+    font-size: 0.76rem;
+}
+
+body.page[data-page="admin"] .leak-alert-workflow-fields,
+body.page[data-page="admin"] .leak-alert-notify-fields {
+    display: grid;
+    gap: 0.7rem;
+}
+
+body.page[data-page="admin"] .leak-alert-workflow-fields {
+    grid-template-columns: minmax(9rem, 0.72fr) minmax(0, 1.28fr);
+    align-items: end;
+}
+
+body.page[data-page="admin"] .leak-alert-workspace label {
+    min-width: 0;
+}
+
+body.page[data-page="admin"] .leak-alert-workspace textarea {
+    min-height: 5.25rem;
+    resize: vertical;
+}
+
+body.page[data-page="admin"] .leak-alert-card-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 0.05rem;
+}
+
+body.page[data-page="admin"] .leak-alert-card-actions .button {
+    min-width: 9.5rem;
+}
+
+@media (max-width: 1099px) {
+    body.page[data-page="admin"] .leak-alert-workspace {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 560px) {
+    body.page[data-page="admin"] .leak-alert-workflow-heading {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    body.page[data-page="admin"] .leak-alert-workflow-fields {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.page[data-page="admin"] .leak-alert-card-actions .button {
+        width: 100%;
+    }
 }
 
 body.page[data-page="admin"] .reports-filter-form > label {
@@ -11331,15 +12393,15 @@ body.page[data-page="admin"] .admin-notification-actions {
     }
 
     body.page[data-page="admin"] .admin-overview-kpis {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(5, minmax(0, 1fr));
     }
 
-    body.page[data-page="admin"] .admin-overview-kpis .stat-card:nth-child(3n) {
-        border-right: 0;
-    }
-
-    body.page[data-page="admin"] .admin-overview-kpis .stat-card:nth-last-child(-n + 3) {
+    body.page[data-page="admin"] .admin-overview-kpis .stat-card {
         border-bottom: 0;
+    }
+
+    body.page[data-page="admin"] .admin-overview-kpis .stat-card:last-child {
+        border-right: 0;
     }
 
     body.page[data-page="admin"] :is(.admin-overview-period-stats, .billing-management-summary, .reports-summary) {
@@ -11357,6 +12419,8 @@ body.page[data-page="admin"] .admin-notification-actions {
 
 @media (min-width: 992px) {
     body.page[data-page="admin"] .admin-sidebar {
+        height: calc(100dvh - var(--admin-topbar-height));
+        min-height: calc(100dvh - var(--admin-topbar-height));
         padding: 0.85rem 0.75rem 0.65rem;
     }
 
@@ -11393,6 +12457,14 @@ body.page[data-page="admin"] .admin-notification-actions {
 }
 
 @media (min-width: 768px) and (max-width: 1099px) {
+    body.page[data-page="admin"] .billing-management-filter-panel .filter-bar {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body.page[data-page="admin"] .billing-filter-actions {
+        grid-column: 1 / -1;
+    }
+
     body.page[data-page="admin"] :is(.admin-overview-kpis, .admin-overview-period-stats, .billing-management-summary, .reports-summary) {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -11704,28 +12776,8 @@ body.page[data-page="admin"] .admin-overview-heading p:last-child {
     line-height: 1.55;
 }
 
-body.page[data-page="admin"] .admin-refresh-control,
 body.page[data-page="admin"] .admin-analytics-controls {
     width: 100%;
-}
-
-body.page[data-page="admin"] .admin-refresh-control {
-    justify-content: space-between;
-}
-
-body.page[data-page="admin"] .admin-refresh-label {
-    line-height: 1.35;
-}
-
-body.page[data-page="admin"] .admin-analytics-timezone {
-    display: inline-flex;
-    min-height: 2.5rem;
-    align-items: center;
-    padding: 0.55rem 0.7rem;
-    border: 1px solid var(--line);
-    border-radius: 0.65rem;
-    background: var(--surface-soft);
-    white-space: nowrap;
 }
 
 @media (min-width: 768px) {
@@ -11743,9 +12795,7 @@ body.page[data-page="admin"] .admin-analytics-timezone {
     }
 
     body.page[data-page="admin"] .admin-analytics-controls {
-        display: grid;
-        grid-template-columns: minmax(11rem, 1fr) auto;
-        align-items: end;
+        display: block;
     }
 
     body.page[data-page="admin"] .admin-analytics-period-field,
@@ -11753,16 +12803,6 @@ body.page[data-page="admin"] .admin-analytics-timezone {
     body.page[data-page="admin"] .admin-analytics-range-select {
         width: 100%;
         min-width: 0;
-    }
-}
-
-@media (max-width: 767px) {
-    body.page[data-page="admin"] .admin-refresh-control {
-        align-items: flex-start;
-    }
-
-    body.page[data-page="admin"] .admin-analytics-timezone {
-        min-height: 0;
     }
 }
 
@@ -11880,6 +12920,19 @@ body.page[data-page="admin"] .customer-management-table .table-actions .link-but
     padding: 0.4rem 0.65rem;
     border-radius: 0.55rem;
     white-space: nowrap;
+}
+
+body.page[data-page="admin"] .customer-management-table .table-actions .admin-user-delete-button {
+    min-height: auto;
+    padding-inline: 0.2rem;
+    border-color: transparent;
+    background: transparent;
+}
+
+body.page[data-page="admin"] .customer-management-table .table-actions .admin-user-delete-button:hover,
+body.page[data-page="admin"] .customer-management-table .table-actions .admin-user-delete-button:focus-visible {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
 html.dark body.page[data-page="admin"] .customer-management-table-shell {
@@ -12024,6 +13077,19 @@ body[data-page="household"] .activity-view-all {
     font-size: 0.8125rem;
 }
 
+/* Keep all three period choices legible in the compact consumption card. */
+body[data-page="household"] .household-consumption-selector {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+body[data-page="household"] .household-consumption-selector button {
+    min-width: 0;
+    padding: 0.45rem 0.15rem;
+    font-size: 0.75rem;
+    text-align: center;
+}
+
 body[data-page="household"] .analytics-group-heading p,
 body[data-page="household"] .analytics-timezone,
 body[data-page="household"] .analytics-timezone strong,
@@ -12086,18 +13152,18 @@ body[data-page="household"] .household-sidebar-account .subtle {
 }
 
 @media (max-width: 480px) {
-    body[data-page="household"] .household-header-actions .account-role-badge {
+    body[data-page="household"] .household-header-actions .household-account-menu span {
         display: none;
     }
 }
 
 /* Dark theme depth and contrast --------------------------------------- */
 html.dark {
-    --bg: #071421;
-    --surface: #12283d;
-    --surface-soft: #1b354d;
-    --line: #3a5872;
-    --line-strong: #58758e;
+    --bg: #061522;
+    --surface: #102b40;
+    --surface-soft: #193b55;
+    --line: #40627d;
+    --line-strong: #5b7d98;
     --text: #f4f7fb;
     --muted: #bdcad8;
     --primary: #4bc1b5;
@@ -12109,7 +13175,7 @@ html.dark {
 }
 
 html.dark body.page {
-    background: linear-gradient(145deg, #0b1d2e, var(--bg) 58%, #081827);
+    background: linear-gradient(145deg, #0b2032, var(--bg) 58%, #081a2a);
 }
 
 html.dark body.page:is([data-page="household"], [data-page="admin"]) .topbar {
@@ -12121,7 +13187,7 @@ html.dark body.page:is([data-page="household"], [data-page="admin"]) .topbar {
 html.dark body.page[data-page="household"] aside.household-sidebar,
 html.dark body.page[data-page="admin"] aside.admin-sidebar {
     border-color: var(--line);
-    background-color: #0f2639;
+    background-color: #0d2639;
     background-image: none;
     box-shadow: 10px 0 30px rgb(0 6 16 / 18%);
 }
@@ -12129,7 +13195,7 @@ html.dark body.page[data-page="admin"] aside.admin-sidebar {
 /* Bootstrap's responsive offcanvas utility paints the administrator
  * sidebar transparent at desktop width unless the theme surface wins. */
 html.dark body.page[data-page="admin"] aside.admin-sidebar.offcanvas-lg {
-    background-color: #0f2639 !important;
+    background-color: #0d2639 !important;
 }
 
 html.dark body.page:is([data-page="household"], [data-page="admin"]) .shell-dashboard {
@@ -12168,6 +13234,27 @@ html.dark body.page:is([data-page="household"], [data-page="admin"]) :is(
 ) {
     border-color: var(--line-strong);
     background-color: var(--surface-soft);
+}
+
+html.dark body[data-page="household"] .household-notifications-panel {
+    border-color: color-mix(in srgb, var(--primary) 22%, var(--line));
+    background-color: #112f46;
+}
+
+html.dark body[data-page="household"] .household-notifications-panel .notification-card {
+    border-color: #51728c;
+    background-color: #1b405c;
+    box-shadow: 0 8px 18px rgb(0 8 18 / 14%);
+}
+
+html.dark .notification-remove-button {
+    color: #d9b6bf;
+}
+
+html.dark .notification-remove-button:hover,
+html.dark .notification-remove-button:focus-visible {
+    color: #ffd0d6;
+    background: rgb(177 64 82 / 18%);
 }
 
 html.dark body.page[data-page="household"] .household-sidebar-nav button,

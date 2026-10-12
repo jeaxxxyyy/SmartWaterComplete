@@ -86,9 +86,9 @@ class WaterConsumptionService
     }
 
     /**
-     * Compare month-to-date consumption with the equivalent elapsed portion
-     * of the household's first recorded month. The first month is the stable
-     * 100% baseline for every later comparison.
+     * Compare month-to-date consumption with July usage where available.
+     * July is the stable 100% baseline; other households use their first
+     * complete available month.
      *
      * @return array<string, bool|float|string>|null
      */
@@ -97,19 +97,24 @@ class WaterConsumptionService
         Carbon $recordedAt,
         float $currentMonthToDateLiters
     ): ?array {
+        $julyStart = $recordedAt->copy()->startOfYear()->month(7)->startOfMonth();
+        $julyEnd = $julyStart->copy()->endOfMonth();
+        $hasJulyBaseline = WaterReading::query()
+            ->where('user_id', $userId)
+            ->whereBetween('recorded_at', [$julyStart, $julyEnd])
+            ->exists();
         $firstReadingAt = WaterReading::query()
             ->where('user_id', $userId)
             ->oldest('recorded_at')
             ->oldest('id')
             ->value('recorded_at');
-        $baselinePeriodStart = $firstReadingAt
+        $baselinePeriodStart = $hasJulyBaseline
+            ? $julyStart
+            : ($firstReadingAt
             ? Carbon::parse($firstReadingAt, config('app.timezone'))->startOfMonth()
-            : $recordedAt->copy()->startOfMonth();
+            : $recordedAt->copy()->startOfMonth());
         $isBaselineMonth = $baselinePeriodStart->isSameMonth($recordedAt);
-        $baselineDay = min($recordedAt->day, $baselinePeriodStart->daysInMonth);
-        $baselinePeriodEnd = $baselinePeriodStart->copy()
-            ->day($baselineDay)
-            ->setTime($recordedAt->hour, $recordedAt->minute, $recordedAt->second);
+        $baselinePeriodEnd = $baselinePeriodStart->copy()->endOfMonth();
         $baselineLiters = $isBaselineMonth
             ? $currentMonthToDateLiters
             : (float) WaterReading::query()
@@ -235,7 +240,9 @@ class WaterConsumptionService
 
             $litersUsed = (float) ($data['liters_used'] ?? $data['total_water_liters'] ?? 0);
             $cubicMeters = $litersUsed / 1000;
-            $waterLimitLiters = (float) $settings->threshold_liters;
+            // A fixed monthly-liter alert has been retired in favor of the
+            // July percentage baseline.
+            $waterLimitLiters = 0.0;
             $monitoringStatus = (string) ($data['monitoring_status'] ?? 'online');
             $deviceConnectionStatus = (string) ($data['device_connection_status'] ?? 'connected');
             // Server receipt is the source of truth for server connectivity.
@@ -278,7 +285,7 @@ class WaterConsumptionService
             ]);
 
             $estimatedBill = $this->calculateEstimatedBill($cubicMeters, $settings);
-            $isThresholdExceeded = $waterLimitLiters > 0 && ($periodLiters + $litersUsed) >= $waterLimitLiters;
+            $isThresholdExceeded = false;
             // The configured municipal flow-rate threshold is authoritative. A device cannot
             // declare a leak merely because its accumulated usage reached the water limit.
             $isPossibleLeak = $this->detectPossibleLeak((float) $data['flow_rate'], $settings, $recordedAt, $household->id);
@@ -322,33 +329,34 @@ class WaterConsumptionService
             $notifications = collect();
             $leakNotification = null;
 
-            $percentageThreshold = (float) ($settings->consumption_change_threshold_percent ?? 100);
-            $isRelevantConsumptionChange = $consumptionComparison !== null
-                && ! $consumptionComparison['is_baseline_month']
-                && $consumptionComparison['change_direction'] !== 'unchanged'
-                && (float) $consumptionComparison['absolute_percentage_change'] >= $percentageThreshold;
-            $comparisonNoticeAlreadySent = $isRelevantConsumptionChange && Notification::query()
+            $hasMonthlyBaselineComparison = $consumptionComparison !== null
+                && ! $consumptionComparison['is_baseline_month'];
+            $comparisonNoticeAlreadySent = $hasMonthlyBaselineComparison && Notification::query()
                 ->where('user_id', $household->id)
                 ->where('type', 'consumption_change')
                 ->where('metadata->comparison_month', $consumptionComparison['comparison_month'])
-                ->where('metadata->change_direction', $consumptionComparison['change_direction'])
                 ->exists();
 
-            if ($isRelevantConsumptionChange && ! $comparisonNoticeAlreadySent
+            if ($hasMonthlyBaselineComparison && ! $comparisonNoticeAlreadySent
                 && ($settings->consumption_alert_enabled ?? true)
                 && ($settings->consumption_alert_behavior ?? 'household') !== 'disabled'
                 && ($household->notificationPreference()->value('consumption_alerts') ?? true)) {
                 $direction = (string) $consumptionComparison['change_direction'];
-                $percentage = number_format((float) $consumptionComparison['absolute_percentage_change'], 2);
+                $usagePercentage = number_format((float) $consumptionComparison['usage_percentage'], 2);
+                $change = number_format((float) $consumptionComparison['absolute_percentage_change'], 2);
+                $comparisonMessage = match ($direction) {
+                    'increase' => "Your water use this month is {$change}% higher than your July baseline.",
+                    'decrease' => "Your water use this month is {$change}% lower than your July baseline.",
+                    default => 'Your water use this month matches your July baseline.',
+                };
                 $consumptionNotification = Notification::create([
                     'user_id' => $household->id,
                     'water_reading_id' => $reading->id,
                     'type' => 'consumption_change',
-                    'title' => 'Relevant water consumption '.$direction,
-                    'message' => 'Your actual current month-to-date water consumption '.$direction.'d by '.$percentage.'% compared with your first recorded month baseline. Review your usage and notify the local waterworks if the change is unexpected or requires verification.',
+                    'title' => 'Monthly water consumption update',
+                    'message' => $comparisonMessage,
                     'metadata' => array_merge($consumptionComparison, [
-                        'percentage_threshold' => $percentageThreshold,
-                        'contact_waterworks_recommended' => true,
+                        'notification_basis' => 'first_month_baseline',
                     ]),
                     'sent_at' => now(),
                 ]);
@@ -356,7 +364,7 @@ class WaterConsumptionService
                 if (($settings->consumption_alert_behavior ?? 'household') === 'household_admin') {
                     $this->notifyAdministrators(
                         $consumptionNotification,
-                        $household->name.' recorded a relevant '.$percentage.'% consumption '.$direction.' from its first-month baseline.',
+                        $household->name.' is at '.$usagePercentage.'% of its July water-use baseline.',
                     );
                 }
             }

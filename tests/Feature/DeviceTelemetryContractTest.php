@@ -170,7 +170,7 @@ class DeviceTelemetryContractTest extends TestCase
         $this->assertSame(2.5, (float) WaterReading::query()->where('user_id', $household->id)->sum('liters_used'));
     }
 
-    public function test_server_limit_cumulative_usage_and_leak_boolean_are_authoritative(): void
+    public function test_baseline_reporting_disables_the_legacy_server_limit_while_leak_boolean_is_authoritative(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-07-28 12:00:00'));
         [, $household, $device, $code] = $this->registerDevice();
@@ -192,7 +192,7 @@ class DeviceTelemetryContractTest extends TestCase
         ]));
         $first->assertCreated()
             ->assertJsonPath('is_possible_leak', true)
-            ->assertJsonPath('water_limit_liters', 2)
+            ->assertJsonPath('water_limit_liters', 0)
             ->assertJsonPath('limit_reached', false);
         $this->assertIsBool($first->json('is_possible_leak'));
 
@@ -200,7 +200,7 @@ class DeviceTelemetryContractTest extends TestCase
             'liters_used' => 1,
         ]))->assertCreated()
             ->assertJsonPath('server_total_liters', 2)
-            ->assertJsonPath('limit_reached', true);
+            ->assertJsonPath('limit_reached', false);
 
         $this->assertDatabaseHas('devices', [
             'id' => $device->id,

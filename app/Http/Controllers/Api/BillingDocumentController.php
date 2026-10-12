@@ -21,6 +21,7 @@ class BillingDocumentController extends Controller
 
     public function receipt(Request $request, BillingPayment $billingPayment)
     {
+        abort_unless($billingPayment->status === 'confirmed', 404, 'A receipt is available only after payment verification.');
         $billingPayment->load(['statement.user:id,name,email,account_number,address', 'recorder:id,name']);
         $this->authorizeRecord($request, $billingPayment->statement->user_id);
 

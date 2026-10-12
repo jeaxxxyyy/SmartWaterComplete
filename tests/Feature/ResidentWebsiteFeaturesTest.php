@@ -30,9 +30,9 @@ class ResidentWebsiteFeaturesTest extends TestCase
 
         $created = $this->postJson('/api/service-requests', [
             'category' => 'billing_dispute',
-            'subject' => 'Please review this statement',
             'description' => 'The recorded charge needs clarification.',
         ])->assertCreated()
+            ->assertJsonPath('data.subject', 'Billing Dispute')
             ->assertJsonPath('data.status', 'open');
         $requestId = $created->json('data.id');
         $this->assertStringStartsWith('REQ-', $created->json('data.reference_number'));

@@ -121,7 +121,7 @@
             <p>Smart Water connects trusted meter data with practical tools for the people who use, manage, and protect water every day.</p>
         </div>
         <div class="home-about-stats" aria-label="Smart Water capabilities">
-            <div><strong>3 sec</strong><span>Live reading interval</span></div>
+            <div><strong>Near real-time</strong><span>Usage updates</span></div>
             <div><strong>24/7</strong><span>Alert visibility</span></div>
             <div><strong>1 view</strong><span>For every role</span></div>
         </div>

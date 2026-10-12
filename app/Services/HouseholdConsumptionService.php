@@ -225,7 +225,7 @@ class HouseholdConsumptionService
             'weekly' => 8,
             'monthly' => 12,
         };
-        $buckets = collect(range($bucketCount - 1, 0))->mapWithKeys(function (int $offset) use ($period, $trendFrom, $timezone): array {
+        $buckets = collect(range(0, $bucketCount - 1))->mapWithKeys(function (int $offset) use ($period, $trendFrom, $timezone): array {
             $start = match ($period) {
                 'daily' => $trendFrom->copy()->addDays($offset)->startOfDay(),
                 'weekly' => $trendFrom->copy()->addWeeks($offset)->startOfWeek(Carbon::MONDAY)->startOfDay(),

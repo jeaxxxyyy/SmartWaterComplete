@@ -50,13 +50,13 @@ class ServiceRequestController extends Controller
         abort_unless($request->user()?->isHousehold(), 403, 'Household access is required.');
         $validated = $request->validate([
             'category' => ['required', Rule::in(self::CATEGORIES)],
-            'subject' => ['required', 'string', 'max:150'],
             'description' => ['required', 'string', 'max:5000'],
             'billing_statement_id' => ['nullable', Rule::exists('billing_statements', 'id')->where('user_id', $request->user()->id)],
         ]);
 
         $item = ServiceRequest::create([
             ...$validated,
+            'subject' => Str::headline($validated['category']),
             'reference_number' => 'REQ-'.now()->format('Ymd').'-'.Str::upper(Str::random(6)),
             'user_id' => $request->user()->id,
             'priority' => in_array($validated['category'], ['suspected_leak', 'service_interruption'], true) ? 'high' : 'normal',

@@ -71,7 +71,7 @@ class WaterApiTest extends TestCase
 
         $response->assertCreated()
             ->assertJsonPath('data.reading.estimated_bill', '0.00')
-            ->assertJsonPath('data.reading.is_threshold_exceeded', true)
+            ->assertJsonPath('data.reading.is_threshold_exceeded', false)
             ->assertJsonPath('data.reading.is_possible_leak', true);
 
         $this->assertDatabaseHas('water_readings', [
@@ -80,7 +80,7 @@ class WaterApiTest extends TestCase
             'liters_used' => 150,
             'cubic_meter' => 0.15,
             'estimated_bill' => 0,
-            'is_threshold_exceeded' => true,
+            'is_threshold_exceeded' => false,
             'is_possible_leak' => true,
         ]);
 
@@ -202,6 +202,33 @@ class WaterApiTest extends TestCase
             'id' => $notification->id,
             'is_read' => true,
         ]);
+    }
+
+    public function test_user_can_mark_all_received_notifications_as_read(): void
+    {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+        $first = Notification::create([
+            'user_id' => $user->id, 'type' => 'announcement', 'title' => 'First',
+            'message' => 'First notice', 'sent_at' => now(),
+        ]);
+        $second = Notification::create([
+            'user_id' => $user->id, 'type' => 'possible_leak', 'title' => 'Leak',
+            'message' => 'Leak notice', 'sent_at' => now(),
+        ]);
+        $other = Notification::create([
+            'user_id' => $otherUser->id, 'type' => 'announcement', 'title' => 'Other',
+            'message' => 'Other notice', 'sent_at' => now(),
+        ]);
+        Sanctum::actingAs($user);
+
+        $this->patchJson('/api/notifications/read-all')
+            ->assertOk()
+            ->assertJsonPath('data.updated_count', 2);
+
+        $this->assertDatabaseHas('notifications', ['id' => $first->id, 'is_read' => true]);
+        $this->assertDatabaseHas('notifications', ['id' => $second->id, 'is_read' => true]);
+        $this->assertDatabaseHas('notifications', ['id' => $other->id, 'is_read' => false]);
     }
 
     public function test_user_can_delete_one_or_clear_all_notifications_without_erasing_municipal_records(): void
