@@ -32,7 +32,7 @@ class Billing extends Model
         'water_rate' => 'decimal:2',
         'fixed_monthly_charge' => 'decimal:2',
         'subsidy_deduction' => 'decimal:2',
-        'effective_date' => 'date',
+        'effective_date' => 'date:Y-m-d',
         'threshold_liters' => 'decimal:2',
         'consumption_alert_enabled' => 'boolean',
         'consumption_change_threshold_percent' => 'decimal:2',

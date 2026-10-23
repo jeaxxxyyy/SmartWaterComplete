@@ -29,7 +29,7 @@ class SystemHealthTest extends TestCase
             'status' => 'active',
             'last_seen_at' => now(),
         ]);
-        WaterReading::create([
+        $reading = WaterReading::create([
             'user_id' => $household->id,
             'device_id' => $device->id,
             'reading_id' => 'health-reading-001',
@@ -45,7 +45,7 @@ class SystemHealthTest extends TestCase
             ->assertJsonPath('data.status', 'healthy')
             ->assertJsonPath('data.database.status', 'connected')
             ->assertJsonPath('data.database.foreign_keys_enforced', true)
-            ->assertJsonPath('data.telemetry.latest_reading_id', 1)
+            ->assertJsonPath('data.telemetry.latest_reading_id', $reading->id)
             ->assertJsonPath('data.devices.active', 1)
             ->assertJsonPath('data.devices.online', 1)
             ->assertJsonPath('data.integrity.issue_count', 0)

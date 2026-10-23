@@ -29,8 +29,8 @@ class BillingStatement extends Model
     ];
 
     protected $casts = [
-        'billing_month' => 'date',
-        'due_date' => 'date',
+        'billing_month' => 'date:Y-m-d',
+        'due_date' => 'date:Y-m-d',
         'opening_balance' => 'decimal:2',
         'total_liters' => 'decimal:2',
         'total_cubic_meter' => 'decimal:4',

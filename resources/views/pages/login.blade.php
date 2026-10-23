@@ -1,7 +1,6 @@
 @extends('layouts.guest')
 
 @push('head')
-    {{-- Login-only vendor styles: Bootstrap utilities/components and icons. --}}
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -15,7 +14,6 @@
 @section('content')
     <section class="login-page container-fluid px-0" aria-label="Smart Water account sign in">
         <div class="login-layout row g-0">
-            {{-- Product message and feature summary. --}}
             <section class="login-brand-panel col-lg-5" aria-labelledby="login-brand-title">
                 <div class="login-brand-content">
                     <div class="login-brand-lockup">
@@ -40,7 +38,6 @@
                         <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Secure Administrator Access</span></li>
                     </ul>
 
-                    {{-- Lightweight inline illustration keeps the page self-contained. --}}
                     <svg class="login-illustration" viewBox="0 0 460 220" role="img" aria-label="Water monitoring analytics illustration" xmlns="http://www.w3.org/2000/svg">
                         <defs>
                             <linearGradient id="water-fill" x1="0" x2="1" y1="0" y2="1">
@@ -63,7 +60,6 @@
                 </div>
             </section>
 
-            {{-- Authentication form: existing data hooks and field names are unchanged. --}}
             <section class="login-form-area col-lg-7" aria-labelledby="login-title">
                 <div class="login-card">
                     <div class="login-card-header">

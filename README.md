@@ -76,11 +76,15 @@ php artisan serve --host=0.0.0.0 --port=8000
 
 ```bash
 php artisan test
+npm run test:frontend
 npm run build
-php artisan test
 ```
 
 Configuration defaults are documented in `.env.example`, `config/devices.php`, and `config/municipality.php`. Browser tokens expire after `SANCTUM_WEB_TOKEN_MINUTES` (eight hours by default); commissioned device credentials keep their separate lifecycle.
+
+Both `composer dev` and `composer demo` start the Laravel scheduler so scheduled notifications are delivered. When running the web server separately, also run `php artisan schedule:work`. Production hosting must run `php artisan schedule:run` every minute through its scheduler and serve the built assets from the `public` directory.
+
+The default `MAIL_MAILER=log` writes password-reset and verification messages to local logs; it does not deliver email. Configure and verify a real mail transport before relying on email recovery. For production, set `APP_ENV=production`, `APP_DEBUG=false`, configure the public HTTPS `APP_URL`, replace development credentials, and verify database backups and a physical meter upload. The application currently retains raw telemetry indefinitely; automatic monthly summarization and deletion are not implemented.
 
 ## Analytics, audit, and privacy controls
 

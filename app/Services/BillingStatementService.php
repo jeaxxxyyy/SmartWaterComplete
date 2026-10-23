@@ -8,15 +8,27 @@ use App\Models\BillingStatement;
 use App\Models\User;
 use App\Models\WaterReading;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class BillingStatementService
 {
     public function generateForUser(User $user, ?Carbon $month = null): BillingStatement
     {
+        return DB::transaction(function () use ($user, $month): BillingStatement {
+            // Serialize generation for this household, including its first bill.
+            User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
+
+            return $this->generateLockedStatement($user, $month);
+        });
+    }
+
+    private function generateLockedStatement(User $user, ?Carbon $month): BillingStatement
+    {
         $month ??= now()->startOfMonth();
         $periodStart = $month->copy()->startOfMonth();
         $periodEnd = $month->copy()->endOfMonth();
+        $settingsEffectiveOn = $periodEnd->isPast() ? $periodEnd : now();
 
         $readings = WaterReading::query()
             ->where('user_id', $user->id)
@@ -28,13 +40,13 @@ class BillingStatementService
                     ->orWhere('user_id', $user->id);
             })
             ->where('is_active', true)
-            ->where(function ($query) use ($periodStart): void {
+            ->where(function ($query) use ($settingsEffectiveOn): void {
                 $query->whereNull('effective_date')
-                    ->orWhereDate('effective_date', '<=', $periodStart->toDateString());
+                    ->orWhereDate('effective_date', '<=', $settingsEffectiveOn->toDateString());
             })
             ->orderByRaw('CASE WHEN user_id IS NULL THEN 1 ELSE 0 END')
             ->orderByRaw('CASE WHEN effective_date IS NULL THEN 0 ELSE 1 END DESC')
-            ->orderByDesc('effective_date')
+            ->orderByRaw('DATE(effective_date) DESC')
             ->latest('id')
             ->first();
 
@@ -53,35 +65,33 @@ class BillingStatementService
         $existingStatement = BillingStatement::query()
             ->where('user_id', $user->id)
             ->whereDate('billing_month', $periodStart->toDateString())
+            ->lockForUpdate()
             ->first();
         $amountPaid = $existingStatement
             ? max((float) $existingStatement->amount_paid, (float) $existingStatement->payments()->where('status', 'confirmed')->sum('amount'))
             : 0;
         $remainingBalance = max($openingBalance + $currentCharge - $amountPaid, 0);
 
-        $statement = BillingStatement::updateOrCreate(
-            [
-                'statement_number' => $existingStatement?->statement_number,
-                'due_date' => $periodEnd->copy()->addDays(15)->toDateString(),
-                'user_id' => $user->id,
-                'billing_month' => $periodStart->toDateString(),
-            ],
-            [
-                'opening_balance' => $openingBalance,
-                'total_liters' => $totalLiters,
-                'total_cubic_meter' => $totalCubicMeter,
-                'water_rate' => $waterRate,
-                'fixed_monthly_charge' => $fixedMonthlyCharge,
-                'currency' => $settings?->currency ?? 'PHP',
-                'subsidy_deduction' => $subsidyDeduction,
-                'current_charge' => $currentCharge,
-                'amount_paid' => $amountPaid,
-                'remaining_balance' => $remainingBalance,
-                'status' => $remainingBalance <= 0 ? 'paid' : ($amountPaid > 0 ? 'partial' : 'unpaid'),
-                'generated_at' => now(),
-                'paid_at' => $remainingBalance <= 0 ? now() : null,
-            ],
-        );
+        $statement = $existingStatement ?? new BillingStatement([
+            'user_id' => $user->id,
+            'billing_month' => $periodStart->toDateString(),
+        ]);
+        $statement->fill([
+            'due_date' => $existingStatement?->due_date ?? $periodEnd->copy()->addDays(15)->toDateString(),
+            'opening_balance' => $openingBalance,
+            'total_liters' => $totalLiters,
+            'total_cubic_meter' => $totalCubicMeter,
+            'water_rate' => $waterRate,
+            'fixed_monthly_charge' => $fixedMonthlyCharge,
+            'currency' => $settings?->currency ?? 'PHP',
+            'subsidy_deduction' => $subsidyDeduction,
+            'current_charge' => $currentCharge,
+            'amount_paid' => $amountPaid,
+            'remaining_balance' => $remainingBalance,
+            'status' => $remainingBalance <= 0 ? 'paid' : ($amountPaid > 0 ? 'partial' : 'unpaid'),
+            'generated_at' => now(),
+            'paid_at' => $remainingBalance <= 0 ? ($existingStatement?->paid_at ?? now()) : null,
+        ])->save();
 
         if (! $statement->statement_number) {
             $statement->update([

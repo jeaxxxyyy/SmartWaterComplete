@@ -107,11 +107,12 @@ class ServiceRequestController extends Controller
             'is_internal' => $admin && ($validated['is_internal'] ?? false),
         ]);
         if ($admin && ! $message->is_internal) {
-            $serviceRequest->update(['status' => 'waiting_for_household', 'assigned_to' => $serviceRequest->assigned_to ?? $request->user()->id]);
+            $serviceRequest->update(['status' => 'waiting_for_household', 'resolved_at' => null, 'assigned_to' => $serviceRequest->assigned_to ?? $request->user()->id]);
             $this->notifyHousehold($serviceRequest, 'New response to your request', "Municipal staff replied to {$serviceRequest->reference_number}.");
         } elseif (! $admin && in_array($serviceRequest->status, ['waiting_for_household', 'resolved'], true)) {
             $serviceRequest->update(['status' => 'in_progress', 'resolved_at' => null]);
         }
+        $serviceRequest->touch();
 
         return response()->json(['message' => 'Reply added.', 'data' => $this->detail($serviceRequest, $admin)], 201);
     }

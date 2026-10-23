@@ -15,8 +15,7 @@ class BillingController extends Controller
     public function __construct(
         protected WaterConsumptionService $waterConsumptionService,
         protected BillingStatementService $billingStatementService
-    ) {
-    }
+    ) {}
 
     public function index(Request $request)
     {
@@ -35,7 +34,7 @@ class BillingController extends Controller
                 }
             })
             ->orderByRaw('CASE WHEN user_id IS NULL THEN 1 ELSE 0 END')
-            ->orderBy('effective_date')
+            ->orderByRaw('DATE(effective_date) ASC')
             ->latest('id')
             ->first();
 
@@ -135,26 +134,38 @@ class BillingController extends Controller
     private function saveSection(Request $request, array $validated, string $section, string $message)
     {
         $userId = isset($validated['user_id']) ? (int) $validated['user_id'] : null;
-        // Section saves create a complete immutable settings snapshot. Use the
-        // latest snapshot as the merge source, including a future-dated rate,
-        // so saving an alert section cannot erase a scheduled billing change.
-        $current = Billing::query()
-            ->where(function ($query) use ($userId): void {
-                $query->whereNull('user_id');
-                if ($userId !== null) {
-                    $query->orWhere('user_id', $userId);
-                }
-            })
-            ->orderByRaw('CASE WHEN user_id IS NULL THEN 1 ELSE 0 END')
-            ->latest('id')
-            ->first()
-            ?? $this->waterConsumptionService->resolveSettingsForUser($userId);
-        $payload = array_merge($this->settingsSnapshot($current), $validated, [
-            'user_id' => $userId,
-            'is_active' => true,
-        ]);
+        $billing = DB::transaction(function () use ($userId, $validated, $section): Billing {
+            $current = $this->waterConsumptionService->resolveSettingsForUser($userId);
 
-        $billing = DB::transaction(fn () => Billing::create($payload));
+            if ($section !== 'billing_rates') {
+                // Alerts take effect immediately. Carry the change into each
+                // scheduled rate without activating that rate early or modifying
+                // historical snapshots.
+                $scheduled = Billing::query()
+                    ->where('user_id', $userId)
+                    ->where('is_active', true)
+                    ->whereDate('effective_date', '>', now()->toDateString())
+                    ->latest('id')
+                    ->lockForUpdate()
+                    ->get()
+                    ->unique(fn (Billing $settings) => $settings->effective_date->toDateString());
+
+                foreach ($scheduled as $settings) {
+                    Billing::create(array_merge($this->settingsSnapshot($settings), $validated, [
+                        'user_id' => $userId,
+                        'is_active' => true,
+                    ]));
+                }
+            }
+
+            return Billing::create(array_merge($this->settingsSnapshot($current), $validated, [
+                'user_id' => $userId,
+                'effective_date' => $section === 'billing_rates'
+                    ? ($validated['effective_date'] ?? now()->toDateString())
+                    : now()->toDateString(),
+                'is_active' => true,
+            ]));
+        });
 
         $this->billingStatementService->recordAudit(
             $request->user(),

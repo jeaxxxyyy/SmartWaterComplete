@@ -13,7 +13,8 @@ class ConsumptionGoalController extends Controller
     public function show(Request $request)
     {
         abort_unless($request->user()?->isHousehold(), 403, 'Household access is required.');
-        $month = $request->filled('month') ? Carbon::createFromFormat('Y-m', $request->string('month')) : now();
+        $validated = $request->validate(['month' => ['nullable', 'date_format:Y-m']]);
+        $month = isset($validated['month']) ? Carbon::createFromFormat('!Y-m', $validated['month']) : now();
 
         return response()->json(['data' => $this->payload($request->user()->id, $month)]);
     }
@@ -25,10 +26,10 @@ class ConsumptionGoalController extends Controller
             'month' => ['nullable', 'date_format:Y-m'],
             'target_liters' => ['required', 'numeric', 'min:1', 'max:100000000'],
         ]);
-        $month = isset($validated['month']) ? Carbon::createFromFormat('Y-m', $validated['month']) : now();
-        ConsumptionGoal::updateOrCreate(
-            ['user_id' => $request->user()->id, 'month' => $month->copy()->startOfMonth()->toDateString()],
-            ['target_liters' => $validated['target_liters']],
+        $month = isset($validated['month']) ? Carbon::createFromFormat('!Y-m', $validated['month']) : now();
+        ConsumptionGoal::query()->whereDate('month', $month->copy()->startOfMonth()->toDateString())->updateOrCreate(
+            ['user_id' => $request->user()->id],
+            ['month' => $month->copy()->startOfMonth()->toDateString(), 'target_liters' => $validated['target_liters']],
         );
 
         return response()->json(['message' => 'Monthly goal saved.', 'data' => $this->payload($request->user()->id, $month)]);

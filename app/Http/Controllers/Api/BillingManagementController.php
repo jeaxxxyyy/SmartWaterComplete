@@ -178,7 +178,7 @@ class BillingManagementController extends Controller
 
         return $aggregates->map(function ($aggregate) use ($households, $from, $to): array {
             $user = $households->get($aggregate->user_id);
-            $settings = $this->waterConsumptionService->resolveSettingsForUser((int) $aggregate->user_id);
+            $settings = $this->waterConsumptionService->resolveSettingsForUser((int) $aggregate->user_id, $to->isPast() ? $to : now());
             $usageCharge = (float) $aggregate->total_cubic_meter * (float) $settings->water_rate;
             $fixedCharge = (float) ($settings->fixed_monthly_charge ?? 0);
             $subsidy = (float) ($settings->subsidy_deduction ?? 0);

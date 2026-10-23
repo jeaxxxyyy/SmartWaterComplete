@@ -89,7 +89,6 @@ const bootSplash = async () => {
         return;
     }
 
-    // sessionStorage makes the splash one-time per browser tab/session.
     window.sessionStorage.setItem(splashSessionKey, 'true');
 
     const minimumDisplay = wait(1800);

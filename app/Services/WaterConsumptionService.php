@@ -35,7 +35,7 @@ class WaterConsumptionService
             })
             ->orderByRaw('CASE WHEN user_id IS NULL THEN 1 ELSE 0 END')
             ->orderByRaw('CASE WHEN effective_date IS NULL THEN 0 ELSE 1 END DESC')
-            ->orderByDesc('effective_date')
+            ->orderByRaw('DATE(effective_date) DESC')
             ->latest('id')
             ->first();
 
@@ -185,11 +185,17 @@ class WaterConsumptionService
         $recordedAt ??= now();
         $cutoff = $recordedAt->copy()->subMinutes($duration);
 
-        return WaterReading::query()
+        // The reading at the beginning of the window must still show high
+        // flow; an older high reading followed by a stop is not continuous flow.
+        $boundaryReading = WaterReading::query()
             ->where('user_id', $userId)
             ->where('recorded_at', '<=', $cutoff)
-            ->where('flow_rate', '>=', (float) $settings->leak_flow_rate_threshold)
-            ->exists()
+            ->latest('recorded_at')
+            ->latest('id')
+            ->first();
+
+        return $boundaryReading !== null
+            && (float) $boundaryReading->flow_rate >= (float) $settings->leak_flow_rate_threshold
             && ! WaterReading::query()
                 ->where('user_id', $userId)
                 ->whereBetween('recorded_at', [$cutoff, $recordedAt])

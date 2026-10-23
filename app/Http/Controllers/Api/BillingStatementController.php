@@ -51,7 +51,7 @@ class BillingStatementController extends Controller
         ]);
 
         $user = User::query()->where('role', 'user')->findOrFail($validated['user_id']);
-        $month = isset($validated['month']) ? Carbon::createFromFormat('Y-m', $validated['month']) : now();
+        $month = isset($validated['month']) ? Carbon::createFromFormat('!Y-m', $validated['month']) : now();
         $statement = $this->billingStatementService->generateForUser($user, $month);
 
         $this->billingStatementService->recordAudit(

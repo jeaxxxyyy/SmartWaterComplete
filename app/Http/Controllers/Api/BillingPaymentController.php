@@ -54,7 +54,7 @@ class BillingPaymentController extends Controller
             $payment->update(['status' => 'voided', 'voided_by' => $request->user()->id, 'voided_at' => now(), 'status_note' => $note]);
             $paid = round((float) $statement->payments()->where('status', 'confirmed')->sum('amount'), 2);
             $remaining = max(round((float) $statement->opening_balance + (float) $statement->current_charge - $paid, 2), 0);
-            $statement->update(['amount_paid' => $paid, 'remaining_balance' => $remaining, 'status' => $remaining <= 0 ? 'paid' : ($statement->due_date?->isPast() ? 'overdue' : 'unpaid'), 'paid_at' => $remaining <= 0 ? now() : null]);
+            $statement->update(['amount_paid' => $paid, 'remaining_balance' => $remaining, 'status' => $remaining <= 0 ? 'paid' : ($paid > 0 ? 'partial' : ($statement->due_date?->isBefore(today()) ? 'overdue' : 'unpaid')), 'paid_at' => $remaining <= 0 ? now() : null]);
 
             return $payment->fresh();
         });

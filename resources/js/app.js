@@ -1944,9 +1944,6 @@ const hasTokenOrReport = () => {
         return true;
     }
 
-    // Admin authentication is established by the login flow and persisted
-    // in the current browser session. The dashboard never asks staff to
-    // paste or manually manage a bearer token.
     setStatus('Redirecting to sign in.');
     safeRedirect('/login');
     return false;
@@ -2551,7 +2548,7 @@ const renderProfile = (user) => {
     setText('[data-profile-created-at]', user?.created_at ? formatDateTime(user.created_at) : 'Not available');
     setText('[data-profile-device]', user?.registered_device ?? 'Not available');
     setText('[data-profile-meter]', user?.assigned_meter ?? 'Not available');
-    if (accountForm && !accountForm.contains(document.activeElement)) {
+    if (accountForm && accountForm.dataset.dirty !== '1' && !accountForm.contains(document.activeElement)) {
         accountForm.elements.email.value = user?.email ?? '';
         accountForm.elements.phone.value = user?.phone ?? '';
     }
@@ -2624,6 +2621,7 @@ const updateAccountFormState = () => {
     const email = accountForm.elements.email?.value.trim() ?? '';
     const phone = accountForm.elements.phone?.value.trim() ?? '';
     const hasChanged = email !== (accountFormInitial.email ?? '') || phone !== (accountFormInitial.phone ?? '');
+    accountForm.dataset.dirty = hasChanged ? '1' : '0';
     const emailError = validateEmail(email);
     const phoneError = validatePhone(phone);
     setFieldError('email', emailError);
@@ -3419,6 +3417,12 @@ const applySummary = (summary, deviceState = householdDeviceState) => {
         ? new Date(billingStatement.billing_month).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
         : '--');
     setText('[data-leak-details]', !latestReading ? 'No recent device reading available.' : Boolean(latestReading?.is_possible_leak) ? 'Possible leak detected from the latest reading.' : 'No leak has been detected yet.');
+    const leakStatus = !latestReading ? 'Unavailable' : latestReading.is_possible_leak ? 'Possible leak' : 'Normal';
+    setText('[data-leak-status]', leakStatus);
+    $$('[data-leak-status]').forEach((node) => {
+        node.classList.toggle('status-chip-alert', Boolean(latestReading?.is_possible_leak));
+        node.classList.toggle('status-chip-soft', !latestReading?.is_possible_leak);
+    });
 
     householdDeviceState = deviceState ?? householdDeviceState;
     renderHouseholdSummaryCards(summaryData, latestReading, notifications, activeBilling, billingStatement, householdDeviceState);
@@ -4700,8 +4704,12 @@ const bindAdminServiceRequests = () => {
         list.addEventListener('click', async (event) => {
             const button = event.target.closest('[data-admin-request-open]');
             if (!button) return;
-            const response = await requestJson(`/api/service-requests/${button.dataset.adminRequestOpen}`);
-            renderAdminServiceRequestDetail(response.data);
+            try {
+                const response = await requestJson(`/api/service-requests/${button.dataset.adminRequestOpen}`, { forceNetwork: true });
+                renderAdminServiceRequestDetail(response.data);
+            } catch (error) {
+                if (!handleAuthFailure(error)) showToast('Could not open this request.', 'error');
+            }
         });
     }
     const detail = $('[data-admin-service-request-detail]');
@@ -4725,16 +4733,26 @@ const bindAdminServiceRequests = () => {
             }
         });
     }
-    $('[data-admin-service-request-close]')?.addEventListener('click', () => {
-        const dialog = $('[data-admin-service-request-dialog]');
-        if (typeof dialog?.close === 'function') dialog.close(); else dialog?.removeAttribute('open');
-    }, { once: true });
+    const closeButton = $('[data-admin-service-request-close]');
+    if (closeButton && closeButton.dataset.bound !== '1') {
+        closeButton.dataset.bound = '1';
+        closeButton.addEventListener('click', () => {
+            const dialog = $('[data-admin-service-request-dialog]');
+            if (typeof dialog?.close === 'function') dialog.close(); else dialog?.removeAttribute('open');
+        });
+    }
 };
 
 const bindAdminSettingsForm = (form, endpoint, statusSelector, successMessage) => {
     if (!form || form.dataset.bound === '1') return;
 
     form.dataset.bound = '1';
+    const markDirty = () => {
+        form.dataset.dirty = '1';
+        form.dataset.revision = String(Number(form.dataset.revision ?? 0) + 1);
+    };
+    form.addEventListener('input', markDirty);
+    form.addEventListener('change', markDirty);
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (form.dataset.saving === '1') return;
@@ -4742,6 +4760,7 @@ const bindAdminSettingsForm = (form, endpoint, statusSelector, successMessage) =
         const submitButton = $('button[type="submit"]', form);
         const feedback = $(statusSelector);
         const payload = Object.fromEntries(new FormData(form).entries());
+        const submittedRevision = form.dataset.revision;
         $$('input[type="checkbox"]', form).forEach((checkbox) => {
             payload[checkbox.name] = checkbox.checked;
         });
@@ -4756,6 +4775,7 @@ const bindAdminSettingsForm = (form, endpoint, statusSelector, successMessage) =
 
         try {
             await requestJson(endpoint, { method: 'POST', body: JSON.stringify(payload) });
+            if (form.dataset.revision === submittedRevision) form.dataset.dirty = '0';
             if (feedback) feedback.textContent = successMessage;
             showToast(successMessage);
             await loadAdmin();
@@ -5464,7 +5484,7 @@ const loadAdmin = async () => {
         if (billingFormSettings) {
             const setValue = (form, field, value) => {
                 const input = form?.elements?.namedItem(field);
-                if (input && value !== undefined && value !== null) input.value = value;
+                if (form?.dataset.dirty !== '1' && input && value !== undefined && value !== null) input.value = value;
             };
             setValue(billingRatesForm, 'water_rate', billingFormSettings.water_rate ?? 0);
             setValue(billingRatesForm, 'fixed_monthly_charge', billingFormSettings.fixed_monthly_charge ?? 0);
@@ -5472,15 +5492,15 @@ const loadAdmin = async () => {
             setValue(billingRatesForm, 'effective_date', billingFormSettings.effective_date ? String(billingFormSettings.effective_date).slice(0, 10) : '');
             setValue(billingRatesForm, 'currency', billingFormSettings.currency ?? 'PHP');
 
-            setValue(consumptionAlertForm, 'notification_behavior', billingFormSettings.consumption_alert_behavior ?? 'household');
-            if (consumptionAlertForm?.elements?.consumption_alert_enabled) consumptionAlertForm.elements.consumption_alert_enabled.checked = billingFormSettings.consumption_alert_enabled !== false;
+            setValue(consumptionAlertForm, 'notification_behavior', billingSettings?.consumption_alert_behavior ?? 'household');
+            if (consumptionAlertForm?.dataset.dirty !== '1' && consumptionAlertForm?.elements?.consumption_alert_enabled) consumptionAlertForm.elements.consumption_alert_enabled.checked = billingSettings?.consumption_alert_enabled !== false;
 
-            setValue(leakSettingsForm, 'leak_flow_rate_threshold', billingFormSettings.leak_flow_rate_threshold ?? 0);
-            setValue(leakSettingsForm, 'leak_continuous_duration_minutes', billingFormSettings.leak_continuous_duration_minutes ?? 0);
-            setValue(leakSettingsForm, 'quiet_hours_start', billingFormSettings.quiet_hours_start ?? 22);
-            setValue(leakSettingsForm, 'quiet_hours_end', billingFormSettings.quiet_hours_end ?? 4);
-            setValue(leakSettingsForm, 'leak_alert_behavior', billingFormSettings.leak_alert_behavior ?? 'household');
-            if (leakSettingsForm?.elements?.leak_alert_enabled) leakSettingsForm.elements.leak_alert_enabled.checked = billingFormSettings.leak_alert_enabled !== false;
+            setValue(leakSettingsForm, 'leak_flow_rate_threshold', billingSettings?.leak_flow_rate_threshold ?? 0);
+            setValue(leakSettingsForm, 'leak_continuous_duration_minutes', billingSettings?.leak_continuous_duration_minutes ?? 0);
+            setValue(leakSettingsForm, 'quiet_hours_start', billingSettings?.quiet_hours_start ?? 22);
+            setValue(leakSettingsForm, 'quiet_hours_end', billingSettings?.quiet_hours_end ?? 4);
+            setValue(leakSettingsForm, 'leak_alert_behavior', billingSettings?.leak_alert_behavior ?? 'household');
+            if (leakSettingsForm?.dataset.dirty !== '1' && leakSettingsForm?.elements?.leak_alert_enabled) leakSettingsForm.elements.leak_alert_enabled.checked = billingSettings?.leak_alert_enabled !== false;
         }
         const summary = summaryResponse.data ?? {};
         const analytics = analyticsResponse.data ?? {};
@@ -5775,7 +5795,11 @@ const bootCommon = () => {
             if (submitButton) submitButton.disabled = true;
             setAccountFormFeedback(accountForm, 'Saving contact information...', 'loading');
             try {
-                const response = await requestJson('/api/account', { method: 'PATCH', body: JSON.stringify(serializeForm(accountForm)) });
+                const submitted = serializeForm(accountForm);
+                const response = await requestJson('/api/account', { method: 'PATCH', body: JSON.stringify(submitted) });
+                if (['email', 'phone'].every((name) => accountForm.elements[name].value.trim() === String(submitted[name] ?? '').trim())) {
+                    accountForm.dataset.dirty = '0';
+                }
                 householdProfile = response?.data ?? householdProfile;
                 accountProfileLoaded = true;
                 renderProfile(householdProfile);
